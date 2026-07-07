@@ -1,0 +1,100 @@
+{
+  "channel": "gmail",
+  "messages": [
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "gm-1001",
+      "external_thread_id": "gth-atlas-renewal",
+      "direction": "inbound",
+      "subject": "Atlas contract renewal \u2014 terms for FY27",
+      "sender": {
+        "handle": "priya.n@atlascorp.com",
+        "display_name": "Priya Natarajan"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, our legal team reviewed the FY27 renewal. Two asks before we sign: (1) a 99.9% uptime SLA with service credits, and (2) quarterly business reviews written into the contract. If those work, we can close by Friday. Can you confirm this week?",
+      "sent_at": "2026-07-07T18:05:00+00:00"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "gm-1002",
+      "external_thread_id": "gth-atlas-renewal",
+      "direction": "outbound",
+      "subject": "Re: Atlas contract renewal \u2014 terms for FY27",
+      "sender": {
+        "handle": "jordan@meridianlabs.io",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "priya.n@atlascorp.com",
+          "display_name": "Priya Natarajan"
+        }
+      ],
+      "body_text": "Priya \u2014 good news on both. 99.9% SLA works; credits capped at 10% monthly fees. QBRs yes, first one in October. Sending the redline today. Let's close Friday.",
+      "sent_at": "2026-07-05T21:40:00+00:00"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "gm-1003",
+      "external_thread_id": "gth-board-deck",
+      "direction": "inbound",
+      "subject": "Board deck \u2014 need your numbers by Thursday",
+      "sender": {
+        "handle": "sam.okafor@meridianlabs.io",
+        "display_name": "Sam Okafor"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan, the Q2 board deck is 80% done. I still need the updated ARR bridge and the hiring plan slide from you. Board meeting is Monday \u2014 can you get me both by Thursday EOD?",
+      "sent_at": "2026-07-07T18:22:00+00:00"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "gm-1004",
+      "external_thread_id": "gth-press",
+      "direction": "inbound",
+      "subject": "Interview request \u2014 enterprise AI adoption piece",
+      "sender": {
+        "handle": "dchen@techledger.com",
+        "display_name": "Dana Chen"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, I'm writing a feature on enterprise AI adoption for TechLedger and would love 20 minutes with you next week. Would Tuesday or Wednesday afternoon work?",
+      "sent_at": "2026-07-07T17:48:00+00:00"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "gm-1005",
+      "external_thread_id": "gth-vendor",
+      "direction": "outbound",
+      "subject": "Re: Renewal pricing",
+      "sender": {
+        "handle": "jordan@meridianlabs.io",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "billing@cloudstack.dev",
+          "display_name": "CloudStack Billing"
+        }
+      ],
+      "body_text": "Thanks \u2014 approved at the quoted annual rate. Please invoice NET-30 to finance@meridianlabs.io and cc me. Appreciate the quick turnaround.",
+      "sent_at": "2026-07-04T14:15:00+00:00"
+    }
+  ]
+}

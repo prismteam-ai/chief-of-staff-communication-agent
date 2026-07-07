@@ -1,0 +1,41 @@
+{
+  "channel": "sms",
+  "messages": [
+    {
+      "account_handle": "+14155550100",
+      "external_id": "sms-3001",
+      "external_thread_id": "sth-recruiter",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+16505550143",
+        "display_name": "Alex Kim (Recruiting)"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan, the VP Eng candidate accepted verbally! She asked for a written offer by Thursday. OK to send at the comp band we discussed (L7, 0.4%)?",
+      "sent_at": "2026-07-07T18:15:00+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "sms-3002",
+      "external_thread_id": "sth-recruiter",
+      "direction": "outbound",
+      "sender": {
+        "handle": "+14155550100",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "+16505550143",
+          "display_name": "Alex Kim (Recruiting)"
+        }
+      ],
+      "body_text": "Great news. Yes on L7 base, hold equity at 0.35 \u2014 I'll go to 0.4 if she pushes. Send tonight.",
+      "sent_at": "2026-07-02T00:05:00+00:00"
+    }
+  ]
+}

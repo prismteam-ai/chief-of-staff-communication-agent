@@ -1,0 +1,31 @@
+[project]
+name = "cos-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Arthur C", email = "78846238+treize-khushrenada@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.139.0",
+    "httpx>=0.28.1",
+    "openai>=2.44.0",
+    "pydantic>=2.13.4",
+    "python-dotenv>=1.2.2",
+    "supabase>=2.31.0",
+    "uvicorn>=0.50.2",
+]
+
+[project.scripts]
+cos-agent = "cos_agent:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]

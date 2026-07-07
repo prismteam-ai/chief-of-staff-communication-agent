@@ -1,0 +1,24 @@
+{
+  "channel": "email",
+  "messages": [
+    {
+      "account_handle": "jordan@halcyon.studio",
+      "external_id": "em-6001",
+      "external_thread_id": "eth-invoice",
+      "direction": "inbound",
+      "subject": "Overdue invoice #2214 \u2014 Halcyon Studio",
+      "sender": {
+        "handle": "accounts@printworks.co",
+        "display_name": "Printworks Accounts"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@halcyon.studio",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hello, invoice #2214 for the spring campaign print run ($4,850) is 15 days overdue. Could you confirm payment timing? A late fee applies after 30 days.",
+      "sent_at": "2026-07-07T14:40:00+00:00"
+    }
+  ]
+}

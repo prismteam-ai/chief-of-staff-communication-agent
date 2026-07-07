@@ -1,0 +1,23 @@
+{
+  "channel": "x",
+  "messages": [
+    {
+      "account_handle": "@jordanreeve",
+      "external_id": "x-4001",
+      "external_thread_id": "xth-dm-investor",
+      "direction": "inbound",
+      "sender": {
+        "handle": "@mchen_vc",
+        "display_name": "Marcus Chen"
+      },
+      "recipients": [
+        {
+          "handle": "@jordanreeve",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan, loved the Meridian launch thread. We're writing checks in applied-AI infra right now \u2014 open to a 30 min intro call this month?",
+      "sent_at": "2026-07-07T16:55:00+00:00"
+    }
+  ]
+}

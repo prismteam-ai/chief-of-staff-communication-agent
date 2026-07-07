@@ -1,0 +1,41 @@
+{
+  "channel": "whatsapp",
+  "messages": [
+    {
+      "account_handle": "+14155550100",
+      "external_id": "wa-2001",
+      "external_thread_id": "wth-priya",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550188",
+        "display_name": "Priya Natarajan"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan \u2014 following up on the email I just sent about the Atlas renewal. Our CFO wants this wrapped before she travels Friday. Anything blocking on your side?",
+      "sent_at": "2026-07-07T18:30:00+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "wa-2002",
+      "external_thread_id": "wth-cofounder",
+      "direction": "outbound",
+      "sender": {
+        "handle": "+14155550100",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550122",
+          "display_name": "Sam Okafor"
+        }
+      ],
+      "body_text": "Sam \u2014 saw the deck draft, strong. I'll own the ARR bridge tonight. Ping me if the hiring slide needs more than headcount + timing.",
+      "sent_at": "2026-07-07T02:10:00+00:00"
+    }
+  ]
+}

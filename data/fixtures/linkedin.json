@@ -1,0 +1,23 @@
+{
+  "channel": "linkedin",
+  "messages": [
+    {
+      "account_handle": "jordan-reeve",
+      "external_id": "li-5001",
+      "external_thread_id": "lth-partnership",
+      "direction": "inbound",
+      "sender": {
+        "handle": "elena-vasquez",
+        "display_name": "Elena Vasquez"
+      },
+      "recipients": [
+        {
+          "handle": "jordan-reeve",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan \u2014 I lead partnerships at Northbeam Systems. We keep hearing Meridian's name from shared customers. Would you be open to exploring a co-sell motion? Happy to share a one-pager first.",
+      "sent_at": "2026-07-07T15:20:00+00:00"
+    }
+  ]
+}
