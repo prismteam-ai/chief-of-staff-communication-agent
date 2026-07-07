@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "command": "sh",
+      "args": [
+        "-c",
+        "set -a; . ./.env; set +a; exec npx -y @supabase/mcp-server-supabase@latest --project-ref=frhromdjjmczranjcnfz"
+      ]
+    },
+    "netlify": {
+      "command": "sh",
+      "args": [
+        "-c",
+        "set -a; . ./.env; set +a; exec npx -y @netlify/mcp@latest"
+      ]
+    }
+  }
+}
