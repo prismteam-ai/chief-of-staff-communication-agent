@@ -1,0 +1,10 @@
+{
+  "name": "chief-of-staff-comms",
+  "description": "Chief of Staff Communication Agent plugin — the Gardevoir agent, its skills, and slash commands over the hosted MCP runtime.",
+  "version": "0.1.0",
+  "author": "Arthur Cho",
+  "agents": "agents/",
+  "skills": "skills/",
+  "commands": "commands/",
+  "mcp": "mcp.json"
+}

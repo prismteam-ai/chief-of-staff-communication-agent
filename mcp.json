@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "chief-of-staff-comms": {
+      "url": "https://cos-comms-agent.onrender.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer REPLACE_WITH_MCP_AUTH_TOKEN"
+      }
+    }
+  }
+}

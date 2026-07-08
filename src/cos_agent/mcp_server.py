@@ -107,6 +107,16 @@ def reject_draft(draft_id: str, note: str = "", decided_by: str = "executive-via
 
 
 @mcp.tool()
+def answer_context(message_id: str, context: str) -> str:
+    """Supply the context the agent asked for on a needs-context message. The agent
+    treats it as authoritative and re-drafts a style-matched reply (which still
+    requires explicit approval before sending)."""
+    from .brain import redraft_with_context
+
+    return json.dumps(redraft_with_context(message_id, context), ensure_ascii=False, indent=1, default=str)
+
+
+@mcp.tool()
 def create_asana_task(message_id: str, title: str, detail: str) -> str:
     """Create an Asana task from a communication; links it and indexes it into RAG."""
     from .asana import task_from_message
