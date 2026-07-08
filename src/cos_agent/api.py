@@ -81,6 +81,48 @@ def login(body: LoginBody) -> dict:
     return auth_login(body.email, body.password)
 
 
+# --- Google OAuth connect flow (Connections page seed) -----------------------
+# start/callback are public by nature of the browser redirect dance; the state
+# nonce prevents forged callbacks, and the flow only ever STORES tokens.
+_oauth_states: set[str] = set()
+
+
+@public.get("/oauth/google/start")
+def google_start():
+    import secrets as _secrets
+
+    from fastapi.responses import RedirectResponse
+
+    from .connectors.gmail_api import oauth_start_url
+
+    state = _secrets.token_urlsafe(24)
+    _oauth_states.add(state)
+    return RedirectResponse(oauth_start_url(state))
+
+
+@public.get("/oauth/google/callback")
+def google_callback(code: str, state: str = ""):
+    from fastapi.responses import RedirectResponse
+
+    from .connectors.base import register
+    from .connectors.gmail_api import GmailConnector, oauth_exchange
+
+    if state not in _oauth_states:
+        raise HTTPException(400, "unknown oauth state — restart from /api/oauth/google/start")
+    _oauth_states.discard(state)
+    tokens = oauth_exchange(code)
+    if not tokens.get("refresh_token"):
+        raise HTTPException(502, "google returned no refresh token — remove the app's prior grant and retry")
+    sb().table("connector_tokens").upsert(
+        {"channel": "gmail", "account_handle": tokens["email"], "refresh_token": tokens["refresh_token"],
+         "scopes": "gmail.readonly gmail.send"},
+        on_conflict="channel,account_handle",
+    ).execute()
+    register(GmailConnector(tokens["email"], tokens["refresh_token"]))  # live swap, no restart
+    log.info("gmail connected for %s — connector registered", tokens["email"])
+    return RedirectResponse("/?connected=gmail")
+
+
 @api.post("/sync")
 def sync() -> dict:
     """Ingest all channels, index new content, process new inbound messages."""

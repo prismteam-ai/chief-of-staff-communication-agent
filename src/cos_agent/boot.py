@@ -1,5 +1,6 @@
 """Connector registration. Fixture connectors by default (mock-first dev loop);
 real provider connectors replace their channel when credentials are present."""
+import os
 from .connectors import x_api
 from .connectors.base import register
 from .connectors.fixture import FixtureConnector
@@ -12,3 +13,9 @@ for _ch in CHANNELS:
 # credential-gated real connectors override their fixture
 if x_api.available():
     register(x_api.XConnector())
+
+if os.environ.get("GOOGLE_CLIENT_ID"):
+    from .connectors import gmail_api
+
+    for _acct in gmail_api.stored_accounts():
+        register(gmail_api.GmailConnector(_acct["account_handle"], _acct["refresh_token"]))

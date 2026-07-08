@@ -15,3 +15,5 @@ comms-checks/
 data/outbox/
 data/asana_outbox/
 *.png
+client_secret*.json
+*credentials*.json
