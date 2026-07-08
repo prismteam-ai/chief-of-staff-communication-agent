@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import boot  # registers connectors
+from . import boot  # noqa: F401  (side effect: registers channel connectors)
 from .brain import process_pending
 from .db import sb
 from .ingest import ingest_all
@@ -107,8 +107,15 @@ class Decision(BaseModel):
 def decide(draft_id: str, d: Decision) -> dict:
     if d.decision not in ("approved", "rejected"):
         raise HTTPException(422, "decision must be approved|rejected")
-    sb().table("approvals").insert(
-        {"draft_id": draft_id, "decision": d.decision, "decided_by": d.decided_by, "note": d.note}
+    current = sb().table("drafts").select("status").eq("id", draft_id).execute().data
+    if not current:
+        raise HTTPException(404, "draft not found")
+    if current[0]["status"] == "sent":
+        raise HTTPException(409, "draft already sent — decisions are final after send")
+    # upsert: a rejected draft may later be approved (and vice versa) without a 500
+    sb().table("approvals").upsert(
+        {"draft_id": draft_id, "decision": d.decision, "decided_by": d.decided_by, "note": d.note},
+        on_conflict="draft_id",
     ).execute()
     new_status = "approved" if d.decision == "approved" else "rejected"
     sb().table("drafts").update({"status": new_status}).eq("id", draft_id).execute()
@@ -129,7 +136,7 @@ def rag_search_endpoint(q: str) -> list[dict]:
 @app.get("/api/topics/{topic_key}")
 def topic(topic_key: str) -> list[dict]:
     links = sb().table("topic_links").select("message_id, reason, confidence").eq("topic_key", topic_key).execute().data
-    ids = [l["message_id"] for l in links]
+    ids = [link["message_id"] for link in links]
     if not ids:
         return []
     return (

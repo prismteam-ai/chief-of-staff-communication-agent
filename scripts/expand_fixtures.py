@@ -126,7 +126,6 @@ def gen(now: datetime) -> None:
                 ext = f"g-{channel}-{t}-{counter}"
                 if ext in seen or ts > now:
                     continue
-                sender_handle = SELF[channel] if direction == "outbound" else handle_for(p, channel)
                 other = {"handle": handle_for(p, channel), "display_name": name}
                 me = {"handle": SELF[channel], "display_name": SELF_NAME}
                 m = {

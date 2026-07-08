@@ -185,7 +185,7 @@ Dated one-liners, recorded after proven.
 - Cursor MCP surface: remote MCP (SSE/HTTP) served by the Python backend — host follows the backend-host decision.
 - Style learning: few-shot from sent messages at draft time vs a distilled style profile? Demo persona needs a seeded sent-history corpus (fresh demo accounts have none).
 - Asana: which workspace for the demo; PAT (fastest) vs OAuth?
-- "Setup simple enough for non-technical users" — what the demo visibly shows: a connect-your-accounts onboarding flow, or guided docs? (Acceptance criterion; needs a visible answer.)
+- ~~"Setup simple enough for non-technical users"~~ RESOLVED 2026-07-08 (Arthur's model): a **Connections page in the UI** — per-channel Connect buttons; OAuth where providers support it (Gmail via our registered Google OAuth app), credential-paste where they don't (IMAP host/app-password, Asana PAT), fixture channels labeled "demo mode". App-level provider registrations (Google OAuth app, Twilio account, Asana app) are product infrastructure owned by us — one registration serves every user; demo accounts are separate disposable identities used at demo time.
 - Response-time tracking: what starts the <5-minute clock (ingest time vs provider timestamp) and what stops it (approval vs actual send)?
 - Do we commit the meta kit (CLAUDE.md, .claude/) to the assignment repo? Sibling leans yes — Prism scores kit-usage and values codified skills — but Arthur decides.
 

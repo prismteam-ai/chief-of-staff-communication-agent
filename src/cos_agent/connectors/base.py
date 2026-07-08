@@ -47,6 +47,10 @@ def register(conn: Connector) -> None:
 
 
 def get(channel: str) -> Connector:
+    if channel not in _REGISTRY:
+        raise LookupError(
+            f"no connector registered for channel '{channel}' (have: {sorted(_REGISTRY)})"
+        )
     return _REGISTRY[channel]
 
 
