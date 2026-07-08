@@ -7,6 +7,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 
 # application
+COPY README.md ./
 COPY src ./src
 COPY web ./web
 COPY data/fixtures ./data/fixtures
