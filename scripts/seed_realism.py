@@ -110,9 +110,8 @@ def main() -> None:
     old = sb().table("messages").select("id").like("raw_ref", "seed:recent:%").execute().data
     if old:
         ids = [r["id"] for r in old]
-        sb().table("recommendations").delete().in_("message_id", ids).execute()
-        sb().table("drafts").delete().in_("message_id", ids).execute()
-        sb().table("topic_links").delete().in_("message_id", ids).execute()
+        for tbl in ("recommendations", "drafts", "topic_links", "asana_links"):
+            sb().table(tbl).delete().in_("message_id", ids).execute()
         sb().table("messages").delete().in_("id", ids).execute()
 
     for i, (ch, (sh, sn), body) in enumerate(RECENT):

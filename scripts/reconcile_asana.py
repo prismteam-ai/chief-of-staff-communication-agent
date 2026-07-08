@@ -27,10 +27,10 @@ CURATED = {
                 "Elena Vasquez (Northbeam partnerships); shared customers; evaluate a co-sell motion."),
     "gm-1004": ("Confirm TechLedger interview slot (Tue/Wed PM)",
                 "Dana Chen, enterprise-AI-adoption feature; 20 minutes next week."),
-    "seed-recent-2": ("Book 2pm call with VP Eng candidate",
-                      "She wants a 10-minute call before she signs."),
-    "seed-recent-4": ("Send ARR bridge numbers for the board deck",
-                      "Sam needs them to lock the final version before Monday."),
+    "wa-2001": ("Unblock Atlas renewal before CFO travels Friday",
+                "Priya (Atlas) following up on WhatsApp; CFO wants it wrapped before Friday."),
+    # NOTE: never target ephemeral seed-recent-* here — seed_realism deletes and
+    # recreates them on refresh, which would orphan the task link.
 }
 
 
