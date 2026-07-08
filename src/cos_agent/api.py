@@ -1,38 +1,93 @@
-"""FastAPI surface: dashboard metrics, queues, and the approval flow."""
+"""FastAPI surface: dashboard metrics, queues, approval flow, MCP over HTTP.
+
+Every /api route except /api/health and /api/login requires a Supabase JWT
+(see auth.py) — the runtime is public, and an unauthenticated caller must not
+be able to read comms or approve sends.
+"""
 from __future__ import annotations
 
+import asyncio
+import logging
+import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import boot  # noqa: F401  (side effect: registers channel connectors)
+from .auth import login as auth_login
+from .auth import require_user
 from .brain import process_pending
 from .db import sb
 from .ingest import ingest_all
+from .mcp_server import mcp as mcp_app_server
 from .rag import index_messages, search
 from .send import ApprovalRequired, send_draft
 
-app = FastAPI(title="Chief of Staff Communication Agent")
+log = logging.getLogger(__name__)
 
 
-@app.get("/api/health")
+async def _autosync_loop() -> None:
+    interval = int(os.environ.get("AUTOSYNC_INTERVAL_S", "300"))
+    while True:
+        try:
+            await asyncio.to_thread(_run_sync)
+        except Exception:
+            log.exception("autosync cycle failed; next attempt in %ss", interval)
+        await asyncio.sleep(interval)
+
+
+def _run_sync() -> dict:
+    report = ingest_all()
+    rag = index_messages()
+    brain = process_pending()
+    log.info("sync: %s new msgs, %s indexed, %s brained",
+             sum(c.get("new", 0) for c in report["channels"].values()), rag.get("indexed"), len(brain))
+    return {"ingest": report, "rag": rag, "brain": brain}
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    task = None
+    if os.environ.get("AUTOSYNC", "0") == "1":
+        task = asyncio.create_task(_autosync_loop())
+    async with mcp_app_server.session_manager.run():
+        yield
+    if task:
+        task.cancel()
+
+
+app = FastAPI(title="Chief of Staff Communication Agent", lifespan=_lifespan)
+
+public = APIRouter(prefix="/api")
+api = APIRouter(prefix="/api", dependencies=[Depends(require_user)])
+
+
+@public.get("/health")
 def health() -> dict:
     return {"ok": True, "time": datetime.now(timezone.utc).isoformat()}
 
 
-@app.post("/api/sync")
+class LoginBody(BaseModel):
+    email: str
+    password: str
+
+
+@public.post("/login")
+def login(body: LoginBody) -> dict:
+    return auth_login(body.email, body.password)
+
+
+@api.post("/sync")
 def sync() -> dict:
     """Ingest all channels, index new content, process new inbound messages."""
-    report = ingest_all()
-    rag = index_messages()
-    brain = process_pending()
-    return {"ingest": report, "rag": rag, "brain": brain}
+    return _run_sync()
 
 
-@app.get("/api/dashboard")
+@api.get("/dashboard")
 def dashboard() -> dict:
     msgs = sb().table("messages").select("id, channel, direction, answered_status, sent_at, answered_at").execute().data
     inbound = [m for m in msgs if m["direction"] == "inbound"]
@@ -70,7 +125,7 @@ def dashboard() -> dict:
     }
 
 
-@app.get("/api/messages")
+@api.get("/messages")
 def messages(status: str | None = None) -> list[dict]:
     q = sb().table("messages").select(
         "id, channel, direction, sender, body_text, sent_at, answered_status, source_id, raw_ref"
@@ -80,7 +135,7 @@ def messages(status: str | None = None) -> list[dict]:
     return q.execute().data
 
 
-@app.get("/api/recommendations")
+@api.get("/recommendations")
 def recommendations() -> list[dict]:
     return (
         sb().table("recommendations")
@@ -89,7 +144,7 @@ def recommendations() -> list[dict]:
     )
 
 
-@app.get("/api/drafts")
+@api.get("/drafts")
 def drafts(status: str = "pending") -> list[dict]:
     return (
         sb().table("drafts").select("id, message_id, body, style_notes, status, created_at")
@@ -103,8 +158,8 @@ class Decision(BaseModel):
     note: str | None = None
 
 
-@app.post("/api/drafts/{draft_id}/decide")
-def decide(draft_id: str, d: Decision) -> dict:
+@api.post("/drafts/{draft_id}/decide")
+def decide(draft_id: str, d: Decision, user: str = Depends(require_user)) -> dict:
     if d.decision not in ("approved", "rejected"):
         raise HTTPException(422, "decision must be approved|rejected")
     current = sb().table("drafts").select("status").eq("id", draft_id).execute().data
@@ -114,7 +169,7 @@ def decide(draft_id: str, d: Decision) -> dict:
         raise HTTPException(409, "draft already sent — decisions are final after send")
     # upsert: a rejected draft may later be approved (and vice versa) without a 500
     sb().table("approvals").upsert(
-        {"draft_id": draft_id, "decision": d.decision, "decided_by": d.decided_by, "note": d.note},
+        {"draft_id": draft_id, "decision": d.decision, "decided_by": d.decided_by or user, "note": d.note},
         on_conflict="draft_id",
     ).execute()
     new_status = "approved" if d.decision == "approved" else "rejected"
@@ -128,12 +183,12 @@ def decide(draft_id: str, d: Decision) -> dict:
     return result
 
 
-@app.get("/api/search")
+@api.get("/search")
 def rag_search_endpoint(q: str) -> list[dict]:
     return search(q)
 
 
-@app.get("/api/topics/{topic_key}")
+@api.get("/topics/{topic_key}")
 def topic(topic_key: str) -> list[dict]:
     links = sb().table("topic_links").select("message_id, reason, confidence").eq("topic_key", topic_key).execute().data
     ids = [link["message_id"] for link in links]
@@ -145,7 +200,13 @@ def topic(topic_key: str) -> list[dict]:
     )
 
 
-# dashboard UI (static, same origin). Mounted last so /api/* wins.
+app.include_router(public)
+app.include_router(api)
+
+# Cursor agent over streamable HTTP at /mcp (same public host — no localhost)
+app.mount("/mcp", mcp_app_server.streamable_http_app())
+
+# dashboard UI (static, same origin). Mounted last so /api/* and /mcp win.
 _web = Path(__file__).resolve().parents[2] / "web"
 if _web.exists():
     app.mount("/", StaticFiles(directory=_web, html=True), name="web")

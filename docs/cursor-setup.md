@@ -36,4 +36,4 @@ Example prompts in Cursor chat:
 - "Draft a reply to the board-deck email and show me before sending."
 - "Approve draft <id> and send it."
 
-When hosted, the same server is reachable over streamable HTTP at `/mcp` (see deployment docs).
+When hosted, the same server is reachable over streamable HTTP at `/mcp/` (trailing slash) (see deployment docs).

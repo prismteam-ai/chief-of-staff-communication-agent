@@ -66,13 +66,38 @@
   .sent-note { color: var(--good-text); font-size: 13px; }
   .empty { color: var(--muted); padding: 8px 2px; }
   #err { color: var(--critical); margin: 10px 0; display: none; }
+  #login-overlay { position: fixed; inset: 0; background: var(--page); display: none;
+                   align-items: center; justify-content: center; z-index: 10; }
+  #login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+                padding: 28px; width: 320px; }
+  #login-card h1 { margin-bottom: 4px; }
+  #login-card p { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  #login-card input { width: 100%; margin-bottom: 10px; padding: 8px 10px; font: inherit;
+                      border: 1px solid var(--grid); border-radius: 8px; background: var(--page); color: var(--ink); }
+  #login-card button { width: 100%; padding: 9px; font: inherit; border: none; border-radius: 8px;
+                       background: var(--ch-gmail); color: #fff; cursor: pointer; }
+  #login-msg { color: var(--critical); font-size: 13px; min-height: 18px; margin-top: 8px; }
+  #logout { border: none; background: none; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; }
 </style>
 </head>
 <body>
+<div id="login-overlay">
+  <form id="login-card" onsubmit="doLogin(event)">
+    <h1>Chief of Staff</h1>
+    <p>Sign in to view communications.</p>
+    <input id="li-email" type="email" placeholder="email" autocomplete="username" required>
+    <input id="li-pass" type="password" placeholder="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+    <div id="login-msg"></div>
+  </form>
+</div>
 <main>
   <header>
     <h1>Chief of Staff — Communications</h1>
-    <button id="sync" title="Ingest all channels, index, and process new messages">Sync channels</button>
+    <span>
+      <button id="sync" title="Ingest all channels, index, and process new messages">Sync channels</button>
+      <button id="logout" onclick="logout()">sign out</button>
+    </span>
   </header>
   <div id="err"></div>
 
@@ -97,10 +122,34 @@ const chColor = c => `var(--ch-${c})`;
 const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const fmtSecs = s => s == null ? "—" : (s < 60 ? Math.round(s) + "s" : s < 3600 ? Math.round(s/60) + "m" : (s/3600).toFixed(1) + "h");
 
-async function j(path, opts) {
+function token() { return localStorage.getItem("cos_token"); }
+function showLogin(show) { document.getElementById("login-overlay").style.display = show ? "flex" : "none"; }
+function logout() { localStorage.removeItem("cos_token"); showLogin(true); }
+
+async function j(path, opts = {}) {
+  opts.headers = Object.assign({}, opts.headers, token() ? {Authorization: "Bearer " + token()} : {});
   const r = await fetch(API + path, opts);
+  if (r.status === 401) { showLogin(true); throw new Error("signed out"); }
   if (!r.ok) throw new Error(path + " → HTTP " + r.status);
   return r.json();
+}
+
+async function doLogin(ev) {
+  ev.preventDefault();
+  const msg = document.getElementById("login-msg");
+  msg.textContent = "";
+  try {
+    const r = await fetch(API + "/login", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({email: document.getElementById("li-email").value,
+                            password: document.getElementById("li-pass").value}),
+    });
+    if (!r.ok) { msg.textContent = "Invalid credentials."; return; }
+    const data = await r.json();
+    localStorage.setItem("cos_token", data.access_token);
+    showLogin(false);
+    render();
+  } catch (e) { msg.textContent = "Login failed: " + e.message; }
 }
 
 function tiles(d) {

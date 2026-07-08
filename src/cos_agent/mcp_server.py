@@ -13,7 +13,7 @@ from mcp.server.fastmcp import FastMCP
 from . import boot  # noqa: F401  (registers connectors)
 from .db import sb
 
-mcp = FastMCP("chief-of-staff-comms")
+mcp = FastMCP("chief-of-staff-comms", streamable_http_path="/")
 
 
 @mcp.tool()

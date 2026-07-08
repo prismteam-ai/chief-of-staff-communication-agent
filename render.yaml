@@ -1,0 +1,36 @@
+# Render blueprint — env-var REFERENCES only, values set in the dashboard
+# (Do NOT regress: no secrets in committed config; this repo becomes a public PR.)
+services:
+  - type: web
+    name: cos-comms-agent
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: AZURE_OPENAI_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_EMBED_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_EMBED_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_EMBED_DEPLOYMENT
+        value: text-embedding-3-small
+      - key: AUTOSYNC
+        value: "1"
+      - key: AUTOSYNC_INTERVAL_S
+        value: "300"
+      # optional real-provider credentials (connectors stay in fixture mode without them)
+      - key: ASANA_ACCESS_TOKEN
+        sync: false
+      - key: ASANA_WORKSPACE_GID
+        sync: false
+      - key: X_USER_ACCESS_TOKEN
+        sync: false
+      - key: X_SELF_USER_ID
+        sync: false
