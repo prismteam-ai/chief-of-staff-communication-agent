@@ -7,8 +7,11 @@ be able to read comms or approve sends.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -82,22 +85,36 @@ def login(body: LoginBody) -> dict:
 
 
 # --- Google OAuth connect flow (Connections page seed) -----------------------
-# start/callback are public by nature of the browser redirect dance; the state
-# nonce prevents forged callbacks, and the flow only ever STORES tokens.
-_oauth_states: set[str] = set()
+# start/callback are public by nature of the browser redirect dance. The state
+# nonce (a stateless HMAC over a timestamp) prevents forged callbacks WITHOUT
+# server-side memory — so it survives Render's idle spin-down / restart between
+# the redirect out and the callback back. The flow only ever STORES tokens.
+def _oauth_secret() -> bytes:
+    return (os.environ.get("MCP_AUTH_TOKEN") or os.environ["SUPABASE_SERVICE_ROLE_KEY"]).encode()
+
+
+def _sign_state() -> str:
+    ts = str(int(time.time()))
+    sig = hmac.new(_oauth_secret(), ts.encode(), hashlib.sha256).hexdigest()[:20]
+    return f"{ts}.{sig}"
+
+
+def _valid_state(state: str, max_age: int = 900) -> bool:
+    try:
+        ts, sig = state.split(".", 1)
+        expect = hmac.new(_oauth_secret(), ts.encode(), hashlib.sha256).hexdigest()[:20]
+        return hmac.compare_digest(sig, expect) and 0 <= time.time() - int(ts) <= max_age
+    except Exception:
+        return False
 
 
 @public.get("/oauth/google/start")
 def google_start():
-    import secrets as _secrets
-
     from fastapi.responses import RedirectResponse
 
     from .connectors.gmail_api import oauth_start_url
 
-    state = _secrets.token_urlsafe(24)
-    _oauth_states.add(state)
-    return RedirectResponse(oauth_start_url(state))
+    return RedirectResponse(oauth_start_url(_sign_state()))
 
 
 @public.get("/oauth/google/callback")
@@ -107,9 +124,8 @@ def google_callback(code: str, state: str = ""):
     from .connectors.base import register
     from .connectors.gmail_api import GmailConnector, oauth_exchange
 
-    if state not in _oauth_states:
-        raise HTTPException(400, "unknown oauth state — restart from /api/oauth/google/start")
-    _oauth_states.discard(state)
+    if not _valid_state(state):
+        raise HTTPException(400, "invalid or expired oauth state — restart from /api/oauth/google/start")
     tokens = oauth_exchange(code)
     if not tokens.get("refresh_token"):
         raise HTTPException(502, "google returned no refresh token — remove the app's prior grant and retry")

@@ -89,8 +89,9 @@ def approve_and_send(draft_id: str, decided_by: str = "executive-via-cursor") ->
     explicitly approved the draft text."""
     from .send import send_draft
 
-    sb().table("approvals").insert(
-        {"draft_id": draft_id, "decision": "approved", "decided_by": decided_by}
+    sb().table("approvals").upsert(
+        {"draft_id": draft_id, "decision": "approved", "decided_by": decided_by},
+        on_conflict="draft_id",
     ).execute()
     sb().table("drafts").update({"status": "approved"}).eq("id", draft_id).execute()
     return json.dumps(send_draft(draft_id), ensure_ascii=False)
@@ -99,8 +100,9 @@ def approve_and_send(draft_id: str, decided_by: str = "executive-via-cursor") ->
 @mcp.tool()
 def reject_draft(draft_id: str, note: str = "", decided_by: str = "executive-via-cursor") -> str:
     """Reject a pending draft (with an optional note on what to change)."""
-    sb().table("approvals").insert(
-        {"draft_id": draft_id, "decision": "rejected", "decided_by": decided_by, "note": note or None}
+    sb().table("approvals").upsert(
+        {"draft_id": draft_id, "decision": "rejected", "decided_by": decided_by, "note": note or None},
+        on_conflict="draft_id",
     ).execute()
     sb().table("drafts").update({"status": "rejected"}).eq("id", draft_id).execute()
     return json.dumps({"draft_id": draft_id, "status": "rejected"})
