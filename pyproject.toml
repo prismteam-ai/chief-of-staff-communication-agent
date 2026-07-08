@@ -1,7 +1,7 @@
 [project]
 name = "cos-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "Chief of Staff Communication Agent — multi-channel triage, RAG context, style-matched drafts, approval-gated send, Asana linking"
 readme = "README.md"
 authors = [
     { name = "Arthur C", email = "78846238+treize-khushrenada@users.noreply.github.com" }
@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.139.0",
     "httpx>=0.28.1",
+    "mcp>=1.28.1",
     "openai>=2.44.0",
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
@@ -19,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 cos-agent = "cos_agent:main"
+cos-mcp = "cos_agent.mcp_server:main"
 
 [build-system]
 requires = ["hatchling"]

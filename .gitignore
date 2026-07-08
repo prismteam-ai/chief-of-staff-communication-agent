@@ -11,3 +11,7 @@ data/raw/
 comms-checks/
 # os/editor
 .DS_Store
+.playwright-mcp/
+data/outbox/
+data/asana_outbox/
+*.png

@@ -36,6 +36,222 @@
       ],
       "body_text": "Sam \u2014 saw the deck draft, strong. I'll own the ARR bridge tonight. Ping me if the hiring slide needs more than headcount + timing.",
       "sent_at": "2026-07-07T02:10:00+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-whatsapp-0-1",
+      "external_thread_id": "g-whatsapp-t0",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550206",
+        "display_name": "Ravi Shankar"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "FYI \u2014 billing migration slipped two days because of the vendor delay. Mitigation plan in the channel; shout if you want changes.",
+      "sent_at": "2026-06-29T05:03:17.473150+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-whatsapp-1-2",
+      "external_thread_id": "g-whatsapp-t1",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550211",
+        "display_name": "Emma Wright"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan, I'd like to introduce you to the CTO at Helioscope; strong fit for a design-partner slot. Worth a 3-way intro?",
+      "sent_at": "2026-07-02T02:20:14.700179+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-whatsapp-2-3",
+      "external_thread_id": "g-whatsapp-t2",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550202",
+        "display_name": "Tom Brandt"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, our Meridian Core contract renews next month. Before we commit, can we review the roadmap for the API rate limits?",
+      "sent_at": "2026-07-06T17:31:35.622165+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-whatsapp-3-4",
+      "external_thread_id": "g-whatsapp-t3",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550202",
+        "display_name": "Tom Brandt"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan, our integration has been failing since last night's deploy \u2014 error rate is 4%. Team is looking but we need a senior eye on it.",
+      "sent_at": "2026-07-02T21:27:25.071690+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-whatsapp-3-5",
+      "external_thread_id": "g-whatsapp-t3",
+      "direction": "outbound",
+      "sender": {
+        "handle": "+14155550100",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550202",
+          "display_name": "Tom Brandt"
+        }
+      ],
+      "body_text": "On it \u2014 give me until tomorrow morning and you'll have it.",
+      "sent_at": "2026-07-03T02:10:18.489783+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-whatsapp-3-6",
+      "external_thread_id": "g-whatsapp-t3",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550202",
+        "display_name": "Tom Brandt"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Error rate is down to 1% but still above SLA. Can you confirm the fix timeline?",
+      "sent_at": "2026-07-06T07:21:10.346410+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-whatsapp-4-7",
+      "external_thread_id": "g-whatsapp-t4",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550211",
+        "display_name": "Emma Wright"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, ahead of our LP meeting \u2014 could you share the Q2 metrics pack? Particularly net retention and the enterprise pipeline.",
+      "sent_at": "2026-06-21T18:27:58.634468+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-whatsapp-5-8",
+      "external_thread_id": "g-whatsapp-t5",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550207",
+        "display_name": "Grace Liu"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "FYI \u2014 billing migration slipped two days because of the vendor delay. Mitigation plan in the channel; shout if you want changes.",
+      "sent_at": "2026-06-28T18:01:03.230600+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-whatsapp-6-9",
+      "external_thread_id": "g-whatsapp-t6",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550206",
+        "display_name": "Ravi Shankar"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "FYI \u2014 SOC2 audit scope slipped two days because of the vendor delay. Mitigation plan in the channel; shout if you want changes.",
+      "sent_at": "2026-07-03T04:33:46.341616+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-whatsapp-7-10",
+      "external_thread_id": "g-whatsapp-t7",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550202",
+        "display_name": "Tom Brandt"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, our Meridian Insights contract renews next month. Before we commit, can we review the roadmap for the API rate limits?",
+      "sent_at": "2026-06-23T20:46:40.304166+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-whatsapp-7-11",
+      "external_thread_id": "g-whatsapp-t7",
+      "direction": "outbound",
+      "sender": {
+        "handle": "+14155550100",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550202",
+          "display_name": "Tom Brandt"
+        }
+      ],
+      "body_text": "Let's hold a week \u2014 I want the board meeting behind us first.",
+      "sent_at": "2026-06-23T23:40:48.803620+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-whatsapp-7-12",
+      "external_thread_id": "g-whatsapp-t7",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550202",
+        "display_name": "Tom Brandt"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Any update on the roadmap review? Renewal deadline is coming up.",
+      "sent_at": "2026-06-27T08:44:45.695259+00:00"
     }
   ]
 }

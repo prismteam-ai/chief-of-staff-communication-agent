@@ -42,6 +42,11 @@ Exercises the system the way the grader will — the actual ingest, the actual R
    PARTIAL is allowed only with the gap named in the Evidence cell.
 5. Feed gaps back into CLAUDE.md **Phasing / Status** (and Open questions if a gap is a design unknown). No separate report file — the matrix goes in the conversation, status goes in CLAUDE.md.
 
-## Pre-submission: slowking self-assessment
+## Slowking self-assessment harness (run at every milestone, full fidelity)
 
-Before the PR, run the `slowking` agent from `../refs/soofi-xyz-team-kit/agents/slowking.md` against the actual submission package (PR draft, public runtime URL, demo credentials, demo video). Slowking's hard gates — publicly hosted runtime, reachable without local setup, login completable with shipped credentials — must all pass; a localhost-only runtime is an automatic 0/100 regardless of how good the matrix looks. Fix anything it fails before Arthur submits.
+A methodology-only imitation drifts on the shadow bands (learned 2026-07-08 — first baseline loaded only 2 of slowking's 5 inputs). Run it properly:
+
+1. **Orchestrator subagent** follows `../refs/soofi-xyz-team-kit/agents/slowking.md` verbatim and loads ALL its inputs: `apply-engineering-guidelines`, `evaluate-candidate-intent`, `evaluate-candidate-product`, `evaluate-candidate-implementation` (all under `../refs/soofi-xyz-team-kit/skills/`).
+2. **Two independent pillar subagents**, never one combined evaluator: product/evidence (drives the UI with Playwright browser tools — curl-only is allowed only while no UI exists) and implementation/kit-usage (consults `arceus.md` + the mapped builder agents — chatot, oranguru, xatu, wigglytuff, ash, espeon/alakazam, metagross — as read-only reviewers).
+3. Gates applied honestly every time: pre-deployment the formal score is 0/100 (local runtime) — print it per slowking's rules, then the labeled SHADOW assessment steers priorities. Track the shadow total across milestones; it must be monotonically rising.
+4. Before the actual PR: run against the real submission package (public runtime URL, shipped demo credentials, demo video). All hard gates must pass — a localhost-only runtime is an automatic 0/100 regardless of how good the matrix looks. Fix every failure before Arthur submits.

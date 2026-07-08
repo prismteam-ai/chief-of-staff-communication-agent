@@ -44,17 +44,13 @@ Central design tensions to resolve:
 2. Channel breadth (6+ integrations) vs speed-of-delivery scoring. The connector architecture must make each additional channel cheap, and the demo needs "multiple channels" end-to-end — not necessarily every channel at production depth. Which channels get real APIs vs a webhook/inbound-gateway path is an Open question.
 
 ## Phasing / Status
-Updated as work lands. Current phase in **bold**.
-1. **Meta kit** — agent context, skills, settings (this commit)
-2. Channel & account inventory — which brands/accounts/credentials exist for demo use; per-channel API access reality check (Gmail API, Twilio SMS/WhatsApp, X API tier, LinkedIn API restrictions)
-3. Core spine — normalized message store schema + connector interface + Gmail connector end-to-end
-4. Knowledge layer — RAG index over messages + Asana + preferences; retrieval quality checked with real questions
-5. Brain — recommendation engine + style-matched drafting + cross-channel topic linking
-6. Asana — link comms to tasks/projects; create/update tasks from communications
-7. More channels — SMS, WhatsApp, X, LinkedIn (or the honest subset; document constraints per channel)
-8. UI — dashboard, recommendations view, drafts-awaiting-approval view, approval flow
-9. Cursor agent — MCP surface over the RAG layer + actions
-10. Hosting + demo — public runtime, demo credentials, demo video, PR; slowking self-assessment before submitting
+Updated as work lands. Current phase in **bold**. DONE: 1 (meta kit), 2 (creds/tooling), 3-5 as spine v0 (fixture connectors all 6 channels → store → RAG → brain → approval-gated send, live-tested 2026-07-08, local commit 39c977d; slowking shadow ≈48/100, formal 0 until hosted).
+6. **Asana** — link comms to tasks/projects; create/update tasks from communications (needs workspace + PAT from Arthur)
+7. **UI** — dashboard, recommendations view, drafts-awaiting-approval view, approval flow (top shadow-points recovery after hosting)
+8. **Cursor agent** — MCP surface over the RAG layer + actions
+9. Corpus scale — grow fixtures from 12 messages to realistic volume + commit RAG seed script (toy data caps every band)
+10. Real connectors — Gmail first (needs demo account + OAuth app), then Twilio SMS/WhatsApp when unparked
+11. Hosting + demo — public runtime (Azure Container Apps proposal), demo credentials, demo video, PR; slowking self-assessment before submitting. NOTHING deploys/pushes until Arthur says so.
 
 ## Tech stack
 Proven choices only; open choices live in Open questions.

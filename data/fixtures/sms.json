@@ -36,6 +36,222 @@
       ],
       "body_text": "Great news. Yes on L7 base, hold equity at 0.35 \u2014 I'll go to 0.4 if she pushes. Send tonight.",
       "sent_at": "2026-07-02T00:05:00+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-sms-0-1",
+      "external_thread_id": "g-sms-t0",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550210",
+        "display_name": "Noah Kim"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, our Meridian Core contract renews next month. Before we commit, can we review the roadmap for the API rate limits?",
+      "sent_at": "2026-06-30T17:42:17.206959+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-sms-1-2",
+      "external_thread_id": "g-sms-t1",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550207",
+        "display_name": "Grace Liu"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan, we need your call on the SOC2 audit scope \u2014 options are in the doc. Blocking the sprint until we hear.",
+      "sent_at": "2026-07-04T02:15:05.018799+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-sms-2-3",
+      "external_thread_id": "g-sms-t2",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550206",
+        "display_name": "Ravi Shankar"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan, we need your call on the data-residency rollout \u2014 options are in the doc. Blocking the sprint until we hear.",
+      "sent_at": "2026-06-20T18:39:04.534692+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-sms-3-4",
+      "external_thread_id": "g-sms-t3",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550206",
+        "display_name": "Ravi Shankar"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "FYI \u2014 data-residency rollout slipped two days because of the vendor delay. Mitigation plan in the channel; shout if you want changes.",
+      "sent_at": "2026-06-29T22:30:39.035133+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-sms-3-5",
+      "external_thread_id": "g-sms-t3",
+      "direction": "outbound",
+      "sender": {
+        "handle": "+14155550100",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550206",
+          "display_name": "Ravi Shankar"
+        }
+      ],
+      "body_text": "Good catch. Looping the team now; expect an update by EOD.",
+      "sent_at": "2026-06-30T00:44:50.966308+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-sms-4-6",
+      "external_thread_id": "g-sms-t4",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550207",
+        "display_name": "Grace Liu"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "FYI \u2014 billing migration slipped two days because of the vendor delay. Mitigation plan in the channel; shout if you want changes.",
+      "sent_at": "2026-07-04T02:19:35.879549+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-sms-4-7",
+      "external_thread_id": "g-sms-t4",
+      "direction": "outbound",
+      "sender": {
+        "handle": "+14155550100",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550207",
+          "display_name": "Grace Liu"
+        }
+      ],
+      "body_text": "On it \u2014 give me until tomorrow morning and you'll have it.",
+      "sent_at": "2026-07-04T05:59:12.287353+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-sms-5-8",
+      "external_thread_id": "g-sms-t5",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550204",
+        "display_name": "Diego Fuentes"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Good news \u2014 we want to roll Meridian Core out to two more business units. Who's the right person to scope pricing?",
+      "sent_at": "2026-07-04T04:09:37.327018+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-sms-5-9",
+      "external_thread_id": "g-sms-t5",
+      "direction": "outbound",
+      "sender": {
+        "handle": "+14155550100",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550204",
+          "display_name": "Diego Fuentes"
+        }
+      ],
+      "body_text": "Let's hold a week \u2014 I want the board meeting behind us first.",
+      "sent_at": "2026-07-04T09:43:43.336474+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-sms-6-10",
+      "external_thread_id": "g-sms-t6",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550209",
+        "display_name": "Sofia Marino"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan, the Ops Manager finalist wants a call with you before deciding \u2014 20 minutes this week possible?",
+      "sent_at": "2026-06-25T07:51:04.564890+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-sms-6-11",
+      "external_thread_id": "g-sms-t6",
+      "direction": "outbound",
+      "sender": {
+        "handle": "+14155550100",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550209",
+          "display_name": "Sofia Marino"
+        }
+      ],
+      "body_text": "Good catch. Looping the team now; expect an update by EOD.",
+      "sent_at": "2026-06-25T10:59:33.282774+00:00"
+    },
+    {
+      "account_handle": "+14155550100",
+      "external_id": "g-sms-7-12",
+      "external_thread_id": "g-sms-t7",
+      "direction": "inbound",
+      "sender": {
+        "handle": "+14155550204",
+        "display_name": "Diego Fuentes"
+      },
+      "recipients": [
+        {
+          "handle": "+14155550100",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan, our integration has been failing since last night's deploy \u2014 error rate is 4%. Team is looking but we need a senior eye on it.",
+      "sent_at": "2026-06-24T04:00:10.445598+00:00"
     }
   ]
 }

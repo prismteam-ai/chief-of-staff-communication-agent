@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import boot  # registers connectors
@@ -134,3 +136,9 @@ def topic(topic_key: str) -> list[dict]:
         sb().table("messages").select("id, channel, sender, body_text, sent_at")
         .in_("id", ids).order("sent_at").execute().data
     )
+
+
+# dashboard UI (static, same origin). Mounted last so /api/* wins.
+_web = Path(__file__).resolve().parents[2] / "web"
+if _web.exists():
+    app.mount("/", StaticFiles(directory=_web, html=True), name="web")

@@ -95,6 +95,709 @@
       ],
       "body_text": "Thanks \u2014 approved at the quoted annual rate. Please invoice NET-30 to finance@meridianlabs.io and cc me. Appreciate the quick turnaround.",
       "sent_at": "2026-07-04T14:15:00+00:00"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-0-1",
+      "external_thread_id": "g-gmail-t0",
+      "direction": "inbound",
+      "sender": {
+        "handle": "tom.brandt@osloworks.no",
+        "display_name": "Tom Brandt"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, our Meridian Core contract renews next month. Before we commit, can we review the roadmap for the API rate limits?",
+      "sent_at": "2026-06-24T04:23:02.497192+00:00",
+      "subject": "renewal question \u2014 Tom"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-0-2",
+      "external_thread_id": "g-gmail-t0",
+      "direction": "outbound",
+      "sender": {
+        "handle": "jordan@meridianlabs.io",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "tom.brandt@osloworks.no",
+          "display_name": "Tom Brandt"
+        }
+      ],
+      "body_text": "Approved. Proceed as scoped and invoice as discussed.",
+      "sent_at": "2026-06-24T04:46:06.119540+00:00",
+      "subject": "renewal question \u2014 Tom"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-0-3",
+      "external_thread_id": "g-gmail-t0",
+      "direction": "inbound",
+      "sender": {
+        "handle": "tom.brandt@osloworks.no",
+        "display_name": "Tom Brandt"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Any update on the roadmap review? Renewal deadline is coming up.",
+      "sent_at": "2026-06-25T21:08:08.200759+00:00",
+      "subject": "renewal question \u2014 Tom"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-1-4",
+      "external_thread_id": "g-gmail-t1",
+      "direction": "inbound",
+      "sender": {
+        "handle": "emma@skylinepartners.com",
+        "display_name": "Emma Wright"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, ahead of our LP meeting \u2014 could you share the Q2 metrics pack? Particularly net retention and the enterprise pipeline.",
+      "sent_at": "2026-06-25T22:54:33.570087+00:00",
+      "subject": "Q2 update ask \u2014 Emma"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-1-5",
+      "external_thread_id": "g-gmail-t1",
+      "direction": "outbound",
+      "sender": {
+        "handle": "jordan@meridianlabs.io",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "emma@skylinepartners.com",
+          "display_name": "Emma Wright"
+        }
+      ],
+      "body_text": "Yes, let's do it. Send times that work and I'll confirm one.",
+      "sent_at": "2026-06-26T03:09:30.720654+00:00",
+      "subject": "Q2 update ask \u2014 Emma"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-1-6",
+      "external_thread_id": "g-gmail-t1",
+      "direction": "inbound",
+      "sender": {
+        "handle": "emma@skylinepartners.com",
+        "display_name": "Emma Wright"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Following up \u2014 any word on the metrics pack?",
+      "sent_at": "2026-06-27T10:06:13.856438+00:00",
+      "subject": "Q2 update ask \u2014 Emma"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-2-7",
+      "external_thread_id": "g-gmail-t2",
+      "direction": "inbound",
+      "sender": {
+        "handle": "ravi@meridianlabs.io",
+        "display_name": "Ravi Shankar"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan, we need your call on the pricing page rework \u2014 options are in the doc. Blocking the sprint until we hear.",
+      "sent_at": "2026-06-25T16:00:14.861206+00:00",
+      "subject": "decision needed \u2014 Ravi"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-3-8",
+      "external_thread_id": "g-gmail-t3",
+      "direction": "inbound",
+      "sender": {
+        "handle": "noah@halcyonclients.com",
+        "display_name": "Noah Kim"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, our Meridian Insights contract renews next month. Before we commit, can we review the roadmap for the API rate limits?",
+      "sent_at": "2026-06-26T05:27:08.626604+00:00",
+      "subject": "renewal question \u2014 Noah"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-3-9",
+      "external_thread_id": "g-gmail-t3",
+      "direction": "outbound",
+      "sender": {
+        "handle": "jordan@meridianlabs.io",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "noah@halcyonclients.com",
+          "display_name": "Noah Kim"
+        }
+      ],
+      "body_text": "Yes, let's do it. Send times that work and I'll confirm one.",
+      "sent_at": "2026-06-26T10:08:10.293560+00:00",
+      "subject": "renewal question \u2014 Noah"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-4-10",
+      "external_thread_id": "g-gmail-t4",
+      "direction": "inbound",
+      "sender": {
+        "handle": "diego@quintaanalytics.com",
+        "display_name": "Diego Fuentes"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, our Meridian Insights contract renews next month. Before we commit, can we review the roadmap for the API rate limits?",
+      "sent_at": "2026-07-04T14:48:15.230870+00:00",
+      "subject": "renewal question \u2014 Diego"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-5-11",
+      "external_thread_id": "g-gmail-t5",
+      "direction": "inbound",
+      "sender": {
+        "handle": "tom.brandt@osloworks.no",
+        "display_name": "Tom Brandt"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Good news \u2014 we want to roll Meridian Core out to two more business units. Who's the right person to scope pricing?",
+      "sent_at": "2026-07-02T06:52:15.705178+00:00",
+      "subject": "expansion \u2014 Tom"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-6-12",
+      "external_thread_id": "g-gmail-t6",
+      "direction": "inbound",
+      "sender": {
+        "handle": "diego@quintaanalytics.com",
+        "display_name": "Diego Fuentes"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Good news \u2014 we want to roll Meridian Core out to two more business units. Who's the right person to scope pricing?",
+      "sent_at": "2026-06-29T22:55:04.689298+00:00",
+      "subject": "expansion \u2014 Diego"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-7-13",
+      "external_thread_id": "g-gmail-t7",
+      "direction": "inbound",
+      "sender": {
+        "handle": "emma@skylinepartners.com",
+        "display_name": "Emma Wright"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan, I'd like to introduce you to the CTO at Helioscope; strong fit for a design-partner slot. Worth a 3-way intro?",
+      "sent_at": "2026-07-05T02:00:04.385007+00:00",
+      "subject": "intro offer \u2014 Emma"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-8-14",
+      "external_thread_id": "g-gmail-t8",
+      "direction": "inbound",
+      "sender": {
+        "handle": "noah@halcyonclients.com",
+        "display_name": "Noah Kim"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan, our integration has been failing since last night's deploy \u2014 error rate is 4%. Team is looking but we need a senior eye on it.",
+      "sent_at": "2026-06-18T00:53:56.189966+00:00",
+      "subject": "escalation \u2014 Noah"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-8-15",
+      "external_thread_id": "g-gmail-t8",
+      "direction": "outbound",
+      "sender": {
+        "handle": "jordan@meridianlabs.io",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "noah@halcyonclients.com",
+          "display_name": "Noah Kim"
+        }
+      ],
+      "body_text": "On it \u2014 give me until tomorrow morning and you'll have it.",
+      "sent_at": "2026-06-18T06:05:36.018720+00:00",
+      "subject": "escalation \u2014 Noah"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-8-16",
+      "external_thread_id": "g-gmail-t8",
+      "direction": "inbound",
+      "sender": {
+        "handle": "noah@halcyonclients.com",
+        "display_name": "Noah Kim"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Error rate is down to 1% but still above SLA. Can you confirm the fix timeline?",
+      "sent_at": "2026-06-19T12:25:03.524812+00:00",
+      "subject": "escalation \u2014 Noah"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-9-17",
+      "external_thread_id": "g-gmail-t9",
+      "direction": "inbound",
+      "sender": {
+        "handle": "grace@meridianlabs.io",
+        "display_name": "Grace Liu"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan, we need your call on the onboarding revamp \u2014 options are in the doc. Blocking the sprint until we hear.",
+      "sent_at": "2026-06-18T07:41:11.807874+00:00",
+      "subject": "decision needed \u2014 Grace"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-9-18",
+      "external_thread_id": "g-gmail-t9",
+      "direction": "outbound",
+      "sender": {
+        "handle": "jordan@meridianlabs.io",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "grace@meridianlabs.io",
+          "display_name": "Grace Liu"
+        }
+      ],
+      "body_text": "Short answer: yes. Longer answer on a call \u2014 grab 15 min with me Thursday.",
+      "sent_at": "2026-06-18T08:33:03.648267+00:00",
+      "subject": "decision needed \u2014 Grace"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-10-19",
+      "external_thread_id": "g-gmail-t10",
+      "direction": "inbound",
+      "sender": {
+        "handle": "lena.hoffmann@vertexpress.de",
+        "display_name": "Lena Hoffmann"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, writing a piece on AI in enterprise workflows for Thursday. Could you give a short comment on adoption barriers?",
+      "sent_at": "2026-07-07T16:11:40.503399+00:00",
+      "subject": "comment request \u2014 Lena"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-11-20",
+      "external_thread_id": "g-gmail-t11",
+      "direction": "inbound",
+      "sender": {
+        "handle": "noah@halcyonclients.com",
+        "display_name": "Noah Kim"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, our Meridian Insights contract renews next month. Before we commit, can we review the roadmap for the API rate limits?",
+      "sent_at": "2026-06-25T18:43:39.096237+00:00",
+      "subject": "renewal question \u2014 Noah"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-12-21",
+      "external_thread_id": "g-gmail-t12",
+      "direction": "inbound",
+      "sender": {
+        "handle": "noah@halcyonclients.com",
+        "display_name": "Noah Kim"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Good news \u2014 we want to roll Meridian Insights out to two more business units. Who's the right person to scope pricing?",
+      "sent_at": "2026-06-19T03:38:34.748259+00:00",
+      "subject": "expansion \u2014 Noah"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-13-22",
+      "external_thread_id": "g-gmail-t13",
+      "direction": "inbound",
+      "sender": {
+        "handle": "lena.hoffmann@vertexpress.de",
+        "display_name": "Lena Hoffmann"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, writing a piece on AI in enterprise workflows for Thursday. Could you give a short comment on adoption barriers?",
+      "sent_at": "2026-06-21T08:59:21.726350+00:00",
+      "subject": "comment request \u2014 Lena"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-13-23",
+      "external_thread_id": "g-gmail-t13",
+      "direction": "outbound",
+      "sender": {
+        "handle": "jordan@meridianlabs.io",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "lena.hoffmann@vertexpress.de",
+          "display_name": "Lena Hoffmann"
+        }
+      ],
+      "body_text": "Yes, let's do it. Send times that work and I'll confirm one.",
+      "sent_at": "2026-06-21T09:56:02.540129+00:00",
+      "subject": "comment request \u2014 Lena"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-14-24",
+      "external_thread_id": "g-gmail-t14",
+      "direction": "inbound",
+      "sender": {
+        "handle": "noah@halcyonclients.com",
+        "display_name": "Noah Kim"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, our Meridian Core contract renews next month. Before we commit, can we review the roadmap for the API rate limits?",
+      "sent_at": "2026-06-23T14:58:23.777514+00:00",
+      "subject": "renewal question \u2014 Noah"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-15-25",
+      "external_thread_id": "g-gmail-t15",
+      "direction": "inbound",
+      "sender": {
+        "handle": "ravi@meridianlabs.io",
+        "display_name": "Ravi Shankar"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "FYI \u2014 billing migration slipped two days because of the vendor delay. Mitigation plan in the channel; shout if you want changes.",
+      "sent_at": "2026-07-06T16:42:04.697555+00:00",
+      "subject": "heads up \u2014 Ravi"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-16-26",
+      "external_thread_id": "g-gmail-t16",
+      "direction": "inbound",
+      "sender": {
+        "handle": "emma@skylinepartners.com",
+        "display_name": "Emma Wright"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, ahead of our LP meeting \u2014 could you share the Q2 metrics pack? Particularly net retention and the enterprise pipeline.",
+      "sent_at": "2026-06-19T15:07:58.773677+00:00",
+      "subject": "Q2 update ask \u2014 Emma"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-16-27",
+      "external_thread_id": "g-gmail-t16",
+      "direction": "outbound",
+      "sender": {
+        "handle": "jordan@meridianlabs.io",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "emma@skylinepartners.com",
+          "display_name": "Emma Wright"
+        }
+      ],
+      "body_text": "Yes, let's do it. Send times that work and I'll confirm one.",
+      "sent_at": "2026-06-19T16:56:53.378949+00:00",
+      "subject": "Q2 update ask \u2014 Emma"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-17-28",
+      "external_thread_id": "g-gmail-t17",
+      "direction": "inbound",
+      "sender": {
+        "handle": "noah@halcyonclients.com",
+        "display_name": "Noah Kim"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, our Meridian Core contract renews next month. Before we commit, can we review the roadmap for the API rate limits?",
+      "sent_at": "2026-07-04T03:34:53.272586+00:00",
+      "subject": "renewal question \u2014 Noah"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-17-29",
+      "external_thread_id": "g-gmail-t17",
+      "direction": "outbound",
+      "sender": {
+        "handle": "jordan@meridianlabs.io",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "noah@halcyonclients.com",
+          "display_name": "Noah Kim"
+        }
+      ],
+      "body_text": "Approved. Proceed as scoped and invoice as discussed.",
+      "sent_at": "2026-07-04T06:09:57.088110+00:00",
+      "subject": "renewal question \u2014 Noah"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-18-30",
+      "external_thread_id": "g-gmail-t18",
+      "direction": "inbound",
+      "sender": {
+        "handle": "maya@northcapital.vc",
+        "display_name": "Maya Lindqvist"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, ahead of our LP meeting \u2014 could you share the Q2 metrics pack? Particularly net retention and the enterprise pipeline.",
+      "sent_at": "2026-07-03T23:30:05.635961+00:00",
+      "subject": "Q2 update ask \u2014 Maya"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-18-31",
+      "external_thread_id": "g-gmail-t18",
+      "direction": "outbound",
+      "sender": {
+        "handle": "jordan@meridianlabs.io",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "maya@northcapital.vc",
+          "display_name": "Maya Lindqvist"
+        }
+      ],
+      "body_text": "Yes, let's do it. Send times that work and I'll confirm one.",
+      "sent_at": "2026-07-04T01:19:01.658582+00:00",
+      "subject": "Q2 update ask \u2014 Maya"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-18-32",
+      "external_thread_id": "g-gmail-t18",
+      "direction": "inbound",
+      "sender": {
+        "handle": "maya@northcapital.vc",
+        "display_name": "Maya Lindqvist"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Following up \u2014 any word on the metrics pack?",
+      "sent_at": "2026-07-07T17:58:36.079293+00:00",
+      "subject": "Q2 update ask \u2014 Maya"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-19-33",
+      "external_thread_id": "g-gmail-t19",
+      "direction": "inbound",
+      "sender": {
+        "handle": "sofia@talentbridge.com",
+        "display_name": "Sofia Marino"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Jordan, the Head of Design finalist wants a call with you before deciding \u2014 20 minutes this week possible?",
+      "sent_at": "2026-06-29T17:04:59.735374+00:00",
+      "subject": "candidate update \u2014 Sofia"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-20-34",
+      "external_thread_id": "g-gmail-t20",
+      "direction": "inbound",
+      "sender": {
+        "handle": "maya@northcapital.vc",
+        "display_name": "Maya Lindqvist"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Hi Jordan, ahead of our LP meeting \u2014 could you share the Q2 metrics pack? Particularly net retention and the enterprise pipeline.",
+      "sent_at": "2026-07-02T01:22:30.414968+00:00",
+      "subject": "Q2 update ask \u2014 Maya"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-21-35",
+      "external_thread_id": "g-gmail-t21",
+      "direction": "inbound",
+      "sender": {
+        "handle": "noah@halcyonclients.com",
+        "display_name": "Noah Kim"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Good news \u2014 we want to roll Meridian Core out to two more business units. Who's the right person to scope pricing?",
+      "sent_at": "2026-06-18T11:04:25.290637+00:00",
+      "subject": "expansion \u2014 Noah"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-21-36",
+      "external_thread_id": "g-gmail-t21",
+      "direction": "outbound",
+      "sender": {
+        "handle": "jordan@meridianlabs.io",
+        "display_name": "Jordan Reeve"
+      },
+      "recipients": [
+        {
+          "handle": "noah@halcyonclients.com",
+          "display_name": "Noah Kim"
+        }
+      ],
+      "body_text": "Short answer: yes. Longer answer on a call \u2014 grab 15 min with me Thursday.",
+      "sent_at": "2026-06-18T13:05:33.359065+00:00",
+      "subject": "expansion \u2014 Noah"
+    },
+    {
+      "account_handle": "jordan@meridianlabs.io",
+      "external_id": "g-gmail-21-37",
+      "external_thread_id": "g-gmail-t21",
+      "direction": "inbound",
+      "sender": {
+        "handle": "noah@halcyonclients.com",
+        "display_name": "Noah Kim"
+      },
+      "recipients": [
+        {
+          "handle": "jordan@meridianlabs.io",
+          "display_name": "Jordan Reeve"
+        }
+      ],
+      "body_text": "Circling back on the expansion scoping \u2014 procurement wants numbers by Friday.",
+      "sent_at": "2026-06-20T21:24:08.874272+00:00",
+      "subject": "expansion \u2014 Noah"
     }
   ]
 }

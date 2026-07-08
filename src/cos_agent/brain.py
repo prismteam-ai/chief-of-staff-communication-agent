@@ -25,8 +25,13 @@ RECOMMEND_SCHEMA = {
         "draft_body": {"type": ["string", "null"]},
         "style_notes": {"type": ["string", "null"]},
         "topic_key": {"type": ["string", "null"]},
+        "task_title": {"type": ["string", "null"]},
+        "task_detail": {"type": ["string", "null"]},
     },
-    "required": ["action", "rationale", "needs_context", "context_question", "draft_body", "style_notes", "topic_key"],
+    "required": [
+        "action", "rationale", "needs_context", "context_question",
+        "draft_body", "style_notes", "topic_key", "task_title", "task_detail",
+    ],
     "additionalProperties": False,
 }
 
@@ -83,7 +88,10 @@ def process_message(message_id: str) -> dict:
         "if you cannot answer confidently, use action 'needs_context' and ask one precise question. "
         "topic_key: a short kebab-case slug naming the person/project/decision this message belongs to, "
         "consistent across channels. If the message belongs to one of known_topic_keys, REUSE that exact key "
-        "instead of inventing a variant."
+        "instead of inventing a variant. "
+        "If the message requires tracked follow-up work (a deliverable, a deadline, an owed action), "
+        "set task_title (imperative, <=70 chars) and task_detail (what, who, by when) — even when the "
+        "action is 'reply', a reply can still need a task. Otherwise leave them null."
     )
     user = json.dumps(
         {
@@ -132,6 +140,15 @@ def process_message(message_id: str) -> dict:
                 "model": s.chat_deployment,
             }
         ).execute()
+
+    if out.get("task_title"):
+        from .asana import task_from_message  # local import: avoids cycle at module load
+
+        try:
+            task = task_from_message(message_id, out["task_title"], out.get("task_detail") or out["rationale"])
+            out["asana_task_url"] = task.get("permalink_url")
+        except Exception as e:  # task failure never blocks the reply path
+            out["asana_error"] = f"{type(e).__name__}: {e}"
 
     if out.get("topic_key"):
         sb().table("topic_links").upsert(

@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📬</text></svg>">
+<title>Chief of Staff — Communications</title>
+<style>
+  :root {
+    --page: #f9f9f7; --surface: #fcfcfb;
+    --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --border: rgba(11,11,11,0.10);
+    --ch-gmail: #2a78d6; --ch-email: #1baf7a; --ch-sms: #eda100;
+    --ch-whatsapp: #008300; --ch-x: #4a3aa7; --ch-linkedin: #e34948;
+    --good: #0ca30c; --critical: #d03b3b; --good-text: #006300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0d0d0d; --surface: #1a1a19;
+      --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --border: rgba(255,255,255,0.10);
+      --ch-gmail: #3987e5; --ch-email: #199e70; --ch-sms: #c98500;
+      --ch-whatsapp: #008300; --ch-x: #9085e9; --ch-linkedin: #e66767;
+      --good-text: #0ca30c;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--page); color: var(--ink);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 24px 20px 64px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px; }
+  h1 { font-size: 18px; font-weight: 650; }
+  #sync { border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+          border-radius: 8px; padding: 6px 14px; font: inherit; cursor: pointer; }
+  #sync:hover { color: var(--ink); }
+  h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); text-transform: uppercase;
+       letter-spacing: .04em; margin: 28px 0 10px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .tile .v { font-size: 26px; font-weight: 650; }
+  .tile .l { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .tile.alert .v { color: var(--critical); }
+  .tile.alert .l::before { content: "⚠ "; }
+
+  .bars { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .barrow { display: grid; grid-template-columns: 84px 1fr 70px; align-items: center; gap: 10px; padding: 5px 0; }
+  .barrow .name { color: var(--ink-2); font-size: 13px; }
+  .track { height: 14px; display: flex; align-items: center; }
+  .bar { height: 14px; border-radius: 4px; min-width: 2px; }
+  .barrow .n { font-variant-numeric: tabular-nums; color: var(--ink); font-size: 13px; }
+  .barrow .n small { color: var(--muted); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+          padding: 14px 16px; margin-bottom: 10px; }
+  .chip { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .msg { color: var(--ink-2); margin: 6px 0 8px; }
+  .draft { border-left: 3px solid var(--grid); padding: 6px 10px; margin: 8px 0; white-space: pre-wrap; }
+  .rec { font-size: 13px; color: var(--ink-2); }
+  .rec b { color: var(--ink); font-weight: 600; }
+  .actions { margin-top: 10px; display: flex; gap: 8px; }
+  .actions button { font: inherit; border-radius: 8px; padding: 6px 14px; cursor: pointer; border: 1px solid var(--border); }
+  .approve { background: var(--good); border-color: transparent; color: #fff; }
+  .reject { background: transparent; color: var(--ink-2); }
+  .sent-note { color: var(--good-text); font-size: 13px; }
+  .empty { color: var(--muted); padding: 8px 2px; }
+  #err { color: var(--critical); margin: 10px 0; display: none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Chief of Staff — Communications</h1>
+    <button id="sync" title="Ingest all channels, index, and process new messages">Sync channels</button>
+  </header>
+  <div id="err"></div>
+
+  <section class="tiles" id="tiles" aria-label="Key metrics"></section>
+
+  <h2>Channel breakdown</h2>
+  <div class="bars" id="bars" role="img" aria-label="Inbound messages per channel"></div>
+
+  <h2>Drafts awaiting approval</h2>
+  <div id="approvals"></div>
+
+  <h2>Needs your context</h2>
+  <div id="needsctx"></div>
+
+  <h2>Recommended actions</h2>
+  <div id="recs"></div>
+</main>
+<script>
+const API = (window.API_BASE || "") + "/api";
+const CH = ["gmail","email","sms","whatsapp","x","linkedin"];   // fixed order — palette slots 1-6
+const chColor = c => `var(--ch-${c})`;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+const fmtSecs = s => s == null ? "—" : (s < 60 ? Math.round(s) + "s" : s < 3600 ? Math.round(s/60) + "m" : (s/3600).toFixed(1) + "h");
+
+async function j(path, opts) {
+  const r = await fetch(API + path, opts);
+  if (!r.ok) throw new Error(path + " → HTTP " + r.status);
+  return r.json();
+}
+
+function tiles(d) {
+  const t = [
+    {v: d.volume.inbound, l: "inbound messages"},
+    {v: d.response_status.pending, l: "awaiting response"},
+    {v: d.overdue_over_5min, l: "overdue (>5 min)", alert: d.overdue_over_5min > 0},
+    {v: d.pending_approvals, l: "drafts to approve"},
+    {v: fmtSecs(d.response_time_seconds.median), l: "median response time"},
+  ];
+  document.getElementById("tiles").innerHTML = t.map(x =>
+    `<div class="tile${x.alert ? " alert" : ""}"><div class="v">${esc(x.v)}</div><div class="l">${esc(x.l)}</div></div>`).join("");
+}
+
+function bars(d) {
+  const max = Math.max(1, ...CH.map(c => d.channel_breakdown[c]?.total || 0));
+  document.getElementById("bars").innerHTML = CH.map(c => {
+    const s = d.channel_breakdown[c] || {total: 0, pending: 0};
+    return `<div class="barrow">
+      <span class="name"><span class="chip" style="background:${chColor(c)}"></span>${c}</span>
+      <span class="track"><span class="bar" style="width:${(s.total/max)*100}%;background:${chColor(c)}"></span></span>
+      <span class="n">${s.total} <small>(${s.pending} open)</small></span>
+    </div>`;
+  }).join("");
+}
+
+function msgLine(m) {
+  const from = m.sender.display_name || m.sender.handle;
+  return `<div class="meta"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(m.channel)} · ${esc(from)} · ${new Date(m.sent_at).toLocaleString()}</div>
+          <div class="msg">${esc(m.body_text)}</div>`;
+}
+
+async function render() {
+  try {
+    const [dash, drafts, recs, msgs] = await Promise.all([
+      j("/dashboard"), j("/drafts?status=pending"), j("/recommendations"), j("/messages")
+    ]);
+    const byId = Object.fromEntries(msgs.map(m => [m.id, m]));
+    tiles(dash); bars(dash);
+
+    document.getElementById("approvals").innerHTML = drafts.length ? drafts.map(d => {
+      const m = byId[d.message_id];
+      return `<div class="card" data-draft="${d.id}">
+        ${m ? msgLine(m) : ""}
+        <div class="draft">${esc(d.body)}</div>
+        ${d.style_notes ? `<div class="meta">style: ${esc(d.style_notes)}</div>` : ""}
+        <div class="actions">
+          <button class="approve" onclick="decide('${d.id}','approved',this)">Approve &amp; send</button>
+          <button class="reject" onclick="decide('${d.id}','rejected',this)">Reject</button>
+        </div>
+      </div>`;
+    }).join("") : `<div class="empty">Nothing waiting — inbox zero on approvals.</div>`;
+
+    const needing = recs.filter(r => r.needs_context);
+    document.getElementById("needsctx").innerHTML = needing.length ? needing.map(r => {
+      const m = byId[r.message_id];
+      return `<div class="card">${m ? msgLine(m) : ""}
+        <div class="rec"><b>Agent asks:</b> ${esc(r.context_question || r.rationale)}</div></div>`;
+    }).join("") : `<div class="empty">No open questions from the agent.</div>`;
+
+    document.getElementById("recs").innerHTML = recs.length ? recs.map(r => {
+      const m = byId[r.message_id];
+      const from = m ? (m.sender.display_name || m.sender.handle) : r.message_id.slice(0,8);
+      return `<div class="card">
+        <div class="meta">${m ? `<span class="chip" style="background:${chColor(m.channel)}"></span>${esc(m.channel)} · ` : ""}${esc(from)}</div>
+        <div class="rec"><b>${esc(r.action)}</b> — ${esc(r.rationale)}</div>
+      </div>`;
+    }).join("") : `<div class="empty">No recommendations yet — run a sync.</div>`;
+  } catch (e) {
+    const el = document.getElementById("err");
+    el.style.display = "block"; el.textContent = "Load failed: " + e.message;
+  }
+}
+
+async function decide(id, decision, btn) {
+  btn.disabled = true; btn.textContent = decision === "approved" ? "Sending…" : "Rejecting…";
+  try {
+    const r = await j(`/drafts/${id}/decide`, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({decision, decided_by: "executive"}),
+    });
+    const card = document.querySelector(`[data-draft="${id}"] .actions`);
+    if (card) card.outerHTML = decision === "approved"
+      ? `<div class="sent-note">✓ Approved — sent via ${esc(r.send ? "channel connector" : "")} (${esc(r.send?.provider_message_id || "")})</div>`
+      : `<div class="meta">Rejected.</div>`;
+    render();
+  } catch (e) { alert("Failed: " + e.message); btn.disabled = false; }
+}
+
+document.getElementById("sync").addEventListener("click", async ev => {
+  ev.target.disabled = true; ev.target.textContent = "Syncing…";
+  try { await j("/sync", {method: "POST"}); } catch (e) { alert("Sync failed: " + e.message); }
+  ev.target.disabled = false; ev.target.textContent = "Sync channels";
+  render();
+});
+
+render();
+setInterval(render, 30000);
+</script>
+</body>
+</html>
