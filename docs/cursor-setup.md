@@ -36,4 +36,19 @@ Example prompts in Cursor chat:
 - "Draft a reply to the board-deck email and show me before sending."
 - "Approve draft <id> and send it."
 
-When hosted, the same server is reachable over streamable HTTP at `/mcp/` (trailing slash) (see deployment docs).
+## Hosted (remote MCP)
+
+The same server runs at the demo URL over streamable HTTP — auth required:
+
+```json
+{
+  "mcpServers": {
+    "chief-of-staff": {
+      "url": "https://cos-comms-agent.onrender.com/mcp/",
+      "headers": {"Authorization": "Bearer <MCP_AUTH_TOKEN — shipped with the demo credentials>"}
+    }
+  }
+}
+```
+
+Note the trailing slash on `/mcp/`. A Supabase session JWT (from `/api/login`) is accepted in place of the static token.

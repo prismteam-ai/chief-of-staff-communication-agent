@@ -166,6 +166,7 @@ Invariants to preserve; add as they're won.
 - No secrets/tokens in committed config — env-var references only. This repo becomes a public PR; OAuth token leakage here is a live-account compromise, not just hygiene.
 - Provenance columns are never dropped "for simplicity" — source-backed recommendations are the product.
 - The demo runtime must be publicly hosted at a reachable URL; demo login credentials ship with the PR (login-blocked = automatic 0/100 from the grader).
+- **Every public surface is auth-gated — including MCP.** The hosted `/mcp/` endpoint exposes send/Asana-write tools; it requires a Supabase JWT or `MCP_AUTH_TOKEN`. (Origin: 2026-07-08 hosted slowking run found it wide open — access-boundary band crashed to 25%. Never mount a new surface without the gate.)
 
 ## Design decisions
 Dated one-liners, recorded after proven.
