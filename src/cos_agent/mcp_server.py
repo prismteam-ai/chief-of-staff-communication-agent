@@ -8,12 +8,26 @@ from __future__ import annotations
 
 import json
 
+import os
+
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from . import boot  # noqa: F401  (registers connectors)
 from .db import sb
 
-mcp = FastMCP("chief-of-staff-comms", streamable_http_path="/")
+_hosts = ["localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*"]
+if os.environ.get("PUBLIC_HOST"):  # e.g. cos-comms-agent.onrender.com
+    _hosts.append(os.environ["PUBLIC_HOST"])
+
+mcp = FastMCP(
+    "chief-of-staff-comms",
+    streamable_http_path="/",
+    transport_security=TransportSecuritySettings(
+        allowed_hosts=_hosts,
+        allowed_origins=[f"https://{h}" for h in _hosts] + [f"http://{h}" for h in _hosts],
+    ),
+)
 
 
 @mcp.tool()
