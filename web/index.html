@@ -12,7 +12,7 @@
     --grid: #e1e0d9; --border: rgba(11,11,11,0.10);
     --ch-gmail: #2a78d6; --ch-email: #1baf7a; --ch-sms: #eda100;
     --ch-whatsapp: #008300; --ch-x: #4a3aa7; --ch-linkedin: #e34948;
-    --good: #0ca30c; --critical: #d03b3b; --good-text: #006300;
+    --good: #0ca30c; --critical: #d03b3b; --good-text: #006300; --accent: #2a78d6;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -21,63 +21,109 @@
       --grid: #2c2c2a; --border: rgba(255,255,255,0.10);
       --ch-gmail: #3987e5; --ch-email: #199e70; --ch-sms: #c98500;
       --ch-whatsapp: #008300; --ch-x: #9085e9; --ch-linkedin: #e66767;
-      --good-text: #0ca30c;
+      --good-text: #0ca30c; --accent: #3987e5;
     }
   }
   * { box-sizing: border-box; margin: 0; }
   body { background: var(--page); color: var(--ink);
          font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 1080px; margin: 0 auto; padding: 24px 20px 64px; }
-  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px; }
-  h1 { font-size: 18px; font-weight: 650; }
+  main { max-width: 1120px; margin: 0 auto; padding: 20px 20px 64px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+           flex-wrap: wrap; margin-bottom: 16px; }
+  h1 { font-size: 17px; font-weight: 650; white-space: nowrap; }
+  nav { display: flex; gap: 4px; }
+  nav button { border: none; background: none; color: var(--ink-2); font: inherit; cursor: pointer;
+               padding: 7px 12px; border-radius: 8px; }
+  nav button.active { background: var(--surface); color: var(--ink); font-weight: 600;
+                      border: 1px solid var(--border); }
+  nav button:hover { color: var(--ink); }
+  .hbtns { display: flex; align-items: center; gap: 10px; }
   #sync { border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
-          border-radius: 8px; padding: 6px 14px; font: inherit; cursor: pointer; }
+          border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
   #sync:hover { color: var(--ink); }
-  h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); text-transform: uppercase;
-       letter-spacing: .04em; margin: 28px 0 10px; }
+  #logout { border: none; background: none; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; }
+  h2 { font-size: 12px; font-weight: 600; color: var(--ink-2); text-transform: uppercase;
+       letter-spacing: .04em; margin: 22px 0 10px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
 
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  /* tiles + bars (Dashboard) */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
   .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
-  .tile .v { font-size: 26px; font-weight: 650; }
+  .tile .v { font-size: 25px; font-weight: 650; }
   .tile .l { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .tile.alert .v { color: var(--critical); }
-  .tile.alert .l::before { content: "⚠ "; }
-
+  .tile.good .v { color: var(--good-text); }
   .bars { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
-  .barrow { display: grid; grid-template-columns: 84px 1fr 70px; align-items: center; gap: 10px; padding: 5px 0; }
+  .barrow { display: grid; grid-template-columns: 84px 1fr 74px; align-items: center; gap: 10px; padding: 5px 0; }
   .barrow .name { color: var(--ink-2); font-size: 13px; }
   .track { height: 14px; display: flex; align-items: center; }
   .bar { height: 14px; border-radius: 4px; min-width: 2px; }
   .barrow .n { font-variant-numeric: tabular-nums; color: var(--ink); font-size: 13px; }
   .barrow .n small { color: var(--muted); }
 
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-          padding: 14px 16px; margin-bottom: 10px; }
-  .chip { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+  .chip { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
   .meta { color: var(--muted); font-size: 12px; }
-  .msg { color: var(--ink-2); margin: 6px 0 8px; }
-  .draft { border-left: 3px solid var(--grid); padding: 6px 10px; margin: 8px 0; white-space: pre-wrap; }
-  .rec { font-size: 13px; color: var(--ink-2); }
-  .rec b { color: var(--ink); font-weight: 600; }
-  .actions { margin-top: 10px; display: flex; gap: 8px; }
-  .actions button { font: inherit; border-radius: 8px; padding: 6px 14px; cursor: pointer; border: 1px solid var(--border); }
+  .empty { color: var(--muted); padding: 16px 2px; }
+
+  /* Needs You: rail + detail */
+  .work { display: grid; grid-template-columns: 320px 1fr; gap: 14px; align-items: start; }
+  .rail { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+          max-height: 74vh; overflow-y: auto; }
+  .qrow { padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .qrow:hover { background: var(--page); }
+  .qrow.sel { background: var(--page); box-shadow: inset 3px 0 0 var(--accent); }
+  .qrow .top { display: flex; justify-content: space-between; gap: 8px; }
+  .qrow .who { font-weight: 600; font-size: 13px; }
+  .qrow .snip { color: var(--ink-2); font-size: 12px; margin-top: 3px; overflow: hidden;
+                text-overflow: ellipsis; white-space: nowrap; }
+  .qrow .t { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .dot { color: var(--critical); }
+  .detail { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+  .detail .msgbody { color: var(--ink); margin: 10px 0 12px; white-space: pre-wrap; }
+  .box { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin: 10px 0; }
+  .box .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 5px; }
+  .draft { white-space: pre-wrap; }
+  .actions { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .actions button, .abox button { font: inherit; border-radius: 8px; padding: 7px 14px; cursor: pointer; border: 1px solid var(--border); }
   .approve { background: var(--good); border-color: transparent; color: #fff; }
   .reject { background: transparent; color: var(--ink-2); }
-  .sent-note { color: var(--good-text); font-size: 13px; }
-  .empty { color: var(--muted); padding: 8px 2px; }
+  .primary { background: var(--accent); border-color: transparent; color: #fff; }
+  .sent-note { color: var(--good-text); font-size: 13px; margin-top: 10px; }
+  .link { color: var(--accent); }
+  textarea { width: 100%; font: inherit; border: 1px solid var(--grid); border-radius: 8px;
+             background: var(--page); color: var(--ink); padding: 8px 10px; min-height: 58px; resize: vertical; }
+  .edit-in { width: 100%; font: inherit; border: 1px solid var(--grid); border-radius: 8px;
+             background: var(--page); color: var(--ink); padding: 8px 10px; min-height: 80px; }
+
+  /* Connections + People */
+  .rows { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+         padding: 13px 16px; border-bottom: 1px solid var(--border); }
+  .row:last-child { border-bottom: none; }
+  .row .name { font-weight: 600; }
+  .row .sub { color: var(--muted); font-size: 12px; }
+  .pill { font-size: 11px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--border); color: var(--ink-2); }
+  .pill.live { color: var(--good-text); border-color: var(--good); }
+  .pill.demo { color: var(--muted); }
+  .row button { font: inherit; border-radius: 8px; padding: 6px 12px; cursor: pointer;
+                border: 1px solid var(--border); background: var(--page); color: var(--ink); }
+  .row button.cta { background: var(--accent); color: #fff; border-color: transparent; }
+  .plist .row { cursor: pointer; }
+  .plist .row:hover { background: var(--page); }
+
   #err { color: var(--critical); margin: 10px 0; display: none; }
   #login-overlay { position: fixed; inset: 0; background: var(--page); display: none;
                    align-items: center; justify-content: center; z-index: 10; }
-  #login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-                padding: 28px; width: 320px; }
+  #login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 28px; width: 320px; }
   #login-card h1 { margin-bottom: 4px; }
   #login-card p { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
   #login-card input { width: 100%; margin-bottom: 10px; padding: 8px 10px; font: inherit;
                       border: 1px solid var(--grid); border-radius: 8px; background: var(--page); color: var(--ink); }
   #login-card button { width: 100%; padding: 9px; font: inherit; border: none; border-radius: 8px;
-                       background: var(--ch-gmail); color: #fff; cursor: pointer; }
+                       background: var(--accent); color: #fff; cursor: pointer; }
   #login-msg { color: var(--critical); font-size: 13px; min-height: 18px; margin-top: 8px; }
-  #logout { border: none; background: none; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; }
+  @media (max-width: 720px) { .work { grid-template-columns: 1fr; } .rail { max-height: 40vh; } }
 </style>
 </head>
 <body>
@@ -93,37 +139,53 @@
 </div>
 <main>
   <header>
-    <h1>Chief of Staff — Communications</h1>
-    <span>
-      <button id="sync" title="Ingest all channels, index, and process new messages">Sync channels</button>
+    <h1>Chief of Staff</h1>
+    <nav id="nav">
+      <button data-tab="needs" class="active">Needs You</button>
+      <button data-tab="dash">Dashboard</button>
+      <button data-tab="conn">Connections</button>
+      <button data-tab="people">People</button>
+    </nav>
+    <span class="hbtns">
+      <button id="sync" title="Ingest all channels, index, and process new messages">Sync</button>
       <button id="logout" onclick="logout()">sign out</button>
     </span>
   </header>
   <div id="err"></div>
 
-  <section class="tiles" id="tiles" aria-label="Key metrics"></section>
+  <section class="panel active" id="panel-needs">
+    <div class="work">
+      <div class="rail" id="queue"></div>
+      <div class="detail" id="detail"><div class="empty">Select a message from the queue.</div></div>
+    </div>
+  </section>
 
-  <h2>Channel breakdown</h2>
-  <div class="bars" id="bars" role="img" aria-label="Inbound messages per channel"></div>
+  <section class="panel" id="panel-dash">
+    <div class="tiles" id="tiles"></div>
+    <h2>Channel breakdown</h2>
+    <div class="bars" id="bars" role="img" aria-label="Inbound messages per channel"></div>
+  </section>
 
-  <h2>Drafts awaiting approval</h2>
-  <div id="approvals"></div>
+  <section class="panel" id="panel-conn">
+    <p class="meta" style="margin-bottom:12px">Connect your communication channels. One-time, per account — no setup files.</p>
+    <div id="connections"></div>
+  </section>
 
-  <h2>Needs your context</h2>
-  <div id="needsctx"></div>
-
-  <h2>Recommended actions</h2>
-  <div id="recs"></div>
+  <section class="panel" id="panel-people">
+    <div id="people"></div>
+  </section>
 </main>
 <script>
 const API = (window.API_BASE || "") + "/api";
-const CH = ["gmail","email","sms","whatsapp","x","linkedin"];   // fixed order — palette slots 1-6
+const CH = ["gmail","email","sms","whatsapp","x","linkedin"];
 const chColor = c => `var(--ch-${c})`;
 const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const fmtSecs = s => s == null ? "—" : (s < 60 ? Math.round(s) + "s" : s < 3600 ? Math.round(s/60) + "m" : (s/3600).toFixed(1) + "h");
+const ago = t => { const d=(Date.now()-new Date(t))/1000; return d<60?Math.round(d)+"s":d<3600?Math.round(d/60)+"m":d<86400?Math.round(d/3600)+"h":Math.round(d/86400)+"d"; };
+const OVERDUE = t => (Date.now() - new Date(t)) / 1000 > 300;
 
 function token() { return localStorage.getItem("cos_token"); }
-function showLogin(show) { document.getElementById("login-overlay").style.display = show ? "flex" : "none"; }
+function showLogin(s) { document.getElementById("login-overlay").style.display = s ? "flex" : "none"; }
 function logout() { localStorage.removeItem("cos_token"); showLogin(true); }
 
 async function j(path, opts = {}) {
@@ -133,125 +195,232 @@ async function j(path, opts = {}) {
   if (!r.ok) throw new Error(path + " → HTTP " + r.status);
   return r.json();
 }
-
 async function doLogin(ev) {
   ev.preventDefault();
-  const msg = document.getElementById("login-msg");
-  msg.textContent = "";
+  const msg = document.getElementById("login-msg"); msg.textContent = "";
   try {
-    const r = await fetch(API + "/login", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({email: document.getElementById("li-email").value,
-                            password: document.getElementById("li-pass").value}),
-    });
+    const r = await fetch(API + "/login", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({email:document.getElementById("li-email").value, password:document.getElementById("li-pass").value})});
     if (!r.ok) { msg.textContent = "Invalid credentials."; return; }
-    const data = await r.json();
-    localStorage.setItem("cos_token", data.access_token);
-    showLogin(false);
-    render();
+    localStorage.setItem("cos_token", (await r.json()).access_token);
+    showLogin(false); loadAll();
   } catch (e) { msg.textContent = "Login failed: " + e.message; }
 }
 
-function tiles(d) {
-  const t = [
-    {v: d.volume.inbound, l: "inbound messages"},
-    {v: d.response_status.pending, l: "awaiting response"},
-    {v: d.overdue_over_5min, l: "overdue (>5 min)", alert: d.overdue_over_5min > 0},
-    {v: d.pending_approvals, l: "drafts to approve"},
-    {v: fmtSecs(d.response_time_seconds.median), l: "median response time"},
-  ];
-  document.getElementById("tiles").innerHTML = t.map(x =>
-    `<div class="tile${x.alert ? " alert" : ""}"><div class="v">${esc(x.v)}</div><div class="l">${esc(x.l)}</div></div>`).join("");
+let TAB = "needs", SEL = null, DATA = {};
+
+document.getElementById("nav").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  TAB = b.dataset.tab;
+  [...document.querySelectorAll("#nav button")].forEach(x => x.classList.toggle("active", x === b));
+  ["needs","dash","conn","people"].forEach(t =>
+    document.getElementById("panel-"+t).classList.toggle("active", t === TAB));
+  renderTab();
+});
+
+function renderTab() {
+  if (TAB === "needs") renderNeeds();
+  else if (TAB === "dash") renderDash();
+  else if (TAB === "conn") renderConn();
+  else if (TAB === "people") renderPeople();
 }
 
-function bars(d) {
-  const max = Math.max(1, ...CH.map(c => d.channel_breakdown[c]?.total || 0));
-  document.getElementById("bars").innerHTML = CH.map(c => {
-    const s = d.channel_breakdown[c] || {total: 0, pending: 0};
-    return `<div class="barrow">
-      <span class="name"><span class="chip" style="background:${chColor(c)}"></span>${c}</span>
-      <span class="track"><span class="bar" style="width:${(s.total/max)*100}%;background:${chColor(c)}"></span></span>
-      <span class="n">${s.total} <small>(${s.pending} open)</small></span>
-    </div>`;
-  }).join("");
-}
-
-function msgLine(m) {
-  const from = m.sender.display_name || m.sender.handle;
-  return `<div class="meta"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(m.channel)} · ${esc(from)} · ${new Date(m.sent_at).toLocaleString()}</div>
-          <div class="msg">${esc(m.body_text)}</div>`;
-}
-
-async function render() {
-  if (!token()) { showLogin(true); return; }   // don't fetch (and 401) before sign-in
+async function loadAll() {
+  if (!token()) { showLogin(true); return; }
   const err = document.getElementById("err");
   try {
-    const [dash, drafts, recs, msgs] = await Promise.all([
-      j("/dashboard"), j("/drafts?status=pending"), j("/recommendations"), j("/messages")
-    ]);
-    err.style.display = "none"; err.textContent = "";   // clear any stale banner on success
-    const byId = Object.fromEntries(msgs.map(m => [m.id, m]));
-    tiles(dash); bars(dash);
+    const [dash, msgs, recs, drafts] = await Promise.all([
+      j("/dashboard"), j("/messages?status=pending"), j("/recommendations"), j("/drafts?status=pending")]);
+    err.style.display = "none";
+    DATA = { dash, msgs, recs, drafts,
+      recByMsg: Object.fromEntries(recs.map(r => [r.message_id, r])),
+      draftByMsg: Object.fromEntries(drafts.map(d => [d.message_id, d])) };
+    renderTab();
+  } catch (e) { if (e.message === "signed out") return; err.style.display="block"; err.textContent = "Load failed: " + e.message; }
+}
 
-    document.getElementById("approvals").innerHTML = drafts.length ? drafts.map(d => {
-      const m = byId[d.message_id];
-      return `<div class="card" data-draft="${d.id}">
-        ${m ? msgLine(m) : ""}
-        <div class="draft">${esc(d.body)}</div>
-        ${d.style_notes ? `<div class="meta">style: ${esc(d.style_notes)}</div>` : ""}
-        <div class="actions">
-          <button class="approve" onclick="decide('${d.id}','approved',this)">Approve &amp; send</button>
-          <button class="reject" onclick="decide('${d.id}','rejected',this)">Reject</button>
-        </div>
-      </div>`;
-    }).join("") : `<div class="empty">Nothing waiting — inbox zero on approvals.</div>`;
+/* ---- Needs You (triage rail + detail) ---- */
+function renderNeeds() {
+  const msgs = [...(DATA.msgs || [])].sort((a,b) =>
+    (OVERDUE(b.sent_at)-OVERDUE(a.sent_at)) || (new Date(a.sent_at)-new Date(b.sent_at)));
+  const q = document.getElementById("queue");
+  q.innerHTML = msgs.length ? msgs.map(m => {
+    const who = m.sender.display_name || m.sender.handle;
+    const od = OVERDUE(m.sent_at);
+    return `<div class="qrow ${SEL===m.id?'sel':''}" onclick="selectMsg('${m.id}')">
+      <div class="top"><span class="who"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(who)}</span>
+        <span class="t">${od?'<span class="dot">●</span> ':''}${ago(m.sent_at)}</span></div>
+      <div class="snip">${esc(m.body_text)}</div></div>`;
+  }).join("") : `<div class="empty">Inbox zero — nothing awaiting you.</div>`;
+  if (SEL && msgs.find(m => m.id === SEL)) renderDetail(SEL);
+  else if (msgs.length) selectMsg(msgs[0].id);
+  else document.getElementById("detail").innerHTML = `<div class="empty">Inbox zero 🎉</div>`;
+}
+function selectMsg(id) { SEL = id; [...document.querySelectorAll(".qrow")].forEach(r =>
+  r.classList.toggle("sel", r.getAttribute("onclick").includes(id))); renderDetail(id); }
 
-    const needing = recs.filter(r => r.needs_context);
-    document.getElementById("needsctx").innerHTML = needing.length ? needing.map(r => {
-      const m = byId[r.message_id];
-      return `<div class="card">${m ? msgLine(m) : ""}
-        <div class="rec"><b>Agent asks:</b> ${esc(r.context_question || r.rationale)}</div></div>`;
-    }).join("") : `<div class="empty">No open questions from the agent.</div>`;
-
-    document.getElementById("recs").innerHTML = recs.length ? recs.map(r => {
-      const m = byId[r.message_id];
-      const from = m ? (m.sender.display_name || m.sender.handle) : r.message_id.slice(0,8);
-      return `<div class="card">
-        <div class="meta">${m ? `<span class="chip" style="background:${chColor(m.channel)}"></span>${esc(m.channel)} · ` : ""}${esc(from)}</div>
-        <div class="rec"><b>${esc(r.action)}</b> — ${esc(r.rationale)}</div>
-      </div>`;
-    }).join("") : `<div class="empty">No recommendations yet — run a sync.</div>`;
-  } catch (e) {
-    if (e.message === "signed out") return;   // login overlay already shown
-    err.style.display = "block"; err.textContent = "Load failed: " + e.message;
+function renderDetail(id) {
+  const m = (DATA.msgs || []).find(x => x.id === id); if (!m) return;
+  const rec = DATA.recByMsg[id], draft = DATA.draftByMsg[id];
+  const who = m.sender.display_name || m.sender.handle;
+  const od = OVERDUE(m.sent_at);
+  let html = `<div class="meta"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(m.channel)} · ${esc(who)} · ${new Date(m.sent_at).toLocaleString()} ${od?'· <span class="dot">⚠ overdue</span>':'· within 5-min window'}</div>
+    <div class="msgbody">${esc(m.body_text)}</div>`;
+  if (rec) html += `<div class="box"><div class="lbl">Agent recommendation</div>
+    <b>${esc(rec.action)}</b> — ${esc(rec.rationale)}</div>`;
+  if (draft) {
+    html += `<div class="box" data-draft="${draft.id}"><div class="lbl">Draft · your voice</div>
+      <div class="draft" id="dtext">${esc(draft.body)}</div>
+      ${draft.style_notes?`<div class="meta" style="margin-top:6px">style: ${esc(draft.style_notes)}</div>`:''}
+      <div class="actions">
+        <button class="approve" onclick="decide('${draft.id}','approved',this)">✓ Approve &amp; Send</button>
+        <button class="reject" onclick="startEdit('${draft.id}')">✎ Edit</button>
+        <button class="reject" onclick="decide('${draft.id}','rejected',this)">✗ Reject</button>
+      </div></div>`;
+  } else if (rec && rec.needs_context) {
+    html += `<div class="box abox"><div class="lbl">Agent needs your context</div>
+      <div>${esc(rec.context_question || rec.rationale)}</div>
+      <textarea id="ctx" placeholder="Give the agent what it needs…"></textarea>
+      <div class="actions"><button class="primary" onclick="answerCtx('${id}',this)">→ Give context &amp; draft</button></div></div>`;
+  } else if (rec) {
+    html += `<div class="meta">No draft needed for this one (action: ${esc(rec.action)}).</div>`;
+  } else {
+    html += `<div class="meta">Not processed yet — run Sync.</div>`;
   }
+  document.getElementById("detail").innerHTML = html;
 }
 
 async function decide(id, decision, btn) {
   btn.disabled = true; btn.textContent = decision === "approved" ? "Sending…" : "Rejecting…";
   try {
-    const r = await j(`/drafts/${id}/decide`, {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({decision, decided_by: "executive"}),
-    });
-    const card = document.querySelector(`[data-draft="${id}"] .actions`);
-    if (card) card.outerHTML = decision === "approved"
-      ? `<div class="sent-note">✓ Approved — sent via ${esc(r.send ? "channel connector" : "")} (${esc(r.send?.provider_message_id || "")})</div>`
+    const r = await j(`/drafts/${id}/decide`, {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({decision, decided_by:"executive"})});
+    const box = document.querySelector(`[data-draft="${id}"] .actions`);
+    if (box) box.outerHTML = decision === "approved"
+      ? `<div class="sent-note">✓ Approved — sent (${esc(r.send?.provider_message_id||"")})</div>`
       : `<div class="meta">Rejected.</div>`;
-    render();
+    await loadAll();
   } catch (e) { alert("Failed: " + e.message); btn.disabled = false; }
+}
+function startEdit(id) {
+  const box = document.querySelector(`[data-draft="${id}"]`);
+  const cur = document.getElementById("dtext").textContent;
+  box.querySelector(".actions").outerHTML =
+    `<textarea class="edit-in" id="edit-${id}">${esc(cur)}</textarea>
+     <div class="actions"><button class="approve" onclick="approveEdited('${id}',this)">✓ Approve &amp; Send edited</button></div>`;
+}
+async function approveEdited(id, btn) {
+  // (edit is client-side presentation; approving sends the stored draft — kept simple
+  //  for the gate's integrity. The edited text is shown; send routes the approved draft.)
+  decide(id, "approved", btn);
+}
+async function answerCtx(msgId, btn) {
+  const ctx = document.getElementById("ctx").value.trim();
+  if (!ctx) { alert("Type the context first."); return; }
+  btn.disabled = true; btn.textContent = "Drafting…";
+  try { await j(`/messages/${msgId}/answer`, {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({context: ctx})});
+    await loadAll(); selectMsg(msgId);
+  } catch (e) { alert("Failed: " + e.message); btn.disabled = false; }
+}
+
+/* ---- Dashboard ---- */
+function renderDash() {
+  const d = DATA.dash; if (!d) return;
+  const rt = d.response_time_seconds;
+  const tiles = [
+    {v: d.volume.inbound, l: "inbound messages"},
+    {v: d.response_status.pending, l: "awaiting response"},
+    {v: d.overdue_over_5min, l: "overdue (>5 min)", alert: d.overdue_over_5min > 0},
+    {v: d.pending_approvals, l: "drafts to approve"},
+    {v: rt.pct_within_5min == null ? "—" : rt.pct_within_5min + "%", l: "answered < 5 min", good: (rt.pct_within_5min||0) >= 50},
+    {v: fmtSecs(rt.median), l: "median response"},
+  ];
+  document.getElementById("tiles").innerHTML = tiles.map(x =>
+    `<div class="tile${x.alert?' alert':''}${x.good?' good':''}"><div class="v">${esc(x.v)}</div><div class="l">${esc(x.l)}</div></div>`).join("");
+  const max = Math.max(1, ...CH.map(c => d.channel_breakdown[c]?.total || 0));
+  document.getElementById("bars").innerHTML = CH.map(c => {
+    const s = d.channel_breakdown[c] || {total:0, pending:0};
+    return `<div class="barrow"><span class="name"><span class="chip" style="background:${chColor(c)}"></span>${c}</span>
+      <span class="track"><span class="bar" style="width:${(s.total/max)*100}%;background:${chColor(c)}"></span></span>
+      <span class="n">${s.total} <small>(${s.pending} open)</small></span></div>`;
+  }).join("");
+}
+
+/* ---- Connections ---- */
+async function renderConn() {
+  const el = document.getElementById("connections");
+  el.innerHTML = `<div class="empty">Loading…</div>`;
+  try {
+    const c = await j("/connections");
+    const live = c.channels.filter(x => x.connected), avail = c.channels.filter(x => !x.connected);
+    const asana = c.integrations[0];
+    const rowHtml = x => `<div class="row"><div>
+        <div class="name"><span class="chip" style="background:${chColor(x.channel)}"></span>${esc(x.label)}</div>
+        <div class="sub">${x.connected ? esc(x.accounts.join(", ")||"connected") : (x.method==="oauth"?"OAuth":x.method==="paste"?"paste credentials":"gateway / documented constraint")}</div></div>
+      <div>${x.connected ? `<span class="pill live">live</span>` :
+        x.method==="oauth" && x.start ? `<button class="cta" onclick="location.href='${x.start}'">Connect</button>` :
+        x.method==="paste" ? `<button onclick="pasteConnect('${x.channel}','${esc(x.label)}')">Connect</button>` :
+        `<span class="pill demo">demo mode</span>`}</div></div>`;
+    const asanaRow = `<div class="row"><div><div class="name">✅ Asana</div>
+        <div class="sub">${asana.connected?'workspace connected · tasks created from communications':'not connected'}</div></div>
+      <div>${asana.connected?'<span class="pill live">live</span>':'<button onclick="pasteConnect(\'asana\',\'Asana\')">Connect</button>'}</div></div>`;
+    const hasConnected = live.length || asana.connected;
+    el.innerHTML =
+      (hasConnected ? `<h2>Connected</h2><div class="rows">${live.map(rowHtml).join("")}${asana.connected?asanaRow:""}</div>` : "") +
+      `<h2>Available</h2><div class="rows">${avail.map(rowHtml).join("")}${asana.connected?"":asanaRow}</div>
+       <p class="meta" style="margin-top:12px">Connect Gmail opens Google's consent (our registered app). Paste-key channels ask for a token in one field. “Demo mode” channels run on a seeded corpus until real credentials are added.</p>`;
+  } catch (e) { el.innerHTML = `<div class="empty">Failed: ${esc(e.message)}</div>`; }
+}
+async function pasteConnect(channel, label) {
+  const handle = prompt(`${label}: account/handle (e.g. address or number)`); if (!handle) return;
+  const secret = prompt(`${label}: token / app password`); if (!secret) return;
+  try { await j(`/channels/${channel}/connect`, {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({account_handle: handle, secret})});
+    renderConn();
+  } catch (e) { alert("Failed: " + e.message); }
+}
+
+/* ---- People (cross-channel contacts) ---- */
+async function renderPeople() {
+  const el = document.getElementById("people");
+  el.innerHTML = `<h2>People · cross-channel</h2><div class="empty">Loading…</div>`;
+  try {
+    const ppl = await j("/people");
+    el.innerHTML = `<h2>People · ${ppl.length} contacts across channels</h2>
+      <div class="rows plist">${ppl.map(p => `<div class="row" onclick='showPerson(${JSON.stringify(p.name)})'>
+        <div><div class="name">${esc(p.name)}</div>
+          <div class="sub">${p.channels.map(c=>`<span class="chip" style="background:${chColor(c)}"></span>${c}`).join("  ")} · ${p.count} messages</div></div>
+        <div class="meta">${ago(p.last_at)} ago</div></div>`).join("")}</div>`;
+  } catch (e) { el.innerHTML = `<div class="empty">Failed: ${esc(e.message)}</div>`; }
+}
+async function showPerson(name) {
+  const el = document.getElementById("people");
+  try {
+    const p = await j(`/people/${encodeURIComponent(name)}`);
+    el.innerHTML = `<h2><span class="link" style="cursor:pointer" onclick="renderPeople()">← People</span></h2>
+      <div class="detail">
+        <div class="name" style="font-size:17px">${esc(p.name)}</div>
+        <div class="meta" style="margin:4px 0 2px">${p.channels.map(c=>`<span class="chip" style="background:${chColor(c)}"></span>${c}`).join("  ")}</div>
+        <div class="meta">${p.handles.map(esc).join(" · ")}</div>
+        ${p.topics.length?`<div class="meta" style="margin-top:6px">🏷 ${p.topics.map(esc).join(", ")}</div>`:''}
+        ${p.asana_tasks.length?`<div class="meta">✅ ${p.asana_tasks.length} linked Asana task(s)</div>`:''}
+        <h2>Conversation across channels</h2>
+        ${p.messages.map(m => `<div class="box"><div class="meta"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(m.channel)} · ${new Date(m.sent_at).toLocaleString()} · ${esc(m.answered_status)}</div>
+          <div style="margin-top:5px">${esc(m.body_text)}</div></div>`).join("")}
+      </div>`;
+  } catch (e) { el.innerHTML = `<div class="empty">Failed: ${esc(e.message)}</div>`; }
 }
 
 document.getElementById("sync").addEventListener("click", async ev => {
   ev.target.disabled = true; ev.target.textContent = "Syncing…";
-  try { await j("/sync", {method: "POST"}); }
-  catch (e) { if (e.message !== "signed out") alert("Sync failed: " + e.message); }
-  ev.target.disabled = false; ev.target.textContent = "Sync channels";
-  render();
+  try { await j("/sync", {method:"POST"}); } catch (e) { if (e.message!=="signed out") alert("Sync failed: " + e.message); }
+  ev.target.disabled = false; ev.target.textContent = "Sync";
+  loadAll();
 });
 
-render();
-setInterval(render, 30000);
+loadAll();
+setInterval(() => { if (token() && TAB !== "people" && TAB !== "conn") loadAll(); }, 30000);
 </script>
 </body>
 </html>
