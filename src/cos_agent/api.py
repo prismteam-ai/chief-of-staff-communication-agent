@@ -163,6 +163,10 @@ def dashboard() -> dict:
         "response_time_seconds": {
             "median": sorted(response_times)[len(response_times) // 2] if response_times else None,
             "count": len(response_times),
+            "within_5min": sum(1 for s in response_times if s <= 300),
+            "pct_within_5min": round(
+                100 * sum(1 for s in response_times if s <= 300) / len(response_times)
+            ) if response_times else None,
         },
     }
 
@@ -240,6 +244,133 @@ def topic(topic_key: str) -> list[dict]:
         sb().table("messages").select("id, channel, sender, body_text, sent_at")
         .in_("id", ids).order("sent_at").execute().data
     )
+
+
+# --- Needs-context answer loop (criterion 21, closing half) -------------------
+class ContextAnswer(BaseModel):
+    context: str
+
+
+@api.post("/messages/{message_id}/answer")
+def answer_context(message_id: str, a: ContextAnswer) -> dict:
+    """Executive supplies the context the agent asked for → agent re-drafts a reply."""
+    from .brain import redraft_with_context
+
+    if not a.context.strip():
+        raise HTTPException(422, "context is required")
+    return redraft_with_context(message_id, a.context.strip())
+
+
+# --- Connections (criterion 1: self-serve channel setup) ---------------------
+_CHANNEL_META = {
+    "gmail": {"label": "Gmail", "method": "oauth", "start": "/api/oauth/google/start"},
+    "email": {"label": "Other email (IMAP)", "method": "paste"},
+    "sms": {"label": "SMS (Twilio)", "method": "paste"},
+    "whatsapp": {"label": "WhatsApp (Twilio sandbox)", "method": "paste"},
+    "x": {"label": "X", "method": "oauth"},
+    "linkedin": {"label": "LinkedIn", "method": "gateway"},
+}
+
+
+@api.get("/connections")
+def connections() -> dict:
+    from .connectors import x_api
+
+    tokens = sb().table("connector_tokens").select("channel, account_handle, connected_at").execute().data
+    by_channel: dict = {}
+    for t in tokens:
+        by_channel.setdefault(t["channel"], []).append(t)
+    last_sync = {
+        r["channel"]: r["fetched_at"]
+        for r in sb().table("messages").select("channel, fetched_at").order("fetched_at", desc=True).limit(200).execute().data
+    }
+    channels = []
+    for ch, meta in _CHANNEL_META.items():
+        accts = [t["account_handle"] for t in by_channel.get(ch, [])]
+        live = bool(accts) or (ch == "x" and x_api.available())
+        channels.append({
+            "channel": ch, "label": meta["label"], "method": meta["method"],
+            "start": meta.get("start"), "connected": live,
+            "accounts": accts, "mode": "live" if live else "demo",
+            "last_sync": last_sync.get(ch),
+        })
+    asana_live = bool(os.environ.get("ASANA_ACCESS_TOKEN"))
+    return {
+        "channels": channels,
+        "integrations": [{"name": "asana", "label": "Asana", "connected": asana_live,
+                          "method": "paste"}],
+    }
+
+
+class PasteCredential(BaseModel):
+    account_handle: str
+    secret: str
+    scopes: str | None = None
+
+
+@api.post("/channels/{channel}/connect")
+def connect_channel(channel: str, c: PasteCredential) -> dict:
+    """Paste-key connect (IMAP/Twilio/Asana). Stores the credential; a real
+    provider connector picks it up where implemented (Gmail uses OAuth instead)."""
+    if channel not in _CHANNEL_META:
+        raise HTTPException(404, f"unknown channel {channel}")
+    sb().table("connector_tokens").upsert(
+        {"channel": channel, "account_handle": c.account_handle, "refresh_token": c.secret,
+         "scopes": c.scopes},
+        on_conflict="channel,account_handle",
+    ).execute()
+    log.info("channel %s connected via paste for %s", channel, c.account_handle)
+    return {"channel": channel, "account_handle": c.account_handle, "connected": True}
+
+
+# --- People (criterion 17: cross-channel linking, made visible) --------------
+# Identity key = display name, so one person messaging from a gmail address AND a
+# phone number collapses into a single contact spanning both channels.
+def _person_key(sender: dict) -> str:
+    return (sender.get("display_name") or sender.get("handle") or "unknown").strip()
+
+
+@api.get("/people")
+def people() -> list[dict]:
+    rows = sb().table("messages").select(
+        "sender, channel, direction, sent_at"
+    ).eq("direction", "inbound").execute().data
+    agg: dict = {}
+    for m in rows:
+        key = _person_key(m["sender"])
+        p = agg.setdefault(key, {"name": key, "handles": set(), "channels": set(),
+                                 "count": 0, "last_at": m["sent_at"]})
+        if m["sender"].get("handle"):
+            p["handles"].add(m["sender"]["handle"])
+        p["channels"].add(m["channel"])
+        p["count"] += 1
+        if m["sent_at"] > p["last_at"]:
+            p["last_at"] = m["sent_at"]
+    out = [{**p, "handles": sorted(p["handles"]), "channels": sorted(p["channels"])}
+           for p in agg.values()]
+    out.sort(key=lambda p: (len(p["channels"]), p["last_at"]), reverse=True)
+    return out
+
+
+@api.get("/people/{name:path}")
+def person(name: str) -> dict:
+    all_inbound = sb().table("messages").select(
+        "id, channel, direction, sender, body_text, sent_at, answered_status"
+    ).eq("direction", "inbound").order("sent_at", desc=True).execute().data
+    msgs = [m for m in all_inbound if _person_key(m["sender"]) == name]
+    ids = [m["id"] for m in msgs]
+    topics, tasks = [], []
+    if ids:
+        topics = sb().table("topic_links").select("topic_key, message_id").in_("message_id", ids).execute().data
+        tasks = sb().table("asana_links").select("task_url, task_gid, message_id").in_("message_id", ids).execute().data
+    return {
+        "name": name,
+        "handles": sorted({m["sender"]["handle"] for m in msgs if m["sender"].get("handle")}),
+        "channels": sorted({m["channel"] for m in msgs}),
+        "messages": msgs,
+        "topics": sorted({t["topic_key"] for t in topics}),
+        "asana_tasks": tasks,
+    }
 
 
 app.include_router(public)

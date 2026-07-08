@@ -164,6 +164,73 @@ def process_message(message_id: str) -> dict:
     return {"message_id": message_id, **out}
 
 
+def redraft_with_context(message_id: str, user_context: str) -> dict:
+    """Answer a needs-context question: re-draft one message using the executive's
+    supplied context as authoritative. Flips the recommendation to a reply + draft.
+    This is the closing half of criterion 21 (prompt for context → act on it)."""
+    msg = sb().table("messages").select("*").eq("id", message_id).single().execute().data
+    history = _thread_history(msg["thread_id"])
+    style = _style_corpus()
+    related = search(msg["body_text"], match_count=5)
+    related_block = "\n".join(
+        f"- ({r['source_type']}, sim {r['similarity']:.2f}) {r['content'][:220]}" for r in related
+    )
+
+    system = (
+        "You are a chief-of-staff communication agent. The executive has just supplied "
+        "the missing context you asked for — treat it as authoritative and now draft the "
+        "reply in their voice (action MUST be 'reply'). Ground the reply in that context "
+        "plus the thread history; do not contradict it. Keep the style concise and matched "
+        "to the samples. task_title/task_detail only if real follow-up work is implied."
+    )
+    user = json.dumps(
+        {
+            "incoming_message": {"channel": msg["channel"], "from": msg["sender"],
+                                 "body": msg["body_text"], "sent_at": msg["sent_at"]},
+            "executive_provided_context": user_context,
+            "thread_history": history,
+            "retrieved_context": related_block,
+            "executive_style_samples": style,
+        },
+        ensure_ascii=False,
+    )
+    s = settings()
+    res = _chat_client().chat.completions.create(
+        model=s.chat_deployment,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "recommendation", "schema": RECOMMEND_SCHEMA, "strict": True},
+        },
+    )
+    out = json.loads(res.choices[0].message.content)
+
+    # record the supplied context on the message's thread as org knowledge for future RAG
+    from .rag import index_knowledge
+
+    try:
+        index_knowledge("preference", f"context-{message_id}",
+                        f"Executive-provided context re: {msg['body_text'][:80]} — {user_context}")
+    except Exception:
+        pass
+
+    rec = sb().table("recommendations").select("id").eq("message_id", message_id).execute().data
+    fields = {"action": "reply", "needs_context": False, "context_question": None,
+              "rationale": out["rationale"], "model": s.chat_deployment}
+    if rec:
+        sb().table("recommendations").update(fields).eq("message_id", message_id).execute()
+    else:
+        sb().table("recommendations").insert({"message_id": message_id, **fields}).execute()
+
+    draft = None
+    if out.get("draft_body"):
+        draft = sb().table("drafts").insert({
+            "message_id": message_id, "body": out["draft_body"],
+            "style_notes": out.get("style_notes"), "model": s.chat_deployment,
+        }).execute().data[0]
+    return {"message_id": message_id, "draft": draft, **out}
+
+
 def process_pending(limit: int = 50) -> list[dict]:
     """Process all unhandled inbound messages (defensive: one failure never kills the batch)."""
     pending = (
