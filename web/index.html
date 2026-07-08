@@ -241,7 +241,8 @@ async function decide(id, decision, btn) {
 
 document.getElementById("sync").addEventListener("click", async ev => {
   ev.target.disabled = true; ev.target.textContent = "Syncing…";
-  try { await j("/sync", {method: "POST"}); } catch (e) { alert("Sync failed: " + e.message); }
+  try { await j("/sync", {method: "POST"}); }
+  catch (e) { if (e.message !== "signed out") alert("Sync failed: " + e.message); }
   ev.target.disabled = false; ev.target.textContent = "Sync channels";
   render();
 });

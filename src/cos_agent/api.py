@@ -203,8 +203,39 @@ def topic(topic_key: str) -> list[dict]:
 app.include_router(public)
 app.include_router(api)
 
+
+class _MCPAuth:
+    """The MCP surface exposes send/Asana-write tools — it gets the same gate as
+    the REST API. Accepts a Supabase JWT or the static MCP_AUTH_TOKEN (simpler
+    to configure in Cursor's headers)."""
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
+            auth = headers.get("authorization", "")
+            token = auth.split(" ", 1)[1].strip() if auth.lower().startswith("bearer ") else ""
+            static = os.environ.get("MCP_AUTH_TOKEN", "")
+            ok = bool(static) and token == static
+            if not ok and token:
+                try:
+                    await asyncio.to_thread(sb().auth.get_user, token)
+                    ok = True
+                except Exception:
+                    ok = False
+            if not ok:
+                await send({"type": "http.response.start", "status": 401,
+                            "headers": [(b"content-type", b"application/json")]})
+                await send({"type": "http.response.body",
+                            "body": b'{"error":"unauthorized: bearer token required for /mcp"}'})
+                return
+        await self.inner(scope, receive, send)
+
+
 # Cursor agent over streamable HTTP at /mcp (same public host — no localhost)
-app.mount("/mcp", mcp_app_server.streamable_http_app())
+app.mount("/mcp", _MCPAuth(mcp_app_server.streamable_http_app()))
 
 # dashboard UI (static, same origin). Mounted last so /api/* and /mcp win.
 _web = Path(__file__).resolve().parents[2] / "web"
