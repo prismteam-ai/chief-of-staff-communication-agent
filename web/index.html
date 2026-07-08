@@ -207,11 +207,13 @@ async function doLogin(ev) {
   } catch (e) { msg.textContent = "Login failed: " + e.message; }
 }
 
-let TAB = "needs", SEL = null, DATA = {};
+let TAB = "needs", SEL = null, DATA = {}, failCount = 0;
+function clearErr() { const e = document.getElementById("err"); e.style.display = "none"; e.textContent = ""; }
 
 document.getElementById("nav").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   TAB = b.dataset.tab;
+  clearErr();
   [...document.querySelectorAll("#nav button")].forEach(x => x.classList.toggle("active", x === b));
   ["needs","dash","conn","people"].forEach(t =>
     document.getElementById("panel-"+t).classList.toggle("active", t === TAB));
@@ -227,16 +229,22 @@ function renderTab() {
 
 async function loadAll() {
   if (!token()) { showLogin(true); return; }
-  const err = document.getElementById("err");
   try {
     const [dash, msgs, recs, drafts] = await Promise.all([
       j("/dashboard"), j("/messages?status=pending"), j("/recommendations"), j("/drafts?status=pending")]);
-    err.style.display = "none";
+    failCount = 0; clearErr();
     DATA = { dash, msgs, recs, drafts,
       recByMsg: Object.fromEntries(recs.map(r => [r.message_id, r])),
       draftByMsg: Object.fromEntries(drafts.map(d => [d.message_id, d])) };
     renderTab();
-  } catch (e) { if (e.message === "signed out") return; err.style.display="block"; err.textContent = "Load failed: " + e.message; }
+  } catch (e) {
+    if (e.message === "signed out") return;
+    // tolerate a single transient blip (free host can cold-start); only warn if it persists
+    if (++failCount >= 2) {
+      const el = document.getElementById("err");
+      el.style.display = "block"; el.textContent = "Reconnecting to the runtime…";
+    }
+  }
 }
 
 /* ---- Needs You (triage rail + detail) ---- */
@@ -253,7 +261,12 @@ function renderNeeds() {
       <div class="snip">${esc(m.body_text)}</div></div>`;
   }).join("") : `<div class="empty">Inbox zero — nothing awaiting you.</div>`;
   if (SEL && msgs.find(m => m.id === SEL)) renderDetail(SEL);
-  else if (msgs.length) selectMsg(msgs[0].id);
+  else if (msgs.length) {
+    // land on something actionable — a ready draft, else a needs-context item
+    const best = msgs.find(m => DATA.draftByMsg[m.id])
+      || msgs.find(m => DATA.recByMsg[m.id] && DATA.recByMsg[m.id].needs_context) || msgs[0];
+    selectMsg(best.id);
+  }
   else document.getElementById("detail").innerHTML = `<div class="empty">Inbox zero 🎉</div>`;
 }
 function selectMsg(id) { SEL = id; [...document.querySelectorAll(".qrow")].forEach(r =>
@@ -283,7 +296,9 @@ function renderDetail(id) {
       <textarea id="ctx" placeholder="Give the agent what it needs…"></textarea>
       <div class="actions"><button class="primary" onclick="answerCtx('${id}',this)">→ Give context &amp; draft</button></div></div>`;
   } else if (rec) {
-    html += `<div class="meta">No draft needed for this one (action: ${esc(rec.action)}).</div>`;
+    html += rec.action === "reply"
+      ? `<div class="meta">Recommended: <b>reply</b> — draft was handled or rejected.</div>`
+      : `<div class="meta">Recommended action: <b>${esc(rec.action)}</b> — no draft needed.</div>`;
   } else {
     html += `<div class="meta">Not processed yet — run Sync.</div>`;
   }
@@ -353,6 +368,7 @@ async function renderConn() {
   el.innerHTML = `<div class="empty">Loading…</div>`;
   try {
     const c = await j("/connections");
+    clearErr();
     const live = c.channels.filter(x => x.connected), avail = c.channels.filter(x => !x.connected);
     const asana = c.integrations[0];
     const rowHtml = x => `<div class="row"><div>
@@ -387,6 +403,7 @@ async function renderPeople() {
   el.innerHTML = `<h2>People · cross-channel</h2><div class="empty">Loading…</div>`;
   try {
     const ppl = await j("/people");
+    clearErr();
     el.innerHTML = `<h2>People · ${ppl.length} contacts across channels</h2>
       <div class="rows plist">${ppl.map(p => `<div class="row" onclick='showPerson(${JSON.stringify(p.name)})'>
         <div><div class="name">${esc(p.name)}</div>
