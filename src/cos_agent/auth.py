@@ -11,7 +11,7 @@ import time
 
 from fastapi import HTTPException, Request
 
-from .db import sb
+from .db import sb_auth
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ _CACHE_TTL = 300
 
 def login(email: str, password: str) -> dict:
     try:
-        res = sb().auth.sign_in_with_password({"email": email, "password": password})
+        res = sb_auth().auth.sign_in_with_password({"email": email, "password": password})
     except Exception as e:
         log.warning("login failed for %s: %s", email, type(e).__name__)
         raise HTTPException(401, "invalid credentials")
@@ -44,7 +44,7 @@ def require_user(request: Request) -> str:
         return cached[1]
 
     try:
-        user = sb().auth.get_user(token)
+        user = sb_auth().auth.get_user(token)
         email = user.user.email
     except Exception:
         raise HTTPException(401, "invalid or expired token")

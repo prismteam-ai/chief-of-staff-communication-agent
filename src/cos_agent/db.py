@@ -44,5 +44,18 @@ for _cls in (
 
 @lru_cache
 def sb() -> Client:
+    """DATA client (service_role, bypasses RLS). Its auth session must NEVER be
+    mutated — auth ops belong on sb_auth(). If sign_in/get_user ran on this
+    client, supabase-py would rewrite its PostgREST header to the user's JWT
+    (role=authenticated), and with RLS enabled every data query would then read
+    zero rows. Keeping the two clients separate is what lets RLS stay on."""
+    s = settings()
+    return create_client(s.supabase_url, s.supabase_service_key)
+
+
+@lru_cache
+def sb_auth() -> Client:
+    """AUTH client — used only for login and JWT verification. Isolated so its
+    session mutations never leak into the service_role data client above."""
     s = settings()
     return create_client(s.supabase_url, s.supabase_service_key)
