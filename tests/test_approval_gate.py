@@ -32,6 +32,27 @@ def test_db_trigger_blocks_direct_sent_update(unapproved_draft):
     assert "approval gate" in str(exc.value)
 
 
+def test_approved_draft_sends_and_persists_provider_id(unapproved_draft):
+    """Full happy path: approve -> send -> provider_message_id persisted + message
+    answered. Exercises the exact write (drafts.provider_message_id) whose missing
+    column silently 500'd every real approval until a migration was reapplied."""
+    d = unapproved_draft
+    sb().table("approvals").upsert(
+        {"draft_id": d["id"], "decision": "approved", "decided_by": "pytest"},
+        on_conflict="draft_id",
+    ).execute()
+    result = send_draft(d["id"])
+    assert result.get("provider_message_id"), "send must return a provider message id"
+
+    row = sb().table("drafts").select("status, provider_message_id").eq("id", d["id"]).single().execute().data
+    assert row["status"] == "sent"
+    assert row["provider_message_id"] == result["provider_message_id"], "provider id must persist"
+
+    msg = sb().table("messages").select("answered_status").eq("id", d["message_id"]).single().execute().data
+    assert msg["answered_status"] == "answered", "sending must mark the message answered"
+    sb().table("approvals").delete().eq("draft_id", d["id"]).execute()
+
+
 def test_ingest_is_idempotent():
     from cos_agent.ingest import ingest_all
 

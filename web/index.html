@@ -183,10 +183,13 @@ function msgLine(m) {
 }
 
 async function render() {
+  if (!token()) { showLogin(true); return; }   // don't fetch (and 401) before sign-in
+  const err = document.getElementById("err");
   try {
     const [dash, drafts, recs, msgs] = await Promise.all([
       j("/dashboard"), j("/drafts?status=pending"), j("/recommendations"), j("/messages")
     ]);
+    err.style.display = "none"; err.textContent = "";   // clear any stale banner on success
     const byId = Object.fromEntries(msgs.map(m => [m.id, m]));
     tiles(dash); bars(dash);
 
@@ -219,8 +222,8 @@ async function render() {
       </div>`;
     }).join("") : `<div class="empty">No recommendations yet — run a sync.</div>`;
   } catch (e) {
-    const el = document.getElementById("err");
-    el.style.display = "block"; el.textContent = "Load failed: " + e.message;
+    if (e.message === "signed out") return;   // login overlay already shown
+    err.style.display = "block"; err.textContent = "Load failed: " + e.message;
   }
 }
 

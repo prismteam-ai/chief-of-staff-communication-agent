@@ -158,6 +158,7 @@ Append one dated, quotable rule here in the same commit as the fix that taught i
 - (inherited) Never emit an infra URL/identifier that merely looks right — a fabricated-but-plausible deploy URL made it into a report while the real one sat in the docs.
 - (inherited) Editing one field of a synced config file re-applies every other field — read the whole file, then push.
 - (inherited) Hardcoded examples in prompts leak into output — an interview bot greeted real users as "Sarah" from its few-shot examples. Dynamic injection only.
+- 2026-07-08 — The Supabase **management-API** `/database/query` endpoint silently no-op'd DDL while returning `[]` "success": migrations 002 (`drafts.provider_message_id`) and 003 (`connector_tokens`) never persisted, and no test hit the successful-send path, so the missing column 500'd on the first real UI approval weeks later. Apply DDL via the Supabase **MCP `apply_migration`** (or verify with `list_tables`) — never trust a bare `[]` from the management API. And every write path needs a test that actually executes it, not just its guards.
 
 ## Do NOT regress
 Invariants to preserve; add as they're won.
