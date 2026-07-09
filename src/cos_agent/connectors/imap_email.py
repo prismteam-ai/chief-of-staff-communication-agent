@@ -59,7 +59,7 @@ class ImapConnector:
 
     # -- fetch ----------------------------------------------------------------
     def fetch(self) -> Iterable[RawMessage]:
-        conn = imaplib.IMAP4_SSL(self.imap_host, self.imap_port)
+        conn = imaplib.IMAP4_SSL(self.imap_host, self.imap_port, timeout=30)
         try:
             conn.login(self.account_handle, self.password)
             conn.select("INBOX", readonly=True)
@@ -131,15 +131,25 @@ class ImapConnector:
             em["In-Reply-To"] = thread_external_id
             em["References"] = thread_external_id
         em.set_content(body)
-        if self.smtp_port == 465:  # implicit SSL (Yahoo, Gmail, Fastmail)
-            with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port) as s:
-                s.login(self.account_handle, self.password)
-                s.send_message(em)
-        else:  # STARTTLS (iCloud 587, Outlook 587)
-            with smtplib.SMTP(self.smtp_host, self.smtp_port) as s:
-                s.starttls()
-                s.login(self.account_handle, self.password)
-                s.send_message(em)
+        # NOTE: many PaaS hosts (Render, Heroku, …) block outbound SMTP ports (465/587)
+        # to prevent spam — a send there hangs, so the timeout turns it into a fast, clear
+        # error instead of a stuck request. (Gmail send avoids this: it's an HTTPS API.)
+        try:
+            if self.smtp_port == 465:  # implicit SSL (Yahoo, Gmail, Fastmail)
+                with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, timeout=20) as s:
+                    s.login(self.account_handle, self.password)
+                    s.send_message(em)
+            else:  # STARTTLS (iCloud 587, Outlook 587)
+                with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=20) as s:
+                    s.starttls()
+                    s.login(self.account_handle, self.password)
+                    s.send_message(em)
+        except (OSError, smtplib.SMTPException) as e:
+            raise RuntimeError(
+                f"SMTP send to {self.smtp_host}:{self.smtp_port} failed ({type(e).__name__}). "
+                "If hosted on a PaaS that blocks outbound SMTP (Render/Heroku), IMAP send is "
+                "unavailable there — receive/triage still work."
+            ) from e
         return em["Message-ID"] or f"imap-sent-{datetime.now(timezone.utc).timestamp()}"
 
 
