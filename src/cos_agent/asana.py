@@ -21,10 +21,14 @@ class AsanaNotConnected(Exception):
     pass
 
 
+COS_PROJECT_NAME = "Chief of Staff — Communications"
+
+
 class RealAsana:
     def __init__(self, token: str) -> None:
         self._h = {"Authorization": f"Bearer {token}"}
         self._workspace: str | None = None
+        self._project: str | None = None
 
     def _workspace_gid(self) -> str:
         if self._workspace:
@@ -37,8 +41,28 @@ class RealAsana:
         self._workspace = workspaces[0]["gid"]
         return self._workspace
 
+    def _project_gid(self) -> str:
+        """Find-or-create a 'Chief of Staff' project so agent tasks land in a real
+        project (visible in list/board views), not loose in the workspace."""
+        if self._project:
+            return self._project
+        ws = self._workspace_gid()
+        r = httpx.get(f"{ASANA_API}/projects", headers=self._h,
+                      params={"workspace": ws, "opt_fields": "name", "limit": 100}, timeout=30)
+        r.raise_for_status()
+        for p in r.json().get("data", []):
+            if "chief of staff" in (p.get("name") or "").lower():
+                self._project = p["gid"]
+                return self._project
+        r = httpx.post(f"{ASANA_API}/projects", headers=self._h,
+                       json={"data": {"name": COS_PROJECT_NAME, "workspace": ws}}, timeout=30)
+        r.raise_for_status()
+        self._project = r.json()["data"]["gid"]
+        return self._project
+
     def create_task(self, name: str, notes: str) -> dict:
-        data = {"name": name, "notes": notes, "workspace": self._workspace_gid()}
+        data = {"name": name, "notes": notes, "workspace": self._workspace_gid(),
+                "projects": [self._project_gid()]}
         r = httpx.post(f"{ASANA_API}/tasks", headers=self._h, json={"data": data}, timeout=30)
         r.raise_for_status()
         return r.json()["data"]
