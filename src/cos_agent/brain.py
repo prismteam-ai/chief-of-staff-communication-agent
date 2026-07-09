@@ -235,11 +235,13 @@ def redraft_with_context(message_id: str, owner: str, user_context: str) -> dict
 
 
 def process_pending(owner: str, limit: int = 50) -> list[dict]:
-    """Process this tenant's unhandled inbound messages (defensive: one failure never kills the batch)."""
+    """Process this tenant's unhandled inbound messages, NEWEST first — the <5-minute
+    response goal means fresh arrivals get triaged immediately, not after a backlog
+    (defensive: one failure never kills the batch)."""
     pending = (
         sb().table("messages").select("id").eq("owner_id", owner)
         .eq("direction", "inbound").eq("answered_status", "pending")
-        .order("sent_at").limit(limit).execute()
+        .order("sent_at", desc=True).limit(limit).execute()
     ).data
     results = []
     for row in pending:
