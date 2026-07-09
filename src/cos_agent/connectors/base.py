@@ -34,8 +34,11 @@ class Connector(Protocol):
         """Yield all currently available messages (idempotent; store dedups)."""
         ...
 
-    def send(self, to: list[dict], body: str, thread_external_id: str | None) -> str:
-        """Send an approved reply. Returns provider message id."""
+    def send(self, to: list[dict], body: str, thread_external_id: str | None,
+             subject: str | None = None) -> str:
+        """Send an approved reply. Returns provider message id. `subject` is used by
+        email channels (Gmail/IMAP) to reply under the original subject; channels
+        without subjects (DMs/SMS/Telegram) ignore it."""
         ...
 
 

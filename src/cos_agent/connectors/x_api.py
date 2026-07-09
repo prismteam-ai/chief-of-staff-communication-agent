@@ -71,7 +71,9 @@ class XConnector:
             if not next_token:
                 return
 
-    def send(self, to: list[dict], body: str, thread_external_id: str | None) -> str:
+    def send(self, to: list[dict], body: str, thread_external_id: str | None,
+             subject: str | None = None) -> str:
+        # DMs have no subject — `subject` is ignored.
         # DM back the counterpart in the conversation; requires their numeric id
         participant = (to[0].get("participant_id") or to[0].get("handle", "")).lstrip("@")
         r = httpx.post(

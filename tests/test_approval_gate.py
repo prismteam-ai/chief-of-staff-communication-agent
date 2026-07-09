@@ -20,7 +20,7 @@ from cos_agent.send import ApprovalRequired, send_draft
 class _StubConnector:
     channel = "gmail"
 
-    def send(self, to, body, thread_external_id):
+    def send(self, to, body, thread_external_id, subject=None):
         return f"stub-{uuid.uuid4().hex[:8]}"
 
     def fetch(self):

@@ -109,11 +109,15 @@ class GmailConnector:
         )
 
     # -- send -----------------------------------------------------------------
-    def send(self, to: list[dict], body: str, thread_external_id: str | None) -> str:
+    def send(self, to: list[dict], body: str, thread_external_id: str | None,
+             subject: str | None = None) -> str:
         em = EmailMessage()
         em["To"] = ", ".join(t["handle"] for t in to)
         em["From"] = self.account_handle
-        em["Subject"] = "Re: (via Chief of Staff agent)"
+        subj = (subject or "").strip()
+        if subj and not subj.lower().startswith("re:"):
+            subj = f"Re: {subj}"
+        em["Subject"] = subj or "Re: (via Chief of Staff agent)"
         em.set_content(body)
         payload: dict = {"raw": base64.urlsafe_b64encode(em.as_bytes()).decode()}
         if thread_external_id:

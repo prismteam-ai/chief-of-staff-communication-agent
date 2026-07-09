@@ -51,12 +51,13 @@ def send_draft(draft_id: str, owner: str) -> dict:
         return {"draft_id": draft_id, "skipped": "already sent"}
 
     msg = sb().table("messages").select("*").eq("id", draft["message_id"]).eq("owner_id", owner).single().execute().data
-    thread = sb().table("threads").select("external_thread_id").eq("id", msg["thread_id"]).single().execute().data
+    thread = sb().table("threads").select("external_thread_id, subject").eq("id", msg["thread_id"]).single().execute().data
 
     try:
         conn = connector_for(owner, msg["channel"])
         provider_id = conn.send(
-            to=[msg["sender"]], body=draft["body"], thread_external_id=thread["external_thread_id"]
+            to=[msg["sender"]], body=draft["body"],
+            thread_external_id=thread["external_thread_id"], subject=thread.get("subject"),
         )
     except Exception:
         # dispatch failed: release the claim so the draft can be retried
