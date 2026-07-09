@@ -264,12 +264,13 @@ function renderTab() {
 async function loadAll() {
   if (!token()) { showLogin(true); return; }
   try {
-    const [dash, msgs, recs, drafts] = await Promise.all([
-      j("/dashboard"), j("/messages?status=pending"), j("/recommendations"), j("/drafts?status=pending")]);
+    const [dash, msgs, recs, drafts, asana] = await Promise.all([
+      j("/dashboard"), j("/messages?status=pending"), j("/recommendations"), j("/drafts?status=pending"), j("/asana")]);
     failCount = 0; clearErr();
-    DATA = { dash, msgs, recs, drafts,
+    DATA = { dash, msgs, recs, drafts, asana,
       recByMsg: Object.fromEntries(recs.map(r => [r.message_id, r])),
-      draftByMsg: Object.fromEntries(drafts.map(d => [d.message_id, d])) };
+      draftByMsg: Object.fromEntries(drafts.map(d => [d.message_id, d])),
+      asanaByMsg: Object.fromEntries(asana.map(a => [a.message_id, a])) };
     renderTab();
   } catch (e) {
     if (e.message === "signed out") return;
@@ -316,6 +317,9 @@ function renderDetail(id) {
     <div class="msgbody">${esc(m.body_text)}</div>`;
   if (rec) html += `<div class="box"><div class="lbl">Agent recommendation</div>
     <b>${esc(rec.action)}</b> — ${esc(rec.rationale)}</div>`;
+  const task = DATA.asanaByMsg && DATA.asanaByMsg[id];
+  if (task) html += `<div class="box"><div class="lbl">📋 Asana task created</div>
+    <a class="link" href="${esc(task.task_url)}" target="_blank" rel="noopener">${esc(task.task_url || task.task_gid)}</a></div>`;
   if (draft) {
     html += `<div class="box" data-draft="${draft.id}"><div class="lbl">Draft · your voice</div>
       <div class="draft" id="dtext">${esc(draft.body)}</div>

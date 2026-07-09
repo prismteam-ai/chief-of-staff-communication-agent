@@ -65,6 +65,12 @@ class GmailConnector:
         return r.json()
 
     # -- fetch ----------------------------------------------------------------
+    # Gmail lists newest-first, so fetching the newest page each sync catches new
+    # arrivals cheaply; the store dedups the rest. (A full history backfill is a
+    # one-time concern, not something to repeat on every 5-minute sync — re-pulling
+    # 500 messages per cycle blew the request budget.)
+    FETCH_LIMIT = 50
+
     def fetch(self) -> Iterable[RawMessage]:
         page_token = None
         fetched = 0
@@ -80,7 +86,7 @@ class GmailConnector:
                 except Exception as e:  # defensive: skip the bad one, keep the sync
                     log.warning("gmail: skipping message %s (%s: %s)", stub.get("id"), type(e).__name__, e)
             page_token = listing.get("nextPageToken")
-            if not page_token or fetched >= 500:
+            if not page_token or fetched >= self.FETCH_LIMIT:
                 return
 
     def _to_raw(self, msg: dict) -> RawMessage:

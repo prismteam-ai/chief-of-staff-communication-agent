@@ -272,6 +272,15 @@ def decide(draft_id: str, d: Decision, user: User = Depends(require_user)) -> di
     return result
 
 
+@api.get("/asana")
+def asana_links(user: User = Depends(require_user)) -> list[dict]:
+    """This tenant's Asana tasks created from communications (message_id → task)."""
+    return (
+        sb().table("asana_links").select("message_id, task_url, task_gid, action, created_at")
+        .eq("owner_id", user.id).order("created_at", desc=True).execute().data
+    )
+
+
 @api.get("/search")
 def rag_search_endpoint(q: str, user: User = Depends(require_user)) -> list[dict]:
     return search(q, user.id)
