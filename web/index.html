@@ -175,6 +175,9 @@
   .kb-add input, .kb-editin { flex: 1; padding: 8px 10px; font: inherit; border: 1px solid var(--grid);
                               border-radius: 8px; background: var(--page); color: var(--ink); }
   .row .kb-btns button { padding: 5px 10px; }
+  .row-actions { display: flex; gap: 6px; align-items: center; }
+  .row-actions button.danger { color: var(--critical); border-color: var(--grid); background: transparent; }
+  .row-actions button.danger:hover { border-color: var(--critical); }
 
   @media (max-width: 900px) { .kanban { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 560px) { .kanban { grid-template-columns: 1fr; } }
@@ -552,17 +555,22 @@ async function renderConn() {
       : x.method==="oauth" ? "Google consent (our app)"
       : x.method==="unavailable" ? "no public messaging API"
       : "bring your own credentials";
-    const btn = x => x.connected ? `<span class="pill live">live</span>`
+    const reconf = x => x.method==="oauth" ? `<button onclick="oauthConnect()">Reconfigure</button>`
+      : CONNECT_FORMS[x.channel] ? `<button onclick="openConnect('${x.channel}')">Reconfigure</button>` : "";
+    const btn = x => x.connected
+      ? `<span class="pill live">live</span>${reconf(x)}<button class="danger" onclick="disconnectChannel('${x.channel}','${esc(x.label)}')">Disconnect</button>`
       : x.method==="unavailable" ? `<span class="pill na">unavailable</span>`
       : x.method==="oauth" ? `<button class="cta" onclick="oauthConnect()">Connect</button>`
       : CONNECT_FORMS[x.channel] ? `<button onclick="openConnect('${x.channel}')">Connect</button>`
       : `<span class="pill na">via login script</span>`;
     const rowHtml = x => `<div class="row"><div>
         <div class="name"><span class="chip" style="background:${chColor(x.channel)}"></span>${esc(x.label)}</div>
-        <div class="sub">${sub(x)}</div></div><div>${btn(x)}</div></div>`;
+        <div class="sub">${sub(x)}</div></div><div class="row-actions">${btn(x)}</div></div>`;
     const asanaRow = `<div class="row"><div><div class="name">📋 Asana</div>
         <div class="sub">${asana.connected?'workspace connected · tasks created from communications':'paste a personal access token'}</div></div>
-      <div>${asana.connected?'<span class="pill live">live</span>':'<button onclick="openConnect(\'asana\')">Connect</button>'}</div></div>`;
+      <div class="row-actions">${asana.connected
+        ? `<span class="pill live">live</span><button onclick="openConnect('asana')">Reconfigure</button><button class="danger" onclick="disconnectChannel('asana','Asana')">Disconnect</button>`
+        : `<button onclick="openConnect('asana')">Connect</button>`}</div></div>`;
     const live = c.channels.filter(x => x.connected);
     const avail = c.channels.filter(x => !x.connected);
     const connectedBlock = (live.length || asana.connected)
@@ -573,6 +581,12 @@ async function renderConn() {
        <div id="cursor-panel"></div>`;
     renderCursor();
   } catch (e) { el.innerHTML = `<div class="empty">Failed: ${esc(e.message)}</div>`; }
+}
+
+async function disconnectChannel(channel, label) {
+  if (!confirm(`Disconnect ${label}? The agent stops syncing and sending on it until you reconnect. Your existing message history stays.`)) return;
+  try { await j("/channels/" + channel + "/connect", {method:"DELETE"}); renderConn(); }
+  catch (e) { alert("Disconnect failed: " + e.message); }
 }
 
 /* ---- Connect Cursor (per-user MCP token) ---- */

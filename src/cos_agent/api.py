@@ -461,6 +461,22 @@ def connect_channel(channel: str, c: PasteCredential, background: BackgroundTask
     return {"channel": channel, "account_handle": c.account_handle, "connected": True}
 
 
+@api.delete("/channels/{channel}/connect")
+def disconnect_channel(channel: str, user: User = Depends(require_user)) -> dict:
+    """Remove THIS tenant's stored credential(s) for a channel so it can be re-connected
+    (e.g. to swap an expired app-password or a bad token). Owner-scoped — only ever
+    touches the caller's own tokens. Ingested history is left intact; only the connector
+    credential is dropped, so syncing/sending stops until reconnected."""
+    if channel not in _CONNECTABLE:
+        raise HTTPException(404, f"unknown channel {channel}")
+    res = (
+        sb().table("connector_tokens").delete()
+        .eq("owner_id", user.id).eq("channel", channel).execute()
+    )
+    log.info("channel %s disconnected for owner %s (%d token(s))", channel, user.id, len(res.data or []))
+    return {"channel": channel, "disconnected": True, "removed": len(res.data or [])}
+
+
 # --- People (cross-channel linking, made visible) ----------------------------
 def _person_key(sender: dict) -> str:
     return (sender.get("display_name") or sender.get("handle") or "unknown").strip()
