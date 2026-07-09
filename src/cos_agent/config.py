@@ -39,8 +39,6 @@ class Settings:
         self.azure_embed_endpoint = _req("AZURE_OPENAI_EMBED_ENDPOINT")
         self.azure_embed_key = _req("AZURE_OPENAI_EMBED_API_KEY")
         self.embed_deployment = os.environ.get("AZURE_OPENAI_EMBED_DEPLOYMENT", "text-embedding-3-small")
-        self.fixture_dir = os.environ.get("FIXTURE_DIR", "data/fixtures")
-        self.outbox_dir = os.environ.get("OUTBOX_DIR", "data/outbox")
 
 
 @lru_cache

@@ -1,8 +1,10 @@
 """FastAPI surface: dashboard metrics, queues, approval flow, MCP over HTTP.
 
-Every /api route except /api/health and /api/login requires a Supabase JWT
-(see auth.py) — the runtime is public, and an unauthenticated caller must not
-be able to read comms or approve sends.
+Every /api route except /api/health, /api/login and the OAuth callback requires a
+Supabase JWT (see auth.py). CRITICAL: every data query is scoped to the caller's
+owner_id (the tenant) — the runtime is multi-user and one tenant must never read
+or act on another's comms. (Origin: 2026-07-09 audit — RLS was toothless and the
+service_role backend returned the global dataset to any logged-in user.)
 """
 from __future__ import annotations
 
@@ -20,12 +22,13 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import boot  # noqa: F401  (side effect: registers channel connectors)
+from . import boot  # noqa: F401  (kept for import compatibility; connectors are per-owner now)
+from .auth import User
 from .auth import login as auth_login
 from .auth import require_user
 from .brain import process_pending
 from .db import sb
-from .ingest import ingest_all
+from .ingest import ingest_for_owner
 from .mcp_server import mcp as mcp_app_server
 from .rag import index_messages, search
 from .send import ApprovalRequired, send_draft
@@ -33,23 +36,30 @@ from .send import ApprovalRequired, send_draft
 log = logging.getLogger(__name__)
 
 
+def _owners_with_connectors() -> list[str]:
+    rows = sb().table("connector_tokens").select("owner_id").execute().data
+    return sorted({r["owner_id"] for r in rows if r.get("owner_id")})
+
+
+def _run_sync(owner: str) -> dict:
+    """Ingest → index → brain for ONE tenant."""
+    report = ingest_for_owner(owner)
+    rag = index_messages(owner)
+    brain = process_pending(owner)
+    log.info("sync[%s]: %s new msgs, %s indexed, %s brained", owner,
+             sum(c.get("new", 0) for c in report["channels"].values()), rag.get("indexed"), len(brain))
+    return {"ingest": report, "rag": rag, "brain": brain}
+
+
 async def _autosync_loop() -> None:
     interval = int(os.environ.get("AUTOSYNC_INTERVAL_S", "300"))
     while True:
         try:
-            await asyncio.to_thread(_run_sync)
+            for owner in await asyncio.to_thread(_owners_with_connectors):
+                await asyncio.to_thread(_run_sync, owner)
         except Exception:
             log.exception("autosync cycle failed; next attempt in %ss", interval)
         await asyncio.sleep(interval)
-
-
-def _run_sync() -> dict:
-    report = ingest_all()
-    rag = index_messages()
-    brain = process_pending()
-    log.info("sync: %s new msgs, %s indexed, %s brained",
-             sum(c.get("new", 0) for c in report["channels"].values()), rag.get("indexed"), len(brain))
-    return {"ingest": report, "rag": rag, "brain": brain}
 
 
 @asynccontextmanager
@@ -84,70 +94,76 @@ def login(body: LoginBody) -> dict:
     return auth_login(body.email, body.password)
 
 
-# --- Google OAuth connect flow (Connections page seed) -----------------------
-# start/callback are public by nature of the browser redirect dance. The state
-# nonce (a stateless HMAC over a timestamp) prevents forged callbacks WITHOUT
-# server-side memory — so it survives Render's idle spin-down / restart between
-# the redirect out and the callback back. The flow only ever STORES tokens.
+# --- Google OAuth connect flow ------------------------------------------------
+# The callback is public (browser redirect), so the tenant identity travels inside
+# the signed state: a stateless HMAC over "timestamp:owner_id". That survives
+# Render's idle spin-down between redirect-out and callback-back AND binds the
+# grant to the tenant who started it — no forged callback can connect gmail into
+# someone else's account.
 def _oauth_secret() -> bytes:
     return (os.environ.get("MCP_AUTH_TOKEN") or os.environ["SUPABASE_SERVICE_ROLE_KEY"]).encode()
 
 
-def _sign_state() -> str:
+def _sign_state(owner: str) -> str:
     ts = str(int(time.time()))
-    sig = hmac.new(_oauth_secret(), ts.encode(), hashlib.sha256).hexdigest()[:20]
-    return f"{ts}.{sig}"
+    sig = hmac.new(_oauth_secret(), f"{ts}:{owner}".encode(), hashlib.sha256).hexdigest()[:20]
+    return f"{ts}.{owner}.{sig}"
 
 
-def _valid_state(state: str, max_age: int = 900) -> bool:
+def _valid_state(state: str, max_age: int = 900) -> str | None:
+    """Returns the owner_id if the state is authentic and fresh, else None."""
     try:
-        ts, sig = state.split(".", 1)
-        expect = hmac.new(_oauth_secret(), ts.encode(), hashlib.sha256).hexdigest()[:20]
-        return hmac.compare_digest(sig, expect) and 0 <= time.time() - int(ts) <= max_age
+        ts, owner, sig = state.split(".", 2)
+        expect = hmac.new(_oauth_secret(), f"{ts}:{owner}".encode(), hashlib.sha256).hexdigest()[:20]
+        if hmac.compare_digest(sig, expect) and 0 <= time.time() - int(ts) <= max_age:
+            return owner
     except Exception:
-        return False
+        pass
+    return None
 
 
-@public.get("/oauth/google/start")
-def google_start():
-    from fastapi.responses import RedirectResponse
-
+@api.get("/oauth/google/start")
+def google_start(user: User = Depends(require_user)) -> dict:
+    """Authed: mints the Google consent URL with the tenant bound into the state.
+    The SPA fetches this (with its bearer token) then redirects the browser to url."""
     from .connectors.gmail_api import oauth_start_url
 
-    return RedirectResponse(oauth_start_url(_sign_state()))
+    return {"url": oauth_start_url(_sign_state(user.id))}
 
 
 @public.get("/oauth/google/callback")
 def google_callback(code: str, state: str = ""):
     from fastapi.responses import RedirectResponse
 
-    from .connectors.base import register
-    from .connectors.gmail_api import GmailConnector, oauth_exchange
+    from .connectors.gmail_api import oauth_exchange
 
-    if not _valid_state(state):
-        raise HTTPException(400, "invalid or expired oauth state — restart from /api/oauth/google/start")
+    owner = _valid_state(state)
+    if not owner:
+        raise HTTPException(400, "invalid or expired oauth state — restart from the Connections page")
     tokens = oauth_exchange(code)
     if not tokens.get("refresh_token"):
         raise HTTPException(502, "google returned no refresh token — remove the app's prior grant and retry")
     sb().table("connector_tokens").upsert(
-        {"channel": "gmail", "account_handle": tokens["email"], "refresh_token": tokens["refresh_token"],
-         "scopes": "gmail.readonly gmail.send"},
+        {"owner_id": owner, "channel": "gmail", "account_handle": tokens["email"],
+         "refresh_token": tokens["refresh_token"], "scopes": "gmail.readonly gmail.send"},
         on_conflict="channel,account_handle",
     ).execute()
-    register(GmailConnector(tokens["email"], tokens["refresh_token"]))  # live swap, no restart
-    log.info("gmail connected for %s — connector registered", tokens["email"])
+    log.info("gmail connected for %s (owner %s)", tokens["email"], owner)
     return RedirectResponse("/?connected=gmail")
 
 
 @api.post("/sync")
-def sync() -> dict:
-    """Ingest all channels, index new content, process new inbound messages."""
-    return _run_sync()
+def sync(user: User = Depends(require_user)) -> dict:
+    """Ingest the caller's channels, index new content, process their new inbound."""
+    return _run_sync(user.id)
 
 
-@api.get("/dashboard")
-def dashboard() -> dict:
-    msgs = sb().table("messages").select("id, channel, direction, answered_status, sent_at, answered_at").execute().data
+def _dashboard(owner: str) -> dict:
+    """Dashboard metrics for one tenant. Shared by the HTTP endpoint and the MCP tool."""
+    msgs = (
+        sb().table("messages").select("id, channel, direction, answered_status, sent_at, answered_at")
+        .eq("owner_id", owner).execute().data
+    )
     inbound = [m for m in msgs if m["direction"] == "inbound"]
     answered = [m for m in inbound if m["answered_status"] == "answered"]
     pending = [m for m in inbound if m["answered_status"] == "pending"]
@@ -163,7 +179,7 @@ def dashboard() -> dict:
                 m["sent_at"].replace("Z", "+00:00")
             )
             response_times.append(dt.total_seconds())
-    drafts_pending = sb().table("drafts").select("id").eq("status", "pending").execute().data
+    drafts_pending = sb().table("drafts").select("id").eq("owner_id", owner).eq("status", "pending").execute().data
     by_channel: dict = {}
     for m in inbound:
         by_channel.setdefault(m["channel"], {"total": 0, "pending": 0})
@@ -187,30 +203,35 @@ def dashboard() -> dict:
     }
 
 
+@api.get("/dashboard")
+def dashboard(user: User = Depends(require_user)) -> dict:
+    return _dashboard(user.id)
+
+
 @api.get("/messages")
-def messages(status: str | None = None) -> list[dict]:
+def messages(status: str | None = None, user: User = Depends(require_user)) -> list[dict]:
     q = sb().table("messages").select(
         "id, channel, direction, sender, body_text, sent_at, answered_status, source_id, raw_ref"
-    ).eq("direction", "inbound").order("sent_at", desc=True)
+    ).eq("owner_id", user.id).eq("direction", "inbound").order("sent_at", desc=True)
     if status:
         q = q.eq("answered_status", status)
     return q.execute().data
 
 
 @api.get("/recommendations")
-def recommendations() -> list[dict]:
+def recommendations(user: User = Depends(require_user)) -> list[dict]:
     return (
         sb().table("recommendations")
         .select("id, message_id, action, rationale, needs_context, context_question, model, created_at")
-        .order("created_at", desc=True).execute().data
+        .eq("owner_id", user.id).order("created_at", desc=True).execute().data
     )
 
 
 @api.get("/drafts")
-def drafts(status: str = "pending") -> list[dict]:
+def drafts(status: str = "pending", user: User = Depends(require_user)) -> list[dict]:
     return (
         sb().table("drafts").select("id, message_id, body, style_notes, status, created_at")
-        .eq("status", status).order("created_at").execute().data
+        .eq("owner_id", user.id).eq("status", status).order("created_at").execute().data
     )
 
 
@@ -221,114 +242,103 @@ class Decision(BaseModel):
 
 
 @api.post("/drafts/{draft_id}/decide")
-def decide(draft_id: str, d: Decision, user: str = Depends(require_user)) -> dict:
+def decide(draft_id: str, d: Decision, user: User = Depends(require_user)) -> dict:
     if d.decision not in ("approved", "rejected"):
         raise HTTPException(422, "decision must be approved|rejected")
-    current = sb().table("drafts").select("status").eq("id", draft_id).execute().data
+    current = sb().table("drafts").select("status").eq("id", draft_id).eq("owner_id", user.id).execute().data
     if not current:
         raise HTTPException(404, "draft not found")
     if current[0]["status"] == "sent":
         raise HTTPException(409, "draft already sent — decisions are final after send")
     # upsert: a rejected draft may later be approved (and vice versa) without a 500
     sb().table("approvals").upsert(
-        {"draft_id": draft_id, "decision": d.decision, "decided_by": d.decided_by or user, "note": d.note},
+        {"owner_id": user.id, "draft_id": draft_id, "decision": d.decision,
+         "decided_by": d.decided_by or user.email, "note": d.note},
         on_conflict="draft_id",
     ).execute()
     new_status = "approved" if d.decision == "approved" else "rejected"
-    sb().table("drafts").update({"status": new_status}).eq("id", draft_id).execute()
+    sb().table("drafts").update({"status": new_status}).eq("id", draft_id).eq("owner_id", user.id).execute()
     result: dict = {"draft_id": draft_id, "decision": d.decision}
     if d.decision == "approved":
         try:
-            result["send"] = send_draft(draft_id)
+            result["send"] = send_draft(draft_id, user.id)
         except ApprovalRequired as e:  # defense in depth; should be unreachable
             raise HTTPException(409, str(e))
     return result
 
 
 @api.get("/search")
-def rag_search_endpoint(q: str) -> list[dict]:
-    return search(q)
+def rag_search_endpoint(q: str, user: User = Depends(require_user)) -> list[dict]:
+    return search(q, user.id)
 
 
 @api.get("/topics/{topic_key}")
-def topic(topic_key: str) -> list[dict]:
-    links = sb().table("topic_links").select("message_id, reason, confidence").eq("topic_key", topic_key).execute().data
+def topic(topic_key: str, user: User = Depends(require_user)) -> list[dict]:
+    links = (
+        sb().table("topic_links").select("message_id, reason, confidence")
+        .eq("owner_id", user.id).eq("topic_key", topic_key).execute().data
+    )
     ids = [link["message_id"] for link in links]
     if not ids:
         return []
     return (
         sb().table("messages").select("id, channel, sender, body_text, sent_at")
-        .in_("id", ids).order("sent_at").execute().data
+        .eq("owner_id", user.id).in_("id", ids).order("sent_at").execute().data
     )
 
 
-# --- Needs-context answer loop (criterion 21, closing half) -------------------
+# --- Needs-context answer loop -----------------------------------------------
 class ContextAnswer(BaseModel):
     context: str
 
 
 @api.post("/messages/{message_id}/answer")
-def answer_context(message_id: str, a: ContextAnswer) -> dict:
+def answer_context(message_id: str, a: ContextAnswer, user: User = Depends(require_user)) -> dict:
     """Executive supplies the context the agent asked for → agent re-drafts a reply."""
     from .brain import redraft_with_context
 
     if not a.context.strip():
         raise HTTPException(422, "context is required")
-    return redraft_with_context(message_id, a.context.strip())
+    return redraft_with_context(message_id, user.id, a.context.strip())
 
 
-# --- Connections (criterion 1: self-serve channel setup) ---------------------
+# --- Connections (self-serve channel setup) ----------------------------------
+# Real integrations only: gmail (OAuth), 2nd email (IMAP paste), telegram (MTProto).
+# x/sms/whatsapp connectors exist but are credential-gated (not offered until funded).
 _CHANNEL_META = {
-    "gmail": {"label": "Gmail", "method": "oauth", "start": "/api/oauth/google/start"},
+    "gmail": {"label": "Gmail", "method": "oauth"},
     "email": {"label": "Other email (IMAP)", "method": "paste"},
-    "sms": {"label": "SMS (Twilio)", "method": "paste"},
-    "whatsapp": {"label": "WhatsApp (Twilio sandbox)", "method": "paste"},
-    "x": {"label": "X", "method": "oauth"},
-    "linkedin": {"label": "LinkedIn", "method": "gateway"},
-    "telegram": {"label": "Telegram", "method": "paste"},
-    "discord": {"label": "Discord", "method": "paste"},
-    "slack": {"label": "Slack", "method": "paste"},
+    "telegram": {"label": "Telegram (your account)", "method": "paste"},
 }
 
 
 @api.get("/connections")
-def connections() -> dict:
-    # live-ness comes from the actual connector registry — a channel is "live" when
-    # a real (non-fixture) connector is registered for it. Truly modular: a new
-    # connector shows up here automatically, no per-channel special-casing.
-    from .connectors.base import get
-    from .connectors.fixture import FixtureConnector
-
-    tokens = sb().table("connector_tokens").select("channel, account_handle, connected_at").execute().data
+def connections(user: User = Depends(require_user)) -> dict:
+    tokens = (
+        sb().table("connector_tokens").select("channel, account_handle, connected_at")
+        .eq("owner_id", user.id).execute().data
+    )
     by_channel: dict = {}
     for t in tokens:
         by_channel.setdefault(t["channel"], []).append(t)
     last_sync = {
         r["channel"]: r["fetched_at"]
-        for r in sb().table("messages").select("channel, fetched_at").order("fetched_at", desc=True).limit(200).execute().data
+        for r in sb().table("messages").select("channel, fetched_at").eq("owner_id", user.id)
+        .order("fetched_at", desc=True).limit(200).execute().data
     }
     channels = []
     for ch, meta in _CHANNEL_META.items():
-        conn = None
-        try:
-            conn = get(ch)
-        except LookupError:
-            pass
-        live = conn is not None and not isinstance(conn, FixtureConnector)
         accts = [t["account_handle"] for t in by_channel.get(ch, [])]
-        if live and not accts and getattr(conn, "account_handle", None):
-            accts = [conn.account_handle]
         channels.append({
             "channel": ch, "label": meta["label"], "method": meta["method"],
-            "start": meta.get("start"), "connected": live,
-            "accounts": accts, "mode": "live" if live else "demo",
+            "connected": bool(accts), "accounts": accts,
+            "mode": "live" if accts else "not_connected",
             "last_sync": last_sync.get(ch),
         })
     asana_live = bool(os.environ.get("ASANA_ACCESS_TOKEN"))
     return {
         "channels": channels,
-        "integrations": [{"name": "asana", "label": "Asana", "connected": asana_live,
-                          "method": "paste"}],
+        "integrations": [{"name": "asana", "label": "Asana", "connected": asana_live, "method": "paste"}],
     }
 
 
@@ -339,32 +349,31 @@ class PasteCredential(BaseModel):
 
 
 @api.post("/channels/{channel}/connect")
-def connect_channel(channel: str, c: PasteCredential) -> dict:
-    """Paste-key connect (IMAP/Twilio/Asana). Stores the credential; a real
-    provider connector picks it up where implemented (Gmail uses OAuth instead)."""
+def connect_channel(channel: str, c: PasteCredential, user: User = Depends(require_user)) -> dict:
+    """Paste-key connect (IMAP/Telegram). Stores the credential for THIS tenant; the
+    per-owner resolver picks it up at sync time."""
     if channel not in _CHANNEL_META:
         raise HTTPException(404, f"unknown channel {channel}")
     sb().table("connector_tokens").upsert(
-        {"channel": channel, "account_handle": c.account_handle, "refresh_token": c.secret,
-         "scopes": c.scopes},
+        {"owner_id": user.id, "channel": channel, "account_handle": c.account_handle,
+         "refresh_token": c.secret, "scopes": c.scopes},
         on_conflict="channel,account_handle",
     ).execute()
-    log.info("channel %s connected via paste for %s", channel, c.account_handle)
+    log.info("channel %s connected via paste for %s (owner %s)", channel, c.account_handle, user.id)
     return {"channel": channel, "account_handle": c.account_handle, "connected": True}
 
 
-# --- People (criterion 17: cross-channel linking, made visible) --------------
-# Identity key = display name, so one person messaging from a gmail address AND a
-# phone number collapses into a single contact spanning both channels.
+# --- People (cross-channel linking, made visible) ----------------------------
 def _person_key(sender: dict) -> str:
     return (sender.get("display_name") or sender.get("handle") or "unknown").strip()
 
 
 @api.get("/people")
-def people() -> list[dict]:
-    rows = sb().table("messages").select(
-        "sender, channel, direction, sent_at"
-    ).eq("direction", "inbound").execute().data
+def people(user: User = Depends(require_user)) -> list[dict]:
+    rows = (
+        sb().table("messages").select("sender, channel, direction, sent_at")
+        .eq("owner_id", user.id).eq("direction", "inbound").execute().data
+    )
     agg: dict = {}
     for m in rows:
         key = _person_key(m["sender"])
@@ -383,16 +392,17 @@ def people() -> list[dict]:
 
 
 @api.get("/people/{name:path}")
-def person(name: str) -> dict:
-    all_inbound = sb().table("messages").select(
-        "id, channel, direction, sender, body_text, sent_at, answered_status"
-    ).eq("direction", "inbound").order("sent_at", desc=True).execute().data
+def person(name: str, user: User = Depends(require_user)) -> dict:
+    all_inbound = (
+        sb().table("messages").select("id, channel, direction, sender, body_text, sent_at, answered_status")
+        .eq("owner_id", user.id).eq("direction", "inbound").order("sent_at", desc=True).execute().data
+    )
     msgs = [m for m in all_inbound if _person_key(m["sender"]) == name]
     ids = [m["id"] for m in msgs]
     topics, tasks = [], []
     if ids:
-        topics = sb().table("topic_links").select("topic_key, message_id").in_("message_id", ids).execute().data
-        tasks = sb().table("asana_links").select("task_url, task_gid, message_id").in_("message_id", ids).execute().data
+        topics = sb().table("topic_links").select("topic_key, message_id").eq("owner_id", user.id).in_("message_id", ids).execute().data
+        tasks = sb().table("asana_links").select("task_url, task_gid, message_id").eq("owner_id", user.id).in_("message_id", ids).execute().data
     return {
         "name": name,
         "handles": sorted({m["sender"]["handle"] for m in msgs if m["sender"].get("handle")}),

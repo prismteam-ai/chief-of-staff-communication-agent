@@ -84,9 +84,13 @@ def client():
     return FixtureAsana()
 
 
-def task_from_message(message_id: str, title: str, detail: str) -> dict:
-    """Create an Asana task from a communication + record the link + index into RAG."""
-    msg = sb().table("messages").select("channel, sender, body_text, sent_at").eq("id", message_id).single().execute().data
+def task_from_message(message_id: str, owner: str, title: str, detail: str) -> dict:
+    """Create an Asana task from a communication + record the link + index into RAG,
+    all owned by `owner` (the message must belong to them)."""
+    msg = (
+        sb().table("messages").select("channel, sender, body_text, sent_at")
+        .eq("id", message_id).eq("owner_id", owner).single().execute().data
+    )
     sender = msg["sender"].get("display_name") or msg["sender"].get("handle")
     notes = (
         f"{detail}\n\n---\nSource communication ({msg['channel']}, {msg['sent_at']}) from {sender}:\n"
@@ -95,6 +99,7 @@ def task_from_message(message_id: str, title: str, detail: str) -> dict:
     task = client().create_task(name=title, notes=notes)
     sb().table("asana_links").insert(
         {
+            "owner_id": owner,
             "message_id": message_id,
             "task_gid": task["gid"],
             "action": "created",
@@ -102,6 +107,7 @@ def task_from_message(message_id: str, title: str, detail: str) -> dict:
         }
     ).execute()
     index_knowledge(
+        owner,
         "asana",
         task["gid"],
         f"Asana task: {title}. {detail} (from {msg['channel']} message by {sender})",

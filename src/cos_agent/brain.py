@@ -43,18 +43,18 @@ def _chat_client() -> AzureOpenAI:
     )
 
 
-def _style_corpus(limit: int = 8) -> list[str]:
-    """The executive's actual outbound messages = style few-shot, injected dynamically."""
+def _style_corpus(owner: str, limit: int = 8) -> list[str]:
+    """This tenant's actual outbound messages = style few-shot, injected dynamically."""
     res = (
-        sb().table("messages").select("channel, body_text")
+        sb().table("messages").select("channel, body_text").eq("owner_id", owner)
         .eq("direction", "outbound").order("sent_at", desc=True).limit(limit).execute()
     )
     return [f"[{r['channel']}] {r['body_text']}" for r in res.data]
 
 
-def _thread_history(thread_id: str, limit: int = 10) -> list[str]:
+def _thread_history(owner: str, thread_id: str, limit: int = 10) -> list[str]:
     res = (
-        sb().table("messages").select("direction, sender, body_text, sent_at")
+        sb().table("messages").select("direction, sender, body_text, sent_at").eq("owner_id", owner)
         .eq("thread_id", thread_id).order("sent_at", desc=True).limit(limit).execute()
     )
     return [
@@ -63,19 +63,19 @@ def _thread_history(thread_id: str, limit: int = 10) -> list[str]:
     ]
 
 
-def process_message(message_id: str) -> dict:
-    """Recommend + draft for one inbound message. Idempotent per message."""
-    existing = sb().table("recommendations").select("id").eq("message_id", message_id).execute()
+def process_message(message_id: str, owner: str) -> dict:
+    """Recommend + draft for one inbound message. Idempotent per message. Owner-scoped."""
+    existing = sb().table("recommendations").select("id").eq("message_id", message_id).eq("owner_id", owner).execute()
     if existing.data:
         return {"message_id": message_id, "skipped": "already processed"}
 
-    msg = sb().table("messages").select("*").eq("id", message_id).single().execute().data
-    history = _thread_history(msg["thread_id"])
-    style = _style_corpus()
+    msg = sb().table("messages").select("*").eq("id", message_id).eq("owner_id", owner).single().execute().data
+    history = _thread_history(owner, msg["thread_id"])
+    style = _style_corpus(owner)
     known_topics = sorted(
-        {r["topic_key"] for r in sb().table("topic_links").select("topic_key").execute().data}
+        {r["topic_key"] for r in sb().table("topic_links").select("topic_key").eq("owner_id", owner).execute().data}
     )
-    related = search(msg["body_text"], match_count=5)
+    related = search(msg["body_text"], owner, match_count=5)
     related_block = "\n".join(
         f"- ({r['source_type']}, sim {r['similarity']:.2f}) {r['content'][:220]}" for r in related
     )
@@ -122,6 +122,7 @@ def process_message(message_id: str) -> dict:
 
     sb().table("recommendations").insert(
         {
+            "owner_id": owner,
             "message_id": message_id,
             "action": out["action"],
             "rationale": out["rationale"],
@@ -134,6 +135,7 @@ def process_message(message_id: str) -> dict:
     if out["action"] == "reply" and out.get("draft_body"):
         sb().table("drafts").insert(
             {
+                "owner_id": owner,
                 "message_id": message_id,
                 "body": out["draft_body"],
                 "style_notes": out.get("style_notes"),
@@ -145,7 +147,7 @@ def process_message(message_id: str) -> dict:
         from .asana import task_from_message  # local import: avoids cycle at module load
 
         try:
-            task = task_from_message(message_id, out["task_title"], out.get("task_detail") or out["rationale"])
+            task = task_from_message(message_id, owner, out["task_title"], out.get("task_detail") or out["rationale"])
             out["asana_task_url"] = task.get("permalink_url")
         except Exception as e:  # task failure never blocks the reply path
             out["asana_error"] = f"{type(e).__name__}: {e}"
@@ -153,6 +155,7 @@ def process_message(message_id: str) -> dict:
     if out.get("topic_key"):
         sb().table("topic_links").upsert(
             {
+                "owner_id": owner,
                 "topic_key": out["topic_key"],
                 "message_id": message_id,
                 "reason": out["rationale"][:200],
@@ -164,14 +167,14 @@ def process_message(message_id: str) -> dict:
     return {"message_id": message_id, **out}
 
 
-def redraft_with_context(message_id: str, user_context: str) -> dict:
+def redraft_with_context(message_id: str, owner: str, user_context: str) -> dict:
     """Answer a needs-context question: re-draft one message using the executive's
     supplied context as authoritative. Flips the recommendation to a reply + draft.
     This is the closing half of criterion 21 (prompt for context → act on it)."""
-    msg = sb().table("messages").select("*").eq("id", message_id).single().execute().data
-    history = _thread_history(msg["thread_id"])
-    style = _style_corpus()
-    related = search(msg["body_text"], match_count=5)
+    msg = sb().table("messages").select("*").eq("id", message_id).eq("owner_id", owner).single().execute().data
+    history = _thread_history(owner, msg["thread_id"])
+    style = _style_corpus(owner)
+    related = search(msg["body_text"], owner, match_count=5)
     related_block = "\n".join(
         f"- ({r['source_type']}, sim {r['similarity']:.2f}) {r['content'][:220]}" for r in related
     )
@@ -209,39 +212,39 @@ def redraft_with_context(message_id: str, user_context: str) -> dict:
     from .rag import index_knowledge
 
     try:
-        index_knowledge("preference", f"context-{message_id}",
+        index_knowledge(owner, "preference", f"context-{message_id}",
                         f"Executive-provided context re: {msg['body_text'][:80]} — {user_context}")
     except Exception:
         pass
 
-    rec = sb().table("recommendations").select("id").eq("message_id", message_id).execute().data
+    rec = sb().table("recommendations").select("id").eq("message_id", message_id).eq("owner_id", owner).execute().data
     fields = {"action": "reply", "needs_context": False, "context_question": None,
               "rationale": out["rationale"], "model": s.chat_deployment}
     if rec:
-        sb().table("recommendations").update(fields).eq("message_id", message_id).execute()
+        sb().table("recommendations").update(fields).eq("message_id", message_id).eq("owner_id", owner).execute()
     else:
-        sb().table("recommendations").insert({"message_id": message_id, **fields}).execute()
+        sb().table("recommendations").insert({"owner_id": owner, "message_id": message_id, **fields}).execute()
 
     draft = None
     if out.get("draft_body"):
         draft = sb().table("drafts").insert({
-            "message_id": message_id, "body": out["draft_body"],
+            "owner_id": owner, "message_id": message_id, "body": out["draft_body"],
             "style_notes": out.get("style_notes"), "model": s.chat_deployment,
         }).execute().data[0]
     return {"message_id": message_id, "draft": draft, **out}
 
 
-def process_pending(limit: int = 50) -> list[dict]:
-    """Process all unhandled inbound messages (defensive: one failure never kills the batch)."""
+def process_pending(owner: str, limit: int = 50) -> list[dict]:
+    """Process this tenant's unhandled inbound messages (defensive: one failure never kills the batch)."""
     pending = (
-        sb().table("messages").select("id")
+        sb().table("messages").select("id").eq("owner_id", owner)
         .eq("direction", "inbound").eq("answered_status", "pending")
         .order("sent_at").limit(limit).execute()
     ).data
     results = []
     for row in pending:
         try:
-            results.append(process_message(row["id"]))
+            results.append(process_message(row["id"], owner))
         except Exception as e:
             results.append({"message_id": row["id"], "error": f"{type(e).__name__}: {e}"})
     return results

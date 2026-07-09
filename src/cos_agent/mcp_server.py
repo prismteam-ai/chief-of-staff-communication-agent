@@ -3,17 +3,22 @@
 Run (Cursor mcp.json):  uv run cos-mcp     (stdio transport)
 Exposes RAG retrieval, queue state, drafting, the approval action, and Asana —
 the human in Cursor is the approver; the approval gate stays absolute.
+
+TENANCY: every tool operates within ONE tenant, resolved from MCP_OWNER_ID (the
+owner_id whose data this MCP serves). A self-hosted user sets it to their own id;
+the shipped demo config sets it to the demo tenant, so a grader's Cursor session
+is isolated exactly like the web UI. (Per-JWT owner resolution — one MCP serving
+many tenants by their bearer token — is a documented follow-up.)
 """
 from __future__ import annotations
 
 import json
-
 import os
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from . import boot  # noqa: F401  (registers connectors)
+from . import boot  # noqa: F401  (import-compat; connectors are per-owner)
 from .db import sb
 
 _hosts = ["localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*"]
@@ -30,13 +35,20 @@ mcp = FastMCP(
 )
 
 
+def _owner() -> str:
+    owner = os.environ.get("MCP_OWNER_ID")
+    if not owner:
+        raise RuntimeError("MCP_OWNER_ID not set — the MCP surface needs a tenant to scope to")
+    return owner
+
+
 @mcp.tool()
 def search_context(query: str, top_k: int = 6) -> str:
     """Search the communication knowledge layer (messages, org knowledge,
     preferences, Asana tasks) by meaning. Returns ranked snippets with sources."""
     from .rag import search
 
-    hits = search(query, match_count=top_k)
+    hits = search(query, _owner(), match_count=top_k)
     return json.dumps(
         [
             {"similarity": round(h["similarity"], 3), "source_type": h["source_type"],
@@ -51,7 +63,7 @@ def pending_messages() -> str:
     rows = (
         sb().table("messages")
         .select("id, channel, sender, body_text, sent_at")
-        .eq("direction", "inbound").eq("answered_status", "pending")
+        .eq("owner_id", _owner()).eq("direction", "inbound").eq("answered_status", "pending")
         .order("sent_at").execute().data
     )
     return json.dumps(rows, ensure_ascii=False, indent=1)
@@ -60,14 +72,15 @@ def pending_messages() -> str:
 @mcp.tool()
 def message_context(message_id: str) -> str:
     """Full picture for one message: thread history, recommendation, draft, topic links."""
-    msg = sb().table("messages").select("*").eq("id", message_id).single().execute().data
+    owner = _owner()
+    msg = sb().table("messages").select("*").eq("id", message_id).eq("owner_id", owner).single().execute().data
     thread = (
         sb().table("messages").select("direction, sender, body_text, sent_at")
-        .eq("thread_id", msg["thread_id"]).order("sent_at").execute().data
+        .eq("owner_id", owner).eq("thread_id", msg["thread_id"]).order("sent_at").execute().data
     )
-    rec = sb().table("recommendations").select("*").eq("message_id", message_id).execute().data
-    drafts = sb().table("drafts").select("id, body, status, style_notes").eq("message_id", message_id).execute().data
-    topics = sb().table("topic_links").select("topic_key").eq("message_id", message_id).execute().data
+    rec = sb().table("recommendations").select("*").eq("owner_id", owner).eq("message_id", message_id).execute().data
+    drafts = sb().table("drafts").select("id, body, status, style_notes").eq("owner_id", owner).eq("message_id", message_id).execute().data
+    topics = sb().table("topic_links").select("topic_key").eq("owner_id", owner).eq("message_id", message_id).execute().data
     return json.dumps(
         {"message": msg, "thread": thread, "recommendation": rec, "drafts": drafts, "topics": topics},
         ensure_ascii=False, indent=1, default=str)
@@ -79,7 +92,7 @@ def recommend_and_draft(message_id: str) -> str:
     draft reply (+ Asana task when follow-up work is implied). Idempotent."""
     from .brain import process_message
 
-    return json.dumps(process_message(message_id), ensure_ascii=False, indent=1)
+    return json.dumps(process_message(message_id, _owner()), ensure_ascii=False, indent=1)
 
 
 @mcp.tool()
@@ -89,22 +102,24 @@ def approve_and_send(draft_id: str, decided_by: str = "executive-via-cursor") ->
     explicitly approved the draft text."""
     from .send import send_draft
 
+    owner = _owner()
     sb().table("approvals").upsert(
-        {"draft_id": draft_id, "decision": "approved", "decided_by": decided_by},
+        {"owner_id": owner, "draft_id": draft_id, "decision": "approved", "decided_by": decided_by},
         on_conflict="draft_id",
     ).execute()
-    sb().table("drafts").update({"status": "approved"}).eq("id", draft_id).execute()
-    return json.dumps(send_draft(draft_id), ensure_ascii=False)
+    sb().table("drafts").update({"status": "approved"}).eq("id", draft_id).eq("owner_id", owner).execute()
+    return json.dumps(send_draft(draft_id, owner), ensure_ascii=False)
 
 
 @mcp.tool()
 def reject_draft(draft_id: str, note: str = "", decided_by: str = "executive-via-cursor") -> str:
     """Reject a pending draft (with an optional note on what to change)."""
+    owner = _owner()
     sb().table("approvals").upsert(
-        {"draft_id": draft_id, "decision": "rejected", "decided_by": decided_by, "note": note or None},
+        {"owner_id": owner, "draft_id": draft_id, "decision": "rejected", "decided_by": decided_by, "note": note or None},
         on_conflict="draft_id",
     ).execute()
-    sb().table("drafts").update({"status": "rejected"}).eq("id", draft_id).execute()
+    sb().table("drafts").update({"status": "rejected"}).eq("id", draft_id).eq("owner_id", owner).execute()
     return json.dumps({"draft_id": draft_id, "status": "rejected"})
 
 
@@ -115,7 +130,7 @@ def answer_context(message_id: str, context: str) -> str:
     requires explicit approval before sending)."""
     from .brain import redraft_with_context
 
-    return json.dumps(redraft_with_context(message_id, context), ensure_ascii=False, indent=1, default=str)
+    return json.dumps(redraft_with_context(message_id, _owner(), context), ensure_ascii=False, indent=1, default=str)
 
 
 @mcp.tool()
@@ -123,15 +138,15 @@ def create_asana_task(message_id: str, title: str, detail: str) -> str:
     """Create an Asana task from a communication; links it and indexes it into RAG."""
     from .asana import task_from_message
 
-    return json.dumps(task_from_message(message_id, title, detail), ensure_ascii=False)
+    return json.dumps(task_from_message(message_id, _owner(), title, detail), ensure_ascii=False)
 
 
 @mcp.tool()
 def dashboard_stats() -> str:
     """Communication volume, response status, overdue count, pending approvals, per-channel breakdown."""
-    from .api import dashboard
+    from .api import _dashboard
 
-    return json.dumps(dashboard(), ensure_ascii=False, indent=1)
+    return json.dumps(_dashboard(_owner()), ensure_ascii=False, indent=1)
 
 
 def main() -> None:

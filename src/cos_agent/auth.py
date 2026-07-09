@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass
 
 from fastapi import HTTPException, Request
 
@@ -15,7 +16,16 @@ from .db import sb_auth
 
 log = logging.getLogger(__name__)
 
-_TOKEN_CACHE: dict[str, tuple[float, str]] = {}  # token -> (expires_at_monotonic, email)
+
+@dataclass(frozen=True)
+class User:
+    """The authenticated tenant. `id` is the Supabase auth user id == owner_id on
+    every row; `email` is for display/audit only. All data access is scoped to `id`."""
+    id: str
+    email: str
+
+
+_TOKEN_CACHE: dict[str, tuple[float, "User"]] = {}  # token -> (expires_at_monotonic, User)
 _CACHE_TTL = 300
 
 
@@ -32,8 +42,9 @@ def login(email: str, password: str) -> dict:
     }
 
 
-def require_user(request: Request) -> str:
-    """FastAPI dependency: returns the authenticated user's email or raises 401."""
+def require_user(request: Request) -> User:
+    """FastAPI dependency: returns the authenticated User (id + email) or raises 401.
+    The `id` is the tenant owner_id every query must filter by."""
     header = request.headers.get("authorization", "")
     if not header.lower().startswith("bearer "):
         raise HTTPException(401, "missing bearer token")
@@ -44,9 +55,9 @@ def require_user(request: Request) -> str:
         return cached[1]
 
     try:
-        user = sb_auth().auth.get_user(token)
-        email = user.user.email
+        res = sb_auth().auth.get_user(token)
+        user = User(id=res.user.id, email=res.user.email)
     except Exception:
         raise HTTPException(401, "invalid or expired token")
-    _TOKEN_CACHE[token] = (time.monotonic() + _CACHE_TTL, email)
-    return email
+    _TOKEN_CACHE[token] = (time.monotonic() + _CACHE_TTL, user)
+    return user

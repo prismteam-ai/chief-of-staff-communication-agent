@@ -39,20 +39,6 @@ class Connector(Protocol):
         ...
 
 
-_REGISTRY: dict[str, Connector] = {}
-
-
-def register(conn: Connector) -> None:
-    _REGISTRY[conn.channel] = conn
-
-
-def get(channel: str) -> Connector:
-    if channel not in _REGISTRY:
-        raise LookupError(
-            f"no connector registered for channel '{channel}' (have: {sorted(_REGISTRY)})"
-        )
-    return _REGISTRY[channel]
-
-
-def all_connectors() -> list[Connector]:
-    return list(_REGISTRY.values())
+# Connectors are resolved PER TENANT from stored credentials — see
+# connectors/resolve.py. There is no global registry: a connector belongs to the
+# owner whose token built it, so cross-tenant sends are impossible by construction.

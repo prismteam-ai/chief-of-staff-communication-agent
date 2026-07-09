@@ -21,12 +21,18 @@ def embed(texts: list[str]) -> list[list[float]]:
     return [d.embedding for d in res.data]
 
 
-def index_messages(batch_size: int = 64) -> dict:
-    """Embed messages not yet in rag_documents. Idempotent via unique(source_type, source_id)."""
-    msgs = sb().table("messages").select("id, channel, direction, sender, body_text, sent_at").execute().data
+def index_messages(owner: str, batch_size: int = 64) -> dict:
+    """Embed this owner's messages not yet in rag_documents. Owner-scoped both ways
+    (only their messages, only their existing docs). Idempotent via the per-owner
+    unique(owner_id, source_type, source_id)."""
+    msgs = (
+        sb().table("messages").select("id, channel, direction, sender, body_text, sent_at")
+        .eq("owner_id", owner).execute().data
+    )
     have = {
         r["source_id"]
-        for r in sb().table("rag_documents").select("source_id").eq("source_type", "message").execute().data
+        for r in sb().table("rag_documents").select("source_id")
+        .eq("owner_id", owner).eq("source_type", "message").execute().data
     }
     todo = [m for m in msgs if m["id"] not in have]
     indexed = 0
@@ -39,6 +45,7 @@ def index_messages(batch_size: int = 64) -> dict:
         vectors = embed(texts)
         rows = [
             {
+                "owner_id": owner,
                 "source_type": "message",
                 "source_id": m["id"],
                 "content": t,
@@ -47,27 +54,32 @@ def index_messages(batch_size: int = 64) -> dict:
             }
             for m, t, v in zip(chunk, texts, vectors)
         ]
-        sb().table("rag_documents").upsert(rows, on_conflict="source_type,source_id").execute()
+        sb().table("rag_documents").upsert(rows, on_conflict="owner_id,source_type,source_id").execute()
         indexed += len(rows)
     return {"indexed": indexed, "already_indexed": len(msgs) - len(todo)}
 
 
-def index_knowledge(source_type: str, source_id: str, content: str, metadata: dict | None = None) -> None:
-    """Index a preference / org-knowledge / asana document."""
+def index_knowledge(owner: str, source_type: str, source_id: str, content: str,
+                    metadata: dict | None = None) -> None:
+    """Index a preference / org-knowledge / asana document, owned by `owner`."""
     vec = embed([content])[0]
     sb().table("rag_documents").upsert(
         {
+            "owner_id": owner,
             "source_type": source_type,
             "source_id": source_id,
             "content": content,
             "embedding": vec,
             "metadata": metadata or {},
         },
-        on_conflict="source_type,source_id",
+        on_conflict="owner_id,source_type,source_id",
     ).execute()
 
 
-def search(query: str, match_count: int = 6) -> list[dict]:
+def search(query: str, owner: str, match_count: int = 6) -> list[dict]:
+    """Vector search scoped to one tenant — p_owner prevents cross-tenant leakage."""
     vec = embed([query])[0]
-    res = sb().rpc("rag_search", {"query_embedding": vec, "match_count": match_count}).execute()
+    res = sb().rpc(
+        "rag_search", {"query_embedding": vec, "match_count": match_count, "p_owner": owner}
+    ).execute()
     return res.data
