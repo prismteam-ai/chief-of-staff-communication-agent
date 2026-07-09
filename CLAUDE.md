@@ -44,13 +44,22 @@ Central design tensions to resolve:
 2. Channel breadth (6+ integrations) vs speed-of-delivery scoring. The connector architecture must make each additional channel cheap, and the demo needs "multiple channels" end-to-end — not necessarily every channel at production depth. Which channels get real APIs vs a webhook/inbound-gateway path is an Open question.
 
 ## Phasing / Status
-Updated as work lands. Current phase in **bold**. DONE: 1 (meta kit), 2 (creds/tooling), 3-5 as spine v0 (fixture connectors all 6 channels → store → RAG → brain → approval-gated send, live-tested 2026-07-08, local commit 39c977d; slowking shadow ≈48/100, formal 0 until hosted).
-6. **Asana** — link comms to tasks/projects; create/update tasks from communications (needs workspace + PAT from Arthur)
-7. **UI** — dashboard, recommendations view, drafts-awaiting-approval view, approval flow (top shadow-points recovery after hosting)
-8. **Cursor agent** — MCP surface over the RAG layer + actions
-9. Corpus scale — grow fixtures from 12 messages to realistic volume + commit RAG seed script (toy data caps every band)
-10. Real connectors — Gmail first (needs demo account + OAuth app), then Twilio SMS/WhatsApp when unparked
-11. Hosting + demo — public runtime (Azure Container Apps proposal), demo credentials, demo video, PR; slowking self-assessment before submitting. NOTHING deploys/pushes until Arthur says so.
+Updated as work lands. **MAJOR PIVOT 2026-07-09** (Arthur): the product is a **multi-tenant, real-only** Chief of Staff — each user connects THEIR OWN real accounts and gets an isolated instance; a grader gets a separate demo account and never sees the owner's data. Superseded the earlier fixture-persona/simulated-send approach entirely.
+
+DONE (spine v0, 2026-07-08, superseded shape): fixture connectors → store → RAG → brain → approval-gated send; Asana; 4-tab UI; Cursor agent package; hosting on Render. Shadow ≈77/100 at that point.
+
+DONE (multi-tenant refactor, 2026-07-09, local commit 6a8199a): real per-user isolation (owner_id + RLS + app-layer scoping, migration 007; **two-login isolation verified**); per-owner connector resolver replacing the global registry; retired all fixtures/FixtureConnector/telegram-bot/LinkedIn/persona; real-only channel scope locked. ruff clean, 5/5 tests.
+
+Current work (in order):
+1. **Web UI** for authed OAuth + 3 real channels — done; endpoints verified.
+2. **owner_id NOT NULL** + connector_tokens owner-unique (migration 008, ships with deploy).
+3. **Real Gmail send proof** — approval-gated approve→real delivery (never once fired; needs Arthur's OK on a test send).
+4. **IMAP** connector + connect (needs Arthur's IMAP account + app-password).
+5. **Telegram MTProto** (Telethon, personal account; needs api_id/api_hash + phone login).
+6. **Demo tenant real data** — connect a demo Gmail + IMAP, seed real messages (needs a demo Google account).
+7. **Deploy** to Render (new env MCP_OWNER_ID) + re-verify hosted isolation; then demo video + PR. NOTHING deploys/pushes until Arthur says so.
+
+Channel scope (locked 2026-07-09): REAL & live = Gmail, 2nd-email (IMAP), Telegram (MTProto). Built-but-credential-gated (real code, awaiting creds/funding) = X DMs, Twilio SMS/WhatsApp. DROPPED = LinkedIn (no personal-messaging API).
 
 ## Tech stack
 Proven choices only; open choices live in Open questions.
@@ -159,6 +168,8 @@ Append one dated, quotable rule here in the same commit as the fix that taught i
 - (inherited) Editing one field of a synced config file re-applies every other field — read the whole file, then push.
 - (inherited) Hardcoded examples in prompts leak into output — an interview bot greeted real users as "Sarah" from its few-shot examples. Dynamic injection only.
 - 2026-07-08 — The Supabase **management-API** `/database/query` endpoint silently no-op'd DDL while returning `[]` "success": migrations 002 (`drafts.provider_message_id`) and 003 (`connector_tokens`) never persisted, and no test hit the successful-send path, so the missing column 500'd on the first real UI approval weeks later. Apply DDL via the Supabase **MCP `apply_migration`** (or verify with `list_tables`) — never trust a bare `[]` from the management API. And every write path needs a test that actually executes it, not just its guards.
+- 2026-07-09 — **RLS "enabled" is not RLS "enforcing."** All tables had `relrowsecurity=true` and I logged "RLS on all tables" as done — but `pg_policies` was empty AND the backend read via service_role (which bypasses RLS) AND no table had an owner column. Net: any logged-in user got the global dataset. Enabling RLS with zero policies + a service_role backend is fake isolation. Isolation requires (a) an owner column, (b) app-layer owner filtering on every query (the real gate under service_role), (c) policies as defense-in-depth — and a two-login test that proves tenant A sees none of tenant B.
+- 2026-07-09 — **A fixture demo read back as the real product and confused me for days.** FixtureConnector.send() wrote to `data/outbox/` and looked identical in the DB to a real send (status=sent, provider id); I couldn't tell real from fake in my own store. Lesson: don't build a simulation that is indistinguishable from the real thing at the data layer — either it's real, or it's unmistakably marked. Arthur's resolution: make everything real.
 
 ## Do NOT regress
 Invariants to preserve; add as they're won.
@@ -168,6 +179,8 @@ Invariants to preserve; add as they're won.
 - Provenance columns are never dropped "for simplicity" — source-backed recommendations are the product.
 - The demo runtime must be publicly hosted at a reachable URL; demo login credentials ship with the PR (login-blocked = automatic 0/100 from the grader).
 - **Every public surface is auth-gated — including MCP.** The hosted `/mcp/` endpoint exposes send/Asana-write tools; it requires a Supabase JWT or `MCP_AUTH_TOKEN`. (Origin: 2026-07-08 hosted slowking run found it wide open — access-boundary band crashed to 25%. Never mount a new surface without the gate.)
+- **Tenant isolation is absolute.** The product is multi-tenant: every tenant-scoped row carries `owner_id`; every query filters by the authenticated user's id; every write stamps it. A login must NEVER read or act on another tenant's data. The backend runs as service_role (bypasses RLS), so the **app-layer owner filter is the real enforcement** — RLS policies (`owner_id = auth.uid()`) are defense-in-depth only. Adding an endpoint or MCP tool without owner-scoping is a privacy breach, not a bug. (Origin: 2026-07-09 audit — RLS enabled with ZERO policies + no owner column + service_role reads → any login saw the global dataset; would have shown Arthur's real inbox to the grader. Proven fixed: two-login test, demo sees 0 of Arthur's mail.)
+- **Real or cut — never faked.** Every channel is a real integration owned by a tenant; there is no fixture connector and no simulated send. A channel we cannot make real (LinkedIn — no personal-messaging API) is DROPPED, not simulated. (Origin: 2026-07-09 — a fixture/persona demo kept getting mistaken for the real product; Arthur: "everything is real.")
 
 ## Design decisions
 Dated one-liners, recorded after proven.
@@ -175,6 +188,7 @@ Dated one-liners, recorded after proven.
 - 2026-07-08 — Azure OpenAI for LLM + embeddings; Supabase (Postgres + pgvector) as the single store for messages, vectors, and demo auth; Netlify for the dashboard UI.
 - 2026-07-08 — Netlify verified NOT to run Python functions (TS/JS/Go only) → backend host is a separate decision (Azure vs Render), pending Arthur.
 - 2026-07-08 — Dedicated Supabase project `chief-of-staff-comms` (ref `frhromdjjmczranjcnfz`) created in the memoirji org via management API; pgvector enabled; keys in `.env`; MCP server scoped to it in `.mcp.json`. Isolation from all other org projects is a standing rule.
+- 2026-07-09 — **Multi-tenant, real-only** (Arthur). Per-user isolation via `owner_id` on every table + app-layer owner filtering + RLS defense-in-depth (migration 007). Each user connects their own real accounts; graders get a separate isolated demo account. Every channel is a real integration (no fixtures, no simulated send); LinkedIn dropped (no API). Two tenants provisioned: Arthur (arthurac@umich.edu, owns his real Gmail) + demo (owns the demo corpus). MCP surface scopes to `MCP_OWNER_ID`.
 
 ## Open questions
 - Demo account inventory (needs Arthur, per channel):
@@ -199,6 +213,7 @@ Dated one-liners, recorded after proven.
 - PBI/reflection/orchestration apparatus (see Rules)
 
 ## Recent milestones
+- 2026-07-09 — **Multi-tenant refactor** (local commit 6a8199a; NOT pushed/deployed). Reframe: workable multi-tenant product, not a demo — each user connects their own real accounts, graders get an isolated demo account. Audit exposed fake isolation (RLS enabled, 0 policies, no owner column, service_role reads → global dataset leak). Rebuilt: migration 007 (owner_id ×10 tables, RLS tenant_isolation, owner-scoped uniques, owner-filtered rag_search); backfill (Arthur owns his 500 real gmail, demo owns the rest); app-layer owner scoping through api/brain/ingest/rag/asana/send/mcp; per-owner connector resolver (`connectors/resolve.py`) replacing the global registry; OAuth state binds the tenant. **Two-login isolation VERIFIED: demo sees 96 msgs / 0 of Arthur's real senders; Arthur sees 499 real gmail.** Retired all fakes (6 fixtures, FixtureConnector, telegram bot, LinkedIn, persona/seed scripts, a committed sim-receipt). Channel scope locked real-only. Web UI updated for authed OAuth + 3 real channels. ruff clean, 5/5 tests (incl. new cross-tenant-send test). REMAINING: NOT-NULL hardening, real Gmail send proof, IMAP + Telegram-MTProto connectors, demo-tenant real data, deploy — most need creds/accounts from Arthur or his deploy-go.
 - 2026-07-09 — Product-shape roll (Parts A–E) + hosted slowking (2 pillars). Runtime-verified ≈**77/100** (formal 0 until PR+video): functional 35/40, runtime&demo 10/20 (no video), evidence 9/12, **access-boundary 8/8** (MCP now auth-gated), impl 5/7, kit-usage 3/5 (top-of-band — real kit-format agent package). Delivered: 4-tab SPA (Needs You triage / Dashboard / Connections / People), honest <5-min data (0%→~55%), needs-context answer loop, cross-channel People (identity merge), Cursor deliverable = `gardevoir` agent + 3 skills + 4 slash commands + plugin manifests (kit format, cookbook-informed). Post-eval fixes: stateless HMAC OAuth nonce (Render-restart-safe), MCP approvals upsert, **replaced 48 fixture Asana links (fake "live" URLs) with 8 real tasks** (anti-fabrication). Two hard gates remain: PR + demo video (held for Arthur).
 - 2026-07-08 — Hosting go (Arthur): Render free tier. Private deploy repo `arthurckw/cos-comms-agent-deploy` pushed (deploy source only — NOT the assignment repo). Render service `srv-d96qhp7aqgkc73c9lvpg` → https://cos-comms-agent.onrender.com (kaisha team; API key in .env — NOTE: Render API 401s transiently, retry-once required). Auth gate shipped: Supabase JWT on all /api routes, login UI, demo user demo@meridianlabs.io (password in .env). MCP over streamable HTTP at /mcp/ (trailing slash required). X connector implemented, credential-gated (company will provide creds). Google: gcloud re-authed (arthur.cho@outlook.com); GCP project `cos-comms-demo` created + Gmail API enabled (utterpia project deliberately untouched — its production consent screen serves polishy/onlyhumans sign-in). Asana workspace being created by Arthur.
 - 2026-07-08 — Full-fidelity slowking milestone run (2 independent pillars): formal 0/100 (local gates, expected), **shadow ≈66/100** (up from ≈48 baseline). Functional 30/40; strongest: dashboard 100%, recommendations 100%; weakest: reproducibility 25% (no setup docs), fixture-only channels. Pillar findings fixed same-day: concurrent 500 burst (supabase HTTP/2 retry — hammer test 42/42), send double-send race, approval re-decision 500, provider_message_id persisted (002), structured logging, ruff. Ruff lesson: autofix removed the load-bearing `boot` import (F401) — side-effect imports need `# noqa` armor.

@@ -378,11 +378,10 @@ async function renderConn() {
     const asana = c.integrations[0];
     const rowHtml = x => `<div class="row"><div>
         <div class="name"><span class="chip" style="background:${chColor(x.channel)}"></span>${esc(x.label)}</div>
-        <div class="sub">${x.connected ? esc(x.accounts.join(", ")||"connected") : (x.method==="oauth"?"OAuth":x.method==="paste"?"paste credentials":"gateway / documented constraint")}</div></div>
+        <div class="sub">${x.connected ? esc(x.accounts.join(", ")||"connected") : (x.method==="oauth"?"Google consent (our app)":"paste app-password / token")}</div></div>
       <div>${x.connected ? `<span class="pill live">live</span>` :
-        x.method==="oauth" && x.start ? `<button class="cta" onclick="location.href='${x.start}'">Connect</button>` :
-        x.method==="paste" ? `<button onclick="pasteConnect('${x.channel}','${esc(x.label)}')">Connect</button>` :
-        `<span class="pill demo">demo mode</span>`}</div></div>`;
+        x.method==="oauth" ? `<button class="cta" onclick="oauthConnect()">Connect</button>` :
+        `<button onclick="pasteConnect('${x.channel}','${esc(x.label)}')">Connect</button>`}</div></div>`;
     const asanaRow = `<div class="row"><div><div class="name">✅ Asana</div>
         <div class="sub">${asana.connected?'workspace connected · tasks created from communications':'not connected'}</div></div>
       <div>${asana.connected?'<span class="pill live">live</span>':'<button onclick="pasteConnect(\'asana\',\'Asana\')">Connect</button>'}</div></div>`;
@@ -390,8 +389,13 @@ async function renderConn() {
     el.innerHTML =
       (hasConnected ? `<h2>Connected</h2><div class="rows">${live.map(rowHtml).join("")}${asana.connected?asanaRow:""}</div>` : "") +
       `<h2>Available</h2><div class="rows">${avail.map(rowHtml).join("")}${asana.connected?"":asanaRow}</div>
-       <p class="meta" style="margin-top:12px">Connect Gmail opens Google's consent (our registered app). Paste-key channels ask for a token in one field. “Demo mode” channels run on a seeded corpus until real credentials are added.</p>`;
+       <p class="meta" style="margin-top:12px">Connect Gmail opens Google's consent (our registered app). Other email (IMAP) and Telegram ask for a credential in one field. Every channel is a real integration — your account, your data, isolated to your login.</p>`;
   } catch (e) { el.innerHTML = `<div class="empty">Failed: ${esc(e.message)}</div>`; }
+}
+async function oauthConnect() {
+  // fetch the tenant-bound consent URL WITH our bearer token, then redirect the browser.
+  try { const r = await j("/oauth/google/start"); location.href = r.url; }
+  catch (e) { alert("Could not start Google connect: " + e.message); }
 }
 async function pasteConnect(channel, label) {
   const handle = prompt(`${label}: account/handle (e.g. address or number)`); if (!handle) return;
