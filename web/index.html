@@ -354,7 +354,6 @@ function badgeFor(m, bucket) {
   if (bucket === "approval") return `<span class="kc-badge">draft ready</span>`;
   let b = "";
   if (task) b += `<span class="kc-badge task">📋 task</span> `;
-  if (OVERDUE(m.sent_at) && bucket !== "done") b += `<span class="kc-badge od">overdue</span>`;
   return b;
 }
 function cardHtml(m, bucket) {
@@ -380,9 +379,8 @@ function openDetail(id) {
   const m = (DATA.msgs || []).find(x => x.id === id); if (!m) return;
   const rec = DATA.recByMsg[id], draft = DATA.draftByMsg[id], task = DATA.asanaByMsg[id];
   const who = m.sender.display_name || m.sender.handle;
-  const od = OVERDUE(m.sent_at);
   let html = `<button class="x" onclick="closeDetail()">✕</button>
-    <div class="meta"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(m.channel)} · ${esc(who)} · ${new Date(m.sent_at).toLocaleString()} ${od?'· <span style="color:var(--critical)">⚠ overdue</span>':'· within 5-min window'}</div>
+    <div class="meta"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(m.channel)} · ${esc(who)} · ${new Date(m.sent_at).toLocaleString()}</div>
     <div class="msgbody" style="margin:10px 0 4px">${esc(m.body_text)}</div>`;
   if (rec) html += `<div class="box"><div class="lbl">Agent recommendation</div>
     <b>${esc(rec.action)}</b> — ${esc(rec.rationale)}</div>`;
