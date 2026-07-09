@@ -40,6 +40,10 @@ app.add_middleware(
 # ---- KB cache (lazy, rebuildable after a connections change) -----------------
 _KB = None
 
+# Session metrics: message_id -> live time-to-answer (seconds), set on approval.
+# In-memory (single-instance demo); survives KB rebuilds so the dashboard is stable.
+_ANSWERED: dict[str, float | None] = {}
+
 
 def kb():
     global _KB
@@ -151,11 +155,37 @@ def approve(req: ApproveRequest, user: dict = Depends(require_owner)) -> dict:
                              asana_op=AsanaOp(req.asana_op), rationale=req.text)
         asana_result = brain._execute_asana(rec, pack)
 
-    response_seconds = None
-    if known is not None:
-        response_seconds = (datetime.now(timezone.utc) - known.timestamp).total_seconds()
+    # Live time-to-answer from the client (open → approve), not the historical
+    # fixture timestamp. Record it for the dashboard.
+    response_seconds = req.interaction_seconds
+    _ANSWERED[req.message_id] = response_seconds
     return {"sent": to_jsonable(sent), "asana": asana_result, "answered": True,
             "response_seconds": response_seconds}
+
+
+@app.get("/api/metrics")
+def metrics(user: dict = Depends(current_user)) -> dict:
+    """Dashboard aggregates: volume, channel breakdown, answered/overdue, pending
+    approvals, and median live response time."""
+    msgs = kb().messages
+    awaiting, overdue = _awaiting_thread_ids(), _overdue_thread_ids()
+    by_channel: dict[str, int] = {}
+    for m in msgs:
+        by_channel[m.channel.value] = by_channel.get(m.channel.value, 0) + 1
+    awaiting_ct = sum(1 for m in msgs if m.thread_id in awaiting)
+    overdue_ct = sum(1 for m in msgs if m.thread_id in overdue)
+    answered_ct = len(_ANSWERED)
+    times = sorted(v for v in _ANSWERED.values() if v is not None)
+    median = times[len(times) // 2] if times else None
+    return {
+        "total": len(msgs),
+        "by_channel": by_channel,
+        "awaiting": awaiting_ct,
+        "overdue": overdue_ct,
+        "answered": answered_ct,
+        "pending_approvals": max(0, awaiting_ct - answered_ct),
+        "median_response_seconds": median,
+    }
 
 
 @app.get("/api/style")

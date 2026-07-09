@@ -4,14 +4,22 @@ import { useEffect, useState } from "react";
 import type { AgentResult, InboxMessage } from "@/lib/types";
 import { PRIORITY_COLOR } from "./channels";
 
+function fmtTime(s: number): string {
+  return s < 90 ? `${Math.round(s)}s` : `${Math.round(s / 60)}m`;
+}
+
 export default function ApprovalCard({
   result,
   message,
   canSend,
+  openedAt,
+  onAnswered,
 }: {
   result: AgentResult;
   message: InboxMessage;
   canSend: boolean;
+  openedAt?: number;
+  onAnswered?: () => void;
 }) {
   const rec = result.recommendation;
   const [text, setText] = useState(result.draft?.text ?? "");
@@ -30,6 +38,9 @@ export default function ApprovalCard({
     setStatus("sending");
     const recipient =
       message.sender.email ?? message.sender.handle ?? undefined;
+    const interaction_seconds = openedAt
+      ? (Date.now() - openedAt) / 1000
+      : null;
     const res = await fetch("/api/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -40,6 +51,7 @@ export default function ApprovalCard({
         to: recipient?.replace(/^\+/, ""),
         thread_id: message.thread_id,
         asana_op: rec.asana_op,
+        interaction_seconds,
       }),
     });
     if (res.ok) {
@@ -47,9 +59,10 @@ export default function ApprovalCard({
       setStatus("sent");
       setDetail(
         `Sent · answered in ${
-          j.response_seconds ? Math.round(j.response_seconds / 60) + "m" : "—"
+          j.response_seconds != null ? fmtTime(j.response_seconds) : "—"
         }${j.asana ? ` · Asana: ${j.asana}` : ""}`
       );
+      onAnswered?.();
     } else {
       setStatus("error");
       const j = await res.json().catch(() => ({}));

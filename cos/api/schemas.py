@@ -25,6 +25,10 @@ class ApproveRequest(BaseModel):
     to: str | None = None
     thread_id: str | None = None
     asana_op: str | None = None      # AsanaOp value, or None to skip
+    # Seconds from opening the message (agent run) to approving it — the real live
+    # time-to-answer. The client measures it; fixture timestamps are historical so a
+    # server-side now()-received delta would be meaningless.
+    interaction_seconds: float | None = None
 
 
 class ConnectionUpdate(BaseModel):

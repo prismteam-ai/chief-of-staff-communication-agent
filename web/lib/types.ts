@@ -126,3 +126,14 @@ export interface StyleResponse {
   profile: StyleProfile | null;
   editable: boolean;
 }
+
+// --- Dashboard metrics --------------------------------------------------------
+export interface Metrics {
+  total: number;
+  by_channel: Record<string, number>;
+  awaiting: number;
+  overdue: number;
+  answered: number;
+  pending_approvals: number;
+  median_response_seconds: number | null;
+}

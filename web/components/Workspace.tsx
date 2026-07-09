@@ -12,6 +12,7 @@ import Inbox from "./Inbox";
 import AgentTrace from "./AgentTrace";
 import ContextPanel from "./ContextPanel";
 import ApprovalCard from "./ApprovalCard";
+import MetricsBar from "./MetricsBar";
 
 export default function Workspace({ role }: { role: string }) {
   const [selected, setSelected] = useState<InboxMessage | null>(null);
@@ -22,6 +23,8 @@ export default function Workspace({ role }: { role: string }) {
   const [ctxLoading, setCtxLoading] = useState(false);
   const [draftText, setDraftText] = useState("");
   const [channel, setChannel] = useState("gmail");
+  const [openedAt, setOpenedAt] = useState<number>(0);
+  const [metricsKey, setMetricsKey] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const canSend = role === "owner";
 
@@ -86,6 +89,7 @@ export default function Workspace({ role }: { role: string }) {
   }
 
   function selectMessage(m: InboxMessage) {
+    setOpenedAt(Date.now());
     setSelected(m);
     loadContext(m.id);
     runStream({ message_id: m.id }, m.id);
@@ -105,6 +109,7 @@ export default function Workspace({ role }: { role: string }) {
       awaiting: false,
       overdue: false,
     };
+    setOpenedAt(Date.now());
     setSelected(custom);
     setContext(null);
     runStream({ channel, body: draftText, sender: "custom@demo" }, null);
@@ -114,7 +119,9 @@ export default function Workspace({ role }: { role: string }) {
   const meta = selected ? channelMeta(selected.channel) : null;
 
   return (
-    <div className="flex-1 grid grid-cols-[300px_1fr_360px] min-h-0">
+    <div className="flex-1 flex flex-col min-h-0">
+      <MetricsBar refreshKey={metricsKey} />
+      <div className="flex-1 grid grid-cols-[300px_1fr_360px] min-h-0">
       {/* Inbox */}
       <div className="border-r border-[var(--color-border)] min-h-0">
         <Inbox selectedId={selected?.id ?? null} onSelect={selectMessage} />
@@ -150,7 +157,13 @@ export default function Workspace({ role }: { role: string }) {
           )}
 
           {result && selected && (
-            <ApprovalCard result={result} message={selected} canSend={canSend} />
+            <ApprovalCard
+              result={result}
+              message={selected}
+              canSend={canSend}
+              openedAt={openedAt}
+              onAnswered={() => setMetricsKey((k) => k + 1)}
+            />
           )}
         </div>
 
@@ -188,6 +201,7 @@ export default function Workspace({ role }: { role: string }) {
           </span>
         </div>
         <ContextPanel context={context} loading={ctxLoading} />
+      </div>
       </div>
     </div>
   );
