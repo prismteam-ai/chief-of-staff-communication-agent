@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📬</text></svg>">
+<title>Chief of Staff — Communications</title>
+<style>
+  :root {
+    --page: #f9f9f7; --surface: #fcfcfb;
+    --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --border: rgba(11,11,11,0.10);
+    --ch-gmail: #2a78d6; --ch-email: #1baf7a; --ch-sms: #eda100;
+    --ch-whatsapp: #008300; --ch-x: #4a3aa7; --ch-linkedin: #e34948;
+    --ch-telegram: #229ed9; --ch-discord: #5865f2; --ch-slack: #7c3a6f;
+    --good: #0ca30c; --critical: #d03b3b; --good-text: #006300; --accent: #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0d0d0d; --surface: #1a1a19;
+      --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --border: rgba(255,255,255,0.10);
+      --ch-gmail: #3987e5; --ch-email: #199e70; --ch-sms: #c98500;
+      --ch-whatsapp: #008300; --ch-x: #9085e9; --ch-linkedin: #e66767;
+      --ch-telegram: #3aabe0; --ch-discord: #7f8bf5; --ch-slack: #b07aa3;
+      --good-text: #0ca30c; --accent: #3987e5;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--page); color: var(--ink);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1240px; margin: 0 auto; padding: 20px 20px 64px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+           flex-wrap: wrap; margin-bottom: 16px; }
+  h1 { font-size: 17px; font-weight: 650; white-space: nowrap; }
+  nav { display: flex; gap: 4px; }
+  nav button { border: none; background: none; color: var(--ink-2); font: inherit; cursor: pointer;
+               padding: 7px 12px; border-radius: 8px; }
+  nav button.active { background: var(--surface); color: var(--ink); font-weight: 600;
+                      border: 1px solid var(--border); }
+  nav button:hover { color: var(--ink); }
+  .hbtns { display: flex; align-items: center; gap: 10px; }
+  .iconbtn { border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+             border-radius: 999px; width: 34px; height: 34px; display: inline-flex;
+             align-items: center; justify-content: center; cursor: pointer; }
+  .iconbtn:hover { color: var(--ink); }
+  .iconbtn:disabled { cursor: default; opacity: .8; }
+  .spin { animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #logout { border: none; background: none; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; }
+  h2 { font-size: 12px; font-weight: 600; color: var(--ink-2); text-transform: uppercase;
+       letter-spacing: .04em; margin: 22px 0 10px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .chip { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .empty { color: var(--muted); padding: 16px 2px; }
+  .link { color: var(--accent); }
+
+  /* Incoming — kanban */
+  .kanban { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; align-items: start; }
+  .kcol { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+          padding: 10px; max-height: 78vh; overflow-y: auto; }
+  .kcol h3 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+             color: var(--ink-2); margin-bottom: 10px; display: flex; justify-content: space-between; }
+  .kcount { color: var(--muted); font-weight: 500; }
+  .kcard { background: var(--page); border: 1px solid var(--border); border-radius: 8px;
+           padding: 10px 11px; margin-bottom: 8px; cursor: pointer; }
+  .kcard:hover { border-color: var(--accent); }
+  .kc-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .kc-who { font-weight: 600; font-size: 13px; }
+  .kc-t { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .kc-snip { color: var(--ink-2); font-size: 12px; margin-top: 3px; overflow: hidden;
+             text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .kc-badge { display: inline-block; margin-top: 7px; font-size: 10.5px; padding: 1px 7px; border-radius: 20px;
+              border: 1px solid var(--border); color: var(--ink-2); }
+  .kc-badge.sent { color: var(--good-text); border-color: var(--good); }
+  .kc-badge.task { color: var(--accent); border-color: var(--accent); }
+  .kc-badge.od { color: var(--critical); border-color: var(--critical); }
+  .kempty { color: var(--muted); font-size: 12px; padding: 6px 2px; }
+
+  /* stat tiles + bars (Insights) */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .tile .v { font-size: 25px; font-weight: 650; }
+  .tile .l { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .tile.alert .v { color: var(--critical); }
+  .tile.good .v { color: var(--good-text); }
+  .bars { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .barrow { display: grid; grid-template-columns: 84px 1fr 84px; align-items: center; gap: 10px; padding: 5px 0; }
+  .barrow .name { color: var(--ink-2); font-size: 13px; }
+  .track { height: 14px; display: flex; align-items: center; }
+  .bar { height: 14px; border-radius: 4px; min-width: 2px; }
+  .barrow .n { font-variant-numeric: tabular-nums; color: var(--ink); font-size: 13px; text-align: right; }
+  .barrow .n small { color: var(--muted); }
+
+  /* rows (Connections + People) */
+  .rows { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+         padding: 13px 16px; border-bottom: 1px solid var(--border); }
+  .row:last-child { border-bottom: none; }
+  .row .name { font-weight: 600; }
+  .row .sub { color: var(--muted); font-size: 12px; }
+  .pill { font-size: 11px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--border); color: var(--ink-2); }
+  .pill.live { color: var(--good-text); border-color: var(--good); }
+  .pill.na { color: var(--muted); }
+  .row button { font: inherit; border-radius: 8px; padding: 6px 12px; cursor: pointer;
+                border: 1px solid var(--border); background: var(--page); color: var(--ink); }
+  .row button.cta { background: var(--accent); color: #fff; border-color: transparent; }
+  .plist .row { cursor: pointer; }
+  .plist .row:hover { background: var(--page); }
+
+  /* detail + person modal */
+  .box { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin: 10px 0; }
+  .box .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 5px; }
+  .msgbody, .draft { white-space: pre-wrap; }
+  .actions { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .actions button { font: inherit; border-radius: 8px; padding: 7px 14px; cursor: pointer; border: 1px solid var(--border); }
+  .approve { background: var(--good); border-color: transparent; color: #fff; }
+  .reject { background: transparent; color: var(--ink-2); }
+  .primary { background: var(--accent); border-color: transparent; color: #fff; }
+  .sent-note { color: var(--good-text); font-size: 13px; margin-top: 10px; }
+  textarea, .edit-in { width: 100%; font: inherit; border: 1px solid var(--grid); border-radius: 8px;
+             background: var(--page); color: var(--ink); padding: 8px 10px; min-height: 70px; resize: vertical; }
+
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none;
+             align-items: flex-start; justify-content: center; z-index: 20; padding: 40px 16px; overflow-y: auto; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+           padding: 22px 24px; width: 640px; max-width: 100%; }
+  .modal .x { float: right; border: none; background: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+  #err { color: var(--critical); margin: 10px 0; display: none; }
+
+  #login-overlay { position: fixed; inset: 0; background: var(--page); display: none;
+                   align-items: center; justify-content: center; z-index: 30; }
+  #login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 28px; width: 320px; }
+  #login-card h1 { margin-bottom: 4px; }
+  #login-card p { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  #login-card input { width: 100%; margin-bottom: 10px; padding: 8px 10px; font: inherit;
+                      border: 1px solid var(--grid); border-radius: 8px; background: var(--page); color: var(--ink); }
+  #login-card button { width: 100%; padding: 9px; font: inherit; border: none; border-radius: 8px;
+                       background: var(--accent); color: #fff; cursor: pointer; }
+  #login-msg { color: var(--critical); font-size: 13px; min-height: 18px; margin-top: 8px; }
+
+  /* connect modal */
+  #cx-card { width: 440px; }
+  .cx-help { color: var(--ink-2); font-size: 13px; line-height: 1.5; margin-bottom: 14px; }
+  .cx-help a { color: var(--accent); }
+  .cx-help code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+                  background: var(--page); padding: 1px 5px; border-radius: 4px; }
+  .cx-steps { margin: 0 0 14px; padding-left: 18px; color: var(--ink-2); font-size: 12.5px; line-height: 1.65; }
+  .cx-steps li { margin-bottom: 3px; }
+  .cx-steps a { color: var(--accent); }
+  .cx-steps code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
+                   background: var(--page); padding: 1px 5px; border-radius: 4px; }
+  .cx-note { font-size: 12px; color: var(--ink-2); background: var(--page); border: 1px solid var(--grid);
+             border-radius: 8px; padding: 8px 10px; margin-bottom: 14px; line-height: 1.6; }
+  .cx-note b { color: var(--ink); }
+  .cx-note code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+  .cx-field { margin-bottom: 10px; }
+  .cx-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .cx-field input { width: 100%; padding: 8px 10px; font: inherit; border: 1px solid var(--grid);
+                    border-radius: 8px; background: var(--page); color: var(--ink); }
+  .cx-fhint { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
+  .cx-fhint a { color: var(--accent); }
+  #cx-msg { color: var(--critical); font-size: 12px; min-height: 16px; }
+  .cx-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+  .cx-actions button { font: inherit; border-radius: 8px; padding: 8px 16px; cursor: pointer; border: 1px solid var(--border); }
+  .cx-connect { background: var(--accent); color: #fff; border-color: transparent; }
+  .cx-cancel { background: transparent; color: var(--ink-2); }
+
+  /* Knowledge */
+  .kb-text { flex: 1; }
+  .kb-btns { display: flex; gap: 6px; }
+  .kb-add { display: flex; gap: 8px; margin: 8px 0 4px; }
+  .kb-add input, .kb-editin { flex: 1; padding: 8px 10px; font: inherit; border: 1px solid var(--grid);
+                              border-radius: 8px; background: var(--page); color: var(--ink); }
+  .row .kb-btns button { padding: 5px 10px; }
+  .row-actions { display: flex; gap: 6px; align-items: center; }
+  .row-actions button.danger { color: var(--critical); border-color: var(--grid); background: transparent; }
+  .row-actions button.danger:hover { border-color: var(--critical); }
+
+  @media (max-width: 900px) { .kanban { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .kanban { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div id="login-overlay">
+  <form id="login-card" onsubmit="doLogin(event)">
+    <h1>Chief of Staff</h1>
+    <p>Sign in to view communications.</p>
+    <input id="li-email" type="email" placeholder="email" autocomplete="username" required>
+    <input id="li-pass" type="password" placeholder="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+    <div id="login-msg"></div>
+  </form>
+</div>
+
+<div id="dt-overlay" class="overlay" onclick="if(event.target===this)closeDetail()">
+  <div id="dt-card" class="modal"></div>
+</div>
+
+<div id="cx-overlay" class="overlay" onclick="if(event.target===this)closeConnect()">
+  <form id="cx-card" class="modal" onsubmit="submitConnect(event)">
+    <h1 id="cx-title" style="font-size:16px;margin-bottom:8px"></h1>
+    <div id="cx-help" class="cx-help"></div>
+    <ol id="cx-steps" class="cx-steps"></ol>
+    <div id="cx-note" class="cx-note" style="display:none"></div>
+    <div id="cx-fields"></div>
+    <div id="cx-msg"></div>
+    <div class="cx-actions">
+      <button type="button" class="cx-cancel" onclick="closeConnect()">Cancel</button>
+      <button type="submit" class="cx-connect">Connect</button>
+    </div>
+  </form>
+</div>
+
+<main>
+  <header>
+    <h1>Chief of Staff</h1>
+    <nav id="nav">
+      <button data-tab="incoming" class="active">Incoming</button>
+      <button data-tab="insights">Insights</button>
+      <button data-tab="knowledge">Knowledge</button>
+      <button data-tab="conn">Connections</button>
+    </nav>
+    <span class="hbtns">
+      <button id="sync" class="iconbtn" title="Sync — fetch new messages across your channels" aria-label="Sync">
+        <svg id="sync-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+      </button>
+      <button id="logout" onclick="logout()">sign out</button>
+    </span>
+  </header>
+  <div id="err"></div>
+
+  <section class="panel active" id="panel-incoming">
+    <div class="kanban" id="kanban"></div>
+  </section>
+
+  <section class="panel" id="panel-insights">
+    <h2>Response performance</h2>
+    <div class="tiles" id="tiles"></div>
+    <h2>Channel breakdown</h2>
+    <div class="bars" id="bars" role="img" aria-label="Inbound messages per channel"></div>
+    <h2 id="people-h">People · cross-channel</h2>
+    <div id="people"></div>
+  </section>
+
+  <section class="panel" id="panel-knowledge">
+    <p class="meta" style="margin-bottom:12px">Teach the agent — these feed every recommendation &amp; draft. Preferences are standing rules applied to every reply; organizational knowledge is facts it can cite.</p>
+    <div id="knowledge"></div>
+  </section>
+
+  <section class="panel" id="panel-conn">
+    <p class="meta" style="margin-bottom:12px">Connect your communication channels — one-time, per account, your credentials stay in your tenant. Every channel is a real integration.</p>
+    <div id="connections"></div>
+  </section>
+</main>
+<script>
+const API = (window.API_BASE || "") + "/api";
+const CH = ["gmail","email","sms","whatsapp","x","telegram","linkedin"];
+const chColor = c => `var(--ch-${c}, var(--accent))`;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+const fmtSecs = s => s == null ? "—" : (s < 60 ? Math.round(s) + "s" : s < 3600 ? Math.round(s/60) + "m" : (s/3600).toFixed(1) + "h");
+const ago = t => { const d=(Date.now()-new Date(t))/1000; return d<60?Math.round(d)+"s":d<3600?Math.round(d/60)+"m":d<86400?Math.round(d/3600)+"h":Math.round(d/86400)+"d"; };
+const OVERDUE = t => (Date.now() - new Date(t)) / 1000 > 300;
+
+function token() { return localStorage.getItem("cos_token"); }
+function showLogin(s) { document.getElementById("login-overlay").style.display = s ? "flex" : "none"; }
+function logout() { localStorage.removeItem("cos_token"); showLogin(true); }
+function clearErr() { const e = document.getElementById("err"); e.style.display = "none"; e.textContent = ""; }
+
+async function j(path, opts = {}) {
+  opts.headers = Object.assign({}, opts.headers, token() ? {Authorization: "Bearer " + token()} : {});
+  const r = await fetch(API + path, opts);
+  if (r.status === 401) { showLogin(true); throw new Error("signed out"); }
+  if (!r.ok) throw new Error(path + " → HTTP " + r.status);
+  return r.json();
+}
+async function doLogin(ev) {
+  ev.preventDefault();
+  const msg = document.getElementById("login-msg"); msg.textContent = "";
+  try {
+    const r = await fetch(API + "/login", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({email:document.getElementById("li-email").value, password:document.getElementById("li-pass").value})});
+    if (!r.ok) { msg.textContent = "Invalid credentials."; return; }
+    localStorage.setItem("cos_token", (await r.json()).access_token);
+    showLogin(false); loadAll();
+  } catch (e) { msg.textContent = "Login failed: " + e.message; }
+}
+
+let TAB = "incoming", DATA = {}, failCount = 0;
+
+document.getElementById("nav").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  TAB = b.dataset.tab; clearErr();
+  [...document.querySelectorAll("#nav button")].forEach(x => x.classList.toggle("active", x === b));
+  ["incoming","insights","knowledge","conn"].forEach(t =>
+    document.getElementById("panel-"+t).classList.toggle("active", t === TAB));
+  renderTab();
+});
+function renderTab() {
+  if (TAB === "incoming") renderIncoming();
+  else if (TAB === "insights") renderInsights();
+  else if (TAB === "knowledge") renderKnowledge();
+  else if (TAB === "conn") renderConn();
+}
+
+async function loadAll() {
+  if (!token()) { showLogin(true); return; }
+  try {
+    const [dash, msgs, recs, drafts, asana, people] = await Promise.all([
+      j("/dashboard"), j("/messages"), j("/recommendations"), j("/drafts?status=all"), j("/asana"), j("/people")]);
+    failCount = 0; clearErr();
+    DATA = { dash, msgs, recs, drafts, asana, people,
+      recByMsg: Object.fromEntries(recs.map(r => [r.message_id, r])),
+      draftByMsg: Object.fromEntries(drafts.map(d => [d.message_id, d])),   // ordered asc → newest wins
+      asanaByMsg: Object.fromEntries(asana.map(a => [a.message_id, a])) };
+    if (TAB !== "conn") renderTab();
+  } catch (e) {
+    if (e.message === "signed out") return;
+    if (++failCount >= 2) {
+      const el = document.getElementById("err");
+      el.style.display = "block"; el.textContent = "Reconnecting to the runtime…";
+    }
+  }
+}
+
+/* ---- Incoming (kanban) ---- */
+const COLS = [
+  {k:"new", label:"New"},
+  {k:"context", label:"Needs Context"},
+  {k:"approval", label:"Awaiting Approval"},
+  {k:"done", label:"Done"},
+];
+function bucketOf(m) {
+  const rec = DATA.recByMsg[m.id], draft = DATA.draftByMsg[m.id];
+  if ((draft && draft.status === "sent") || m.answered_status === "answered") return "done";
+  if (draft && draft.status === "pending") return "approval";
+  if (rec && rec.needs_context) return "context";
+  if (draft && draft.status === "rejected") return "done";
+  if (rec && ["archive","create_task","link_task","delegate"].includes(rec.action)) return "done";
+  return "new";
+}
+function badgeFor(m, bucket) {
+  const draft = DATA.draftByMsg[m.id], rec = DATA.recByMsg[m.id], task = DATA.asanaByMsg[m.id];
+  if (bucket === "done") {
+    if ((draft && draft.status === "sent") || m.answered_status === "answered") return `<span class="kc-badge sent">✓ replied</span>`;
+    if (draft && draft.status === "rejected") return `<span class="kc-badge">rejected</span>`;
+    if (rec && rec.action === "archive") return `<span class="kc-badge">archived</span>`;
+    if (rec) return `<span class="kc-badge">${esc(rec.action)}</span>`;
+  }
+  if (bucket === "approval") return `<span class="kc-badge">draft ready</span>`;
+  let b = "";
+  if (task) b += `<span class="kc-badge task">📋 task</span> `;
+  return b;
+}
+function cardHtml(m, bucket) {
+  const who = m.sender.display_name || m.sender.handle;
+  return `<div class="kcard" onclick="openDetail('${m.id}')">
+    <div class="kc-top"><span class="kc-who"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(who)}</span>
+      <span class="kc-t">${ago(m.sent_at)}</span></div>
+    <div class="kc-snip">${esc(m.body_text)}</div>
+    ${badgeFor(m, bucket)}</div>`;
+}
+function renderIncoming() {
+  const msgs = [...(DATA.msgs || [])].sort((a,b) => new Date(b.sent_at)-new Date(a.sent_at));
+  const buckets = {new:[], context:[], approval:[], done:[]};
+  msgs.forEach(m => buckets[bucketOf(m)].push(m));
+  document.getElementById("kanban").innerHTML = COLS.map(c =>
+    `<div class="kcol"><h3>${c.label}<span class="kcount">${buckets[c.k].length}</span></h3>
+      ${buckets[c.k].length ? buckets[c.k].map(m => cardHtml(m, c.k)).join("") : '<div class="kempty">—</div>'}
+    </div>`).join("");
+}
+
+/* ---- Detail modal ---- */
+function openDetail(id) {
+  const m = (DATA.msgs || []).find(x => x.id === id); if (!m) return;
+  const rec = DATA.recByMsg[id], draft = DATA.draftByMsg[id], task = DATA.asanaByMsg[id];
+  const who = m.sender.display_name || m.sender.handle;
+  let html = `<button class="x" onclick="closeDetail()">✕</button>
+    <div class="meta"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(m.channel)} · ${esc(who)} · ${new Date(m.sent_at).toLocaleString()}</div>
+    <div class="msgbody" style="margin:10px 0 4px">${esc(m.body_text)}</div>`;
+  if (rec) html += `<div class="box"><div class="lbl">Agent recommendation</div>
+    <b>${esc(rec.action)}</b> — ${esc(rec.rationale)}</div>`;
+  if (task) html += `<div class="box"><div class="lbl">📋 Asana task created</div>
+    <a class="link" href="${esc(task.task_url)}" target="_blank" rel="noopener">${esc(task.task_url || task.task_gid)}</a></div>`;
+  if (draft && draft.status === "sent") {
+    html += `<div class="box"><div class="lbl">✓ Sent · your voice</div><div class="draft">${esc(draft.body)}</div>
+      <div class="sent-note">Delivered${draft.provider_message_id?` (${esc(draft.provider_message_id)})`:""}.</div></div>`;
+  } else if (draft && draft.status !== "rejected") {
+    html += `<div class="box" data-draft="${draft.id}"><div class="lbl">Draft · your voice</div>
+      <div class="draft" id="dtext">${esc(draft.body)}</div>
+      ${draft.style_notes?`<div class="meta" style="margin-top:6px">style: ${esc(draft.style_notes)}</div>`:''}
+      <div class="actions">
+        <button class="approve" onclick="decide('${draft.id}','approved',this)">✓ Approve &amp; Send</button>
+        <button class="reject" onclick="startEdit('${draft.id}')">✎ Edit</button>
+        <button class="reject" onclick="regenerateMsg('${id}',this)">↻ Regenerate</button>
+        <button class="reject" onclick="decide('${draft.id}','rejected',this)">✗ Reject</button>
+      </div></div>`;
+  } else if (rec && rec.needs_context) {
+    html += `<div class="box"><div class="lbl">Agent needs your context</div>
+      <div>${esc(rec.context_question || rec.rationale)}</div>
+      <textarea id="ctx" placeholder="Give the agent what it needs…"></textarea>
+      <div class="actions"><button class="primary" onclick="answerCtx('${id}',this)">→ Give context &amp; draft</button></div></div>`;
+  } else if (draft && draft.status === "rejected") {
+    html += `<div class="meta">Draft rejected.</div>`;
+  } else if (rec && rec.action !== "reply") {
+    html += `<div class="meta">Handled — action <b>${esc(rec.action)}</b>, no reply needed.
+      <button class="reject" style="margin-left:8px" onclick="regenerateMsg('${id}',this)">↻ Regenerate</button></div>`;
+  } else if (!rec) {
+    html += `<div class="meta">Not processed yet — hit Sync.</div>`;
+  }
+  document.getElementById("dt-card").innerHTML = html;
+  document.getElementById("dt-overlay").style.display = "flex";
+}
+function closeDetail() { document.getElementById("dt-overlay").style.display = "none"; }
+
+async function decide(id, decision, btn) {
+  btn.disabled = true; btn.textContent = decision === "approved" ? "Sending…" : "Rejecting…";
+  try {
+    const r = await j(`/drafts/${id}/decide`, {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({decision, decided_by:"executive"})});
+    const box = document.querySelector(`[data-draft="${id}"] .actions`);
+    if (box) box.outerHTML = decision === "approved"
+      ? `<div class="sent-note">✓ Approved — sent${r.send?.provider_message_id?` (${esc(r.send.provider_message_id)})`:""}</div>`
+      : `<div class="meta">Rejected.</div>`;
+    await loadAll();
+  } catch (e) { alert("Failed: " + e.message); btn.disabled = false; }
+}
+async function regenerateMsg(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = "Regenerating…"; }
+  try { await j(`/messages/${id}/regenerate`, {method:"POST"}); await loadAll(); openDetail(id); }
+  catch (e) { alert("Regenerate failed: " + e.message); if (btn) { btn.disabled = false; btn.textContent = "↻ Regenerate"; } }
+}
+function startEdit(id) {
+  const box = document.querySelector(`[data-draft="${id}"]`);
+  const cur = document.getElementById("dtext").textContent;
+  box.querySelector(".actions").outerHTML =
+    `<textarea class="edit-in" id="edit-${id}">${esc(cur)}</textarea>
+     <div class="actions"><button class="approve" onclick="decide('${id}','approved',this)">✓ Approve &amp; Send</button></div>`;
+}
+async function answerCtx(msgId, btn) {
+  const ctx = document.getElementById("ctx").value.trim();
+  if (!ctx) { alert("Type the context first."); return; }
+  btn.disabled = true; btn.textContent = "Drafting…";
+  try { await j(`/messages/${msgId}/answer`, {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({context: ctx})});
+    await loadAll(); openDetail(msgId);
+  } catch (e) { alert("Failed: " + e.message); btn.disabled = false; }
+}
+
+/* ---- Insights (stats + people) ---- */
+function renderInsights() {
+  const d = DATA.dash; if (!d) return;
+  const rt = d.response_time_seconds;
+  const tiles = [
+    {v: d.volume.inbound, l: "inbound messages"},
+    {v: d.response_status.pending, l: "awaiting response"},
+    {v: d.overdue_over_5min, l: "overdue (>5 min)", alert: d.overdue_over_5min > 0},
+    {v: d.pending_approvals, l: "drafts to approve"},
+    {v: rt.pct_within_5min == null ? "—" : rt.pct_within_5min + "%", l: "answered < 5 min", good: (rt.pct_within_5min||0) >= 50},
+    {v: fmtSecs(rt.median), l: "median response"},
+  ];
+  document.getElementById("tiles").innerHTML = tiles.map(x =>
+    `<div class="tile${x.alert?' alert':''}${x.good?' good':''}"><div class="v">${esc(x.v)}</div><div class="l">${esc(x.l)}</div></div>`).join("");
+  const present = Object.keys(d.channel_breakdown || {});
+  const chans = [...CH, ...present.filter(c => !CH.includes(c))].filter(c => d.channel_breakdown[c]);
+  const max = Math.max(1, ...chans.map(c => d.channel_breakdown[c]?.total || 0));
+  document.getElementById("bars").innerHTML = chans.length ? chans.map(c => {
+    const s = d.channel_breakdown[c] || {total:0, pending:0};
+    return `<div class="barrow"><span class="name"><span class="chip" style="background:${chColor(c)}"></span>${c}</span>
+      <span class="track"><span class="bar" style="width:${(s.total/max)*100}%;background:${chColor(c)}"></span></span>
+      <span class="n">${s.total} <small>(${s.pending} open)</small></span></div>`;
+  }).join("") : `<div class="empty">No messages yet.</div>`;
+  const ppl = DATA.people || [];
+  document.getElementById("people-h").textContent = `People · ${ppl.length} contacts across channels`;
+  document.getElementById("people").innerHTML = ppl.length ? `<div class="rows plist">${ppl.map(p =>
+    `<div class="row" onclick='openPerson(${JSON.stringify(p.name)})'>
+      <div><div class="name">${esc(p.name)}</div>
+        <div class="sub">${p.channels.map(c=>`<span class="chip" style="background:${chColor(c)}"></span>${c}`).join("  ")} · ${p.count} messages</div></div>
+      <div class="meta">${ago(p.last_at)} ago</div></div>`).join("")}</div>` : `<div class="empty">No contacts yet.</div>`;
+}
+async function openPerson(name) {
+  try {
+    const p = await j(`/people/${encodeURIComponent(name)}`);
+    document.getElementById("dt-card").innerHTML = `<button class="x" onclick="closeDetail()">✕</button>
+      <div class="name" style="font-size:17px">${esc(p.name)}</div>
+      <div class="meta" style="margin:4px 0 2px">${p.channels.map(c=>`<span class="chip" style="background:${chColor(c)}"></span>${c}`).join("  ")}</div>
+      <div class="meta">${p.handles.map(esc).join(" · ")}</div>
+      ${p.topics.length?`<div class="meta" style="margin-top:6px">🏷 ${p.topics.map(esc).join(", ")}</div>`:''}
+      ${p.asana_tasks.length?`<div class="meta">📋 ${p.asana_tasks.length} linked Asana task(s)</div>`:''}
+      <h2>Conversation across channels</h2>
+      ${p.messages.map(m => `<div class="box"><div class="meta"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(m.channel)} · ${new Date(m.sent_at).toLocaleString()} · ${esc(m.answered_status)}</div>
+        <div style="margin-top:5px">${esc(m.body_text)}</div></div>`).join("")}`;
+    document.getElementById("dt-overlay").style.display = "flex";
+  } catch (e) { alert("Failed: " + e.message); }
+}
+
+/* ---- Knowledge (preferences + org facts → RAG) ---- */
+const KB = {
+  preference: {title:"Preferences", hint:"standing rules — e.g. “keep replies short”, “I decline Friday meetings”", ph:"Add a preference…"},
+  org: {title:"Organizational knowledge", hint:"facts it can cite — e.g. “Acme is our biggest client”, “Q3 launch is Sept 15”", ph:"Add a fact…"},
+};
+async function renderKnowledge() {
+  const el = document.getElementById("knowledge");
+  el.innerHTML = `<div class="empty">Loading…</div>`;
+  try {
+    const items = await j("/knowledge"); clearErr();
+    el.innerHTML = ["preference","org"].map(kind => {
+      const list = items.filter(i => i.kind === kind);
+      const rows = list.length ? list.map(kbRow).join("") : `<div class="empty" style="padding:12px 16px">Nothing yet.</div>`;
+      return `<h2>${KB[kind].title}</h2><div class="meta" style="margin:-4px 0 8px">${KB[kind].hint}</div>
+        <div class="rows">${rows}</div>
+        <div class="kb-add"><input id="kb-in-${kind}" placeholder="${esc(KB[kind].ph)}"
+             onkeydown="if(event.key==='Enter')addKnowledge('${kind}')">
+          <button class="cta" onclick="addKnowledge('${kind}')">Add</button></div>`;
+    }).join("");
+  } catch (e) { el.innerHTML = `<div class="empty">Failed: ${esc(e.message)}</div>`; }
+}
+function kbRow(i) {
+  return `<div class="row" data-kb="${esc(i.id)}"><div class="kb-text">${esc(i.text)}</div>
+    <div class="kb-btns"><button onclick="editKnowledge('${esc(i.id)}','${i.kind}')">Edit</button>
+      <button onclick="delKnowledge('${esc(i.id)}')">Delete</button></div></div>`;
+}
+async function addKnowledge(kind) {
+  const inp = document.getElementById("kb-in-"+kind), text = inp.value.trim(); if (!text) return;
+  try { await j("/knowledge", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({kind, text})}); renderKnowledge(); }
+  catch (e) { alert("Failed: " + e.message); }
+}
+async function delKnowledge(id) {
+  if (!confirm("Delete this?")) return;
+  try { await j("/knowledge/" + encodeURIComponent(id), {method:"DELETE"}); renderKnowledge(); }
+  catch (e) { alert("Failed: " + e.message); }
+}
+function editKnowledge(id, kind) {
+  const row = document.querySelector(`[data-kb="${CSS.escape(id)}"]`);
+  const cur = row.querySelector(".kb-text").textContent;
+  row.innerHTML = `<input class="kb-editin" value="${esc(cur)}">
+    <div class="kb-btns"><button class="cta" onclick="saveKnowledge('${esc(id)}','${kind}',this)">Save</button>
+      <button onclick="renderKnowledge()">Cancel</button></div>`;
+  row.querySelector(".kb-editin").focus();
+}
+async function saveKnowledge(id, kind, btn) {
+  const text = btn.closest(".row").querySelector(".kb-editin").value.trim(); if (!text) return;
+  try { await j("/knowledge/" + encodeURIComponent(id), {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({kind, text})}); renderKnowledge(); }
+  catch (e) { alert("Failed: " + e.message); }
+}
+
+/* ---- Connections ---- */
+async function renderConn() {
+  const el = document.getElementById("connections");
+  el.innerHTML = `<div class="empty">Loading…</div>`;
+  try {
+    const c = await j("/connections");
+    clearErr();
+    const asana = c.integrations[0];
+    const sub = x => x.connected ? esc(x.accounts.join(", ")||"connected")
+      : x.method==="oauth" ? "Google consent (our app)"
+      : x.method==="unavailable" ? "no public messaging API"
+      : "bring your own credentials";
+    const reconf = x => x.method==="oauth" ? `<button onclick="oauthConnect()">Re-authorize</button>`
+      : CONNECT_FORMS[x.channel] ? `<button onclick='openConnect(${JSON.stringify(x.channel)}, ${JSON.stringify((x.accounts&&x.accounts[0])||"")})'>Reconfigure</button>` : "";
+    const btn = x => x.connected
+      ? `<span class="pill live">live</span>${reconf(x)}<button class="danger" onclick="disconnectChannel('${x.channel}','${esc(x.label)}')">Disconnect</button>`
+      : x.method==="unavailable" ? `<span class="pill na">unavailable</span>`
+      : x.method==="oauth" ? `<button class="cta" onclick="oauthConnect()">Connect</button>`
+      : CONNECT_FORMS[x.channel] ? `<button onclick="openConnect('${x.channel}')">Connect</button>`
+      : `<span class="pill na">via login script</span>`;
+    const rowHtml = x => `<div class="row"><div>
+        <div class="name"><span class="chip" style="background:${chColor(x.channel)}"></span>${esc(x.label)}</div>
+        <div class="sub">${sub(x)}</div></div><div class="row-actions">${btn(x)}</div></div>`;
+    const asanaRow = `<div class="row"><div><div class="name">📋 Asana</div>
+        <div class="sub">${asana.connected?'workspace connected · tasks created from communications':'paste a personal access token'}</div></div>
+      <div class="row-actions">${asana.connected
+        ? `<span class="pill live">live</span><button onclick="openConnect('asana','asana')">Reconfigure</button><button class="danger" onclick="disconnectChannel('asana','Asana')">Disconnect</button>`
+        : `<button onclick="openConnect('asana')">Connect</button>`}</div></div>`;
+    const live = c.channels.filter(x => x.connected);
+    const avail = c.channels.filter(x => !x.connected);
+    const connectedBlock = (live.length || asana.connected)
+      ? `<h2>Connected</h2><div class="rows">${live.map(rowHtml).join("")}${asana.connected?asanaRow:""}</div>` : "";
+    el.innerHTML = connectedBlock +
+      `<h2>Available</h2><div class="rows">${avail.map(rowHtml).join("")}${asana.connected?"":asanaRow}</div>
+       <p class="meta" style="margin-top:12px">X, SMS and WhatsApp run on your own (paid) provider accounts — the platforms charge, but you can connect them. LinkedIn has no public personal-messaging API.</p>
+       <div id="cursor-panel"></div>`;
+    renderCursor();
+  } catch (e) { el.innerHTML = `<div class="empty">Failed: ${esc(e.message)}</div>`; }
+}
+
+async function disconnectChannel(channel, label) {
+  if (!confirm(`Disconnect ${label}? The agent stops syncing and sending on it until you reconnect. Your existing message history stays.`)) return;
+  try { await j("/channels/" + channel + "/connect", {method:"DELETE"}); renderConn(); }
+  catch (e) { alert("Disconnect failed: " + e.message); }
+}
+
+/* ---- Connect Cursor (per-user MCP token) ---- */
+const MCP_URL = location.origin + "/mcp/";
+function mcpSnippet(tok) {
+  return JSON.stringify({mcpServers: {"chief-of-staff-comms":
+    {url: MCP_URL, headers: {Authorization: "Bearer " + tok}}}}, null, 2);
+}
+async function renderCursor() {
+  const el = document.getElementById("cursor-panel"); if (!el) return;
+  let toks = [];
+  try { toks = await j("/mcp-tokens"); } catch (e) { /* signed-out handled by j() */ return; }
+  const rows = toks.length ? toks.map(t => `<div class="row"><div>
+      <div class="name">🔑 ${esc(t.label||'Cursor')}</div>
+      <div class="sub">${esc(t.masked)} · created ${new Date(t.created_at).toLocaleDateString()}</div></div>
+      <div><button onclick="revokeMcp('${t.id}')">Revoke</button></div></div>`).join("")
+    : `<div class="meta" style="padding:4px 0 8px">No Cursor tokens yet.</div>`;
+  el.innerHTML = `<h2 style="margin-top:22px">Connect Cursor</h2>
+    <p class="meta">Use this agent inside Cursor. Generate a token tied to <b>your</b> login — Cursor then acts as you (your channels, your data, the same approval gate). It’s a personal token: keep it private, revoke anytime.</p>
+    <div class="rows">${rows}</div>
+    <div style="margin-top:10px"><button class="cta" onclick="genMcp()">Generate Cursor token</button></div>
+    <div id="mcp-reveal"></div>`;
+}
+async function genMcp() {
+  try {
+    const r = await j("/mcp-tokens", {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"});
+    document.getElementById("mcp-reveal").innerHTML = `<div class="cx-note" style="margin-top:12px">
+      <b>Copy this now — the token is shown only once.</b><br>
+      1. Cursor → Settings → <b>MCP</b> → add server (or edit <code>~/.cursor/mcp.json</code>).<br>
+      2. Paste this, then restart Cursor:
+      <pre id="mcp-json" style="white-space:pre-wrap;user-select:all;background:var(--page);padding:8px;border-radius:6px;margin:8px 0;font-size:11.5px;overflow-x:auto">${esc(mcpSnippet(r.token))}</pre>
+      <button class="cta" onclick="copyMcp()">Copy config</button>
+      <button onclick="document.getElementById('mcp-reveal').innerHTML='';renderCursor()">Done</button></div>`;
+  } catch (e) { alert("Could not generate token: " + e.message); }
+}
+function copyMcp() {
+  const t = document.getElementById("mcp-json"); if (!t) return;
+  navigator.clipboard.writeText(t.textContent).then(
+    () => { const b = event.target; const o = b.textContent; b.textContent = "Copied ✓"; setTimeout(()=>b.textContent=o, 1500); },
+    () => alert("Copy failed — select the text manually."));
+}
+async function revokeMcp(id) {
+  if (!confirm("Revoke this Cursor token? Any Cursor using it stops working immediately.")) return;
+  try { await j("/mcp-tokens/" + id, {method:"DELETE"}); renderCursor(); }
+  catch (e) { alert("Revoke failed: " + e.message); }
+}
+async function oauthConnect() {
+  try { const r = await j("/oauth/google/start"); location.href = r.url; }
+  catch (e) { alert("Could not start Google connect: " + e.message); }
+}
+const CONNECT_FORMS = {
+  email: {
+    title: "Connect email (IMAP)",
+    help: `Connect any IMAP mailbox — Zoho, Fastmail, Gmail, Yahoo, iCloud, Outlook / Microsoft 365.
+           The agent reads your inbox and, once you approve a draft, replies <b>as you</b>.`,
+    steps: [
+      `In your mail provider, turn on <b>IMAP access</b> (usually Settings → Mail → IMAP → enable, then save).`,
+      `Create an <b>app password</b> — a provider-generated password for apps. Your normal login
+       password will not work over IMAP.
+       <a href="https://www.zoho.com/mail/help/app-passwords.html" target="_blank" rel="noopener">Zoho</a> ·
+       <a href="https://support.google.com/mail/answer/185833" target="_blank" rel="noopener">Gmail</a> ·
+       <a href="https://www.fastmail.help/hc/en-us/articles/360058752854" target="_blank" rel="noopener">Fastmail</a> ·
+       <a href="https://support.apple.com/102654" target="_blank" rel="noopener">iCloud</a>`,
+      `Enter your address + that app password below, then <b>Connect</b> — we run one sync immediately.`,
+    ],
+    note: `<b>IMAP host</b> is auto-detected for common providers. Only fill the host field if yours
+           isn't listed: &nbsp;Zoho <code>imap.zoho.com</code> · Gmail <code>imap.gmail.com</code> ·
+           Fastmail <code>imap.fastmail.com</code> · Yahoo <code>imap.mail.yahoo.com</code> ·
+           iCloud <code>imap.mail.me.com</code> · Outlook/M365 <code>outlook.office365.com</code>.`,
+    fields: [
+      {k:"email", label:"Email address", type:"email", ph:"you@company.com", req:true,
+       hint:"The mailbox you want the agent to manage."},
+      {k:"password", label:"App password", type:"password", ph:"xxxx xxxx xxxx xxxx", req:true,
+       hint:"The app-specific password from step 2 — not your login password."},
+      {k:"imap_host", label:"IMAP host (optional — auto-detected)", type:"text", ph:"imap.zoho.com",
+       hint:"Leave blank unless your provider isn't in the list above (e.g. Zoho needs imap.zoho.com)."},
+    ],
+    build: v => ({account_handle: v.email,
+      secret: JSON.stringify(v.imap_host ? {password:v.password, imap_host:v.imap_host} : {password:v.password})}),
+  },
+  telegram: {
+    title: "Connect Telegram (your account)",
+    help: `Reads and replies on your <b>personal</b> Telegram via MTProto (your own account, not a bot) —
+           so the agent sees your real 1:1 chats.`,
+    steps: [
+      `Go to <a href="https://my.telegram.org" target="_blank" rel="noopener">my.telegram.org</a> → <b>API development tools</b>
+       and create an app to get your <code>api_id</code> and <code>api_hash</code>.`,
+      `On your machine, run <code>uv run python scripts/telegram_login.py</code>. It asks for your phone,
+       then the login code Telegram texts you, and prints a one-line JSON blob.`,
+      `Paste that whole blob into <b>Session blob</b> below. It stays in your tenant; we never see your password.`,
+    ],
+    note: `The session blob authorizes read + send on your account. Keep it private — treat it like a password.`,
+    fields: [
+      {k:"phone", label:"Your phone / handle (label only)", type:"text", ph:"+1 555 123 4567", req:true,
+       hint:"Just a label shown in Connections — not used to log in."},
+      {k:"blob", label:"Session blob (from telegram_login.py)", type:"password", ph:'{"api_id":…,"api_hash":"…","session":"…"}', req:true,
+       hint:"The full JSON line the script printed."},
+    ],
+    build: v => ({account_handle: v.phone, secret: v.blob}),
+  },
+  x: {
+    title: "Connect X · Twitter DMs",
+    help: `Reads and sends <b>your</b> X DMs. Needs your own X app with DM access — X charges for the DM API,
+           so this runs on your paid X developer account.`,
+    steps: [
+      `In the <a href="https://developer.x.com/en/portal/dashboard" target="_blank" rel="noopener">X developer portal</a>,
+       create an app and enable <b>OAuth 2.0</b> with scopes <code>dm.read</code> <code>dm.write</code> (+ <code>tweet.read users.read</code>).`,
+      `Generate an <b>OAuth2 user access token</b> for your own account (not the app-only bearer token).`,
+      `Find your <b>numeric user id</b> (e.g. via <a href="https://developer.x.com/en/docs/x-api/users/lookup/introduction" target="_blank" rel="noopener">users lookup</a>), then paste all three below.`,
+    ],
+    fields: [
+      {k:"access_token", label:"OAuth2 user access token", type:"password", req:true,
+       hint:"The per-user token with dm.read + dm.write."},
+      {k:"self_user_id", label:"Your numeric X user id", type:"text", ph:"1234567890", req:true,
+       hint:"Numeric id, not the @handle — used to tell your own messages apart."},
+      {k:"self_handle", label:"Your handle", type:"text", ph:"@you", req:true},
+    ],
+    build: v => ({account_handle: v.self_handle,
+      secret: JSON.stringify({access_token:v.access_token, self_user_id:v.self_user_id, self_handle:v.self_handle})}),
+  },
+  sms: {
+    title: "Connect SMS · Twilio",
+    help: `Reads and sends SMS on <b>your own Twilio number</b> — a business line you own. (No API can read
+           carrier texts from your personal cell, so this is a Twilio number, not your phone.)`,
+    steps: [
+      `In the <a href="https://console.twilio.com" target="_blank" rel="noopener">Twilio console</a>, buy/select a phone number with SMS enabled.`,
+      `Copy your <b>Account SID</b> and <b>Auth Token</b> from the console dashboard.`,
+      `Paste them below with that number. Twilio charges per number + per message.`,
+    ],
+    fields: [
+      {k:"account_sid", label:"Account SID", type:"text", ph:"AC…", req:true, hint:"Starts with AC — from the console dashboard."},
+      {k:"auth_token", label:"Auth Token", type:"password", req:true},
+      {k:"from_number", label:"Your Twilio number", type:"text", ph:"+15551234567", req:true,
+       hint:"E.164 format, e.g. +15551234567."},
+    ],
+    build: v => ({account_handle: v.from_number,
+      secret: JSON.stringify({account_sid:v.account_sid, auth_token:v.auth_token, from_number:v.from_number})}),
+  },
+  whatsapp: {
+    title: "Connect WhatsApp · Twilio",
+    help: `Reads and sends via <b>your Twilio WhatsApp sender</b> (WhatsApp Business — personal WhatsApp has no API).`,
+    steps: [
+      `In Twilio, set up a <b>WhatsApp sender</b> — the
+       <a href="https://www.twilio.com/docs/whatsapp/sandbox" target="_blank" rel="noopener">sandbox</a> for testing,
+       or an approved business number for production.`,
+      `Use the <b>same Account SID + Auth Token</b> as SMS (one Twilio account covers both).`,
+      `Paste them below with your WhatsApp-enabled number.`,
+    ],
+    fields: [
+      {k:"account_sid", label:"Account SID", type:"text", ph:"AC…", req:true, hint:"Same SID as your Twilio SMS."},
+      {k:"auth_token", label:"Auth Token", type:"password", req:true},
+      {k:"from_number", label:"Your WhatsApp-enabled number", type:"text", ph:"+14155238886", req:true,
+       hint:"The sandbox number, or your approved WhatsApp sender."},
+    ],
+    build: v => ({account_handle: v.from_number,
+      secret: JSON.stringify({account_sid:v.account_sid, auth_token:v.auth_token, from_number:v.from_number})}),
+  },
+  asana: {
+    title: "Connect Asana",
+    help: `Lets the agent create and update <b>follow-up tasks</b> in your own Asana workspace, in a
+           "Chief of Staff" project it creates.`,
+    steps: [
+      `Open <a href="https://app.asana.com/0/my-apps" target="_blank" rel="noopener">app.asana.com → Apps → Personal access tokens</a>.`,
+      `Click <b>Create new token</b>, name it (e.g. "Chief of Staff"), and copy it — Asana shows it once.`,
+      `Paste it below. Tasks link back to the message that created them.`,
+    ],
+    fields: [{k:"pat", label:"Personal Access Token", type:"password", ph:"2/1216…", req:true,
+      hint:"The token from step 2 — starts with a number and a slash."}],
+    build: v => ({account_handle:"asana", secret: v.pat}),
+  },
+};
+let CX_CHANNEL = null;
+const HANDLE_FIELD = {email:"email", telegram:"phone", x:"self_handle", sms:"from_number", whatsapp:"from_number"};
+function openConnect(channel, acct) {
+  const f = CONNECT_FORMS[channel];
+  if (!f) { alert("This channel connects via a one-time login script — see the setup docs."); return; }
+  CX_CHANNEL = channel;
+  const reconf = acct !== undefined && acct !== null;
+  document.getElementById("cx-title").textContent = reconf ? "Reconfigure " + f.title.replace(/^Connect\s+/i, "") : f.title;
+  document.getElementById("cx-help").innerHTML = f.help;
+  document.getElementById("cx-steps").innerHTML = (f.steps || []).map(s => `<li>${s}</li>`).join("");
+  const noteEl = document.getElementById("cx-note");
+  const acctLabel = (acct && acct !== "asana") ? ` (${esc(acct)})` : "";
+  const rnote = reconf
+    ? `<b>Updating your existing connection${acctLabel}.</b> Re-enter the credential below to replace it — for your security the stored secret is never shown back, so this box starts empty.`
+    : "";
+  if (rnote || f.note) { noteEl.innerHTML = [rnote, f.note].filter(Boolean).join("<br><br>"); noteEl.style.display = "block"; }
+  else { noteEl.style.display = "none"; }
+  const hf = HANDLE_FIELD[channel];
+  document.getElementById("cx-fields").innerHTML = f.fields.map(fl => {
+    const pf = (reconf && fl.k === hf && acct && acct !== "asana") ? ` value="${esc(acct)}"` : "";
+    return `<div class="cx-field"><label>${esc(fl.label)}</label>
+       <input data-k="${fl.k}" type="${fl.type}" placeholder="${esc(fl.ph||'')}" ${fl.req?'required':''}${pf}>
+       ${fl.hint ? `<div class="cx-fhint">${esc(fl.hint)}</div>` : ""}</div>`;
+  }).join("");
+  document.getElementById("cx-msg").textContent = "";
+  document.getElementById("cx-overlay").style.display = "flex";
+}
+function closeConnect() { document.getElementById("cx-overlay").style.display = "none"; CX_CHANNEL = null; }
+async function submitConnect(ev) {
+  ev.preventDefault();
+  const f = CONNECT_FORMS[CX_CHANNEL]; if (!f) return;
+  const v = {}; document.querySelectorAll("#cx-fields input").forEach(i => v[i.dataset.k] = i.value.trim());
+  const msg = document.getElementById("cx-msg"); msg.textContent = "Connecting…";
+  try {
+    await j(`/channels/${CX_CHANNEL}/connect`, {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(f.build(v))});
+    closeConnect(); renderConn();
+  } catch (e) { msg.textContent = "Failed: " + e.message; }
+}
+
+/* ---- Sync (spinning icon) ---- */
+async function doSync() {
+  const btn = document.getElementById("sync"), ico = document.getElementById("sync-ico");
+  if (btn.disabled) return;
+  btn.disabled = true; ico.classList.add("spin");
+  try {
+    await j("/sync", {method:"POST"});  // background; refresh as newest-first results land
+    for (let i=0;i<4;i++){ await new Promise(r=>setTimeout(r,4000)); await loadAll(); }
+  } catch (e) { if (e.message!=="signed out") alert("Sync failed: " + e.message); }
+  finally { btn.disabled = false; ico.classList.remove("spin"); }
+}
+document.getElementById("sync").addEventListener("click", doSync);
+
+loadAll();
+setInterval(() => { if (token() && TAB === "incoming") loadAll(); }, 30000);
+</script>
+</body>
+</html>

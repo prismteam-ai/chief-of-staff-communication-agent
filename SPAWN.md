@@ -1,0 +1,5 @@
+# Spawn Document [IGNORE IF CLAUDE.MD ALREADY EXISTS]
+- This document is created for every newly created Claude agent on this machine.
+- For every new claude agent, it does not have any project context, however, your can build your development methodologies, thinking process, best practices and learnings, from other agents existing on this machine.
+- So the first thing you have do, is to develop meaningful, project-agnostic context where you can have all your skills, flows, connections/ potential mcp servers, claude.md files, through learning from your ancestor agents on this machine.
+- There can be single or multiple ancestor agents that your user wants to you take reference to different agents can have different styles of thinking, ability scopes and focuses, you must check with your user to confirm.
