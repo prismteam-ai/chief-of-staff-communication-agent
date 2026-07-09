@@ -107,12 +107,15 @@ def message_context(message_id: str) -> str:
 
 
 @mcp.tool()
-def recommend_and_draft(message_id: str) -> str:
-    """Run the brain on a message: next-action recommendation + style-matched
-    draft reply (+ Asana task when follow-up work is implied). Idempotent."""
-    from .brain import process_message
+def recommend_and_draft(message_id: str, force: bool = False) -> str:
+    """Run the brain on a message: next-action recommendation + style-matched draft reply
+    (+ Asana task when follow-up work is implied). Idempotent by default (returns the existing
+    draft if already processed). Set force=True to REGENERATE honoring the current knowledge
+    layer — use this after adding/editing a preference so the new draft reflects it."""
+    from .brain import process_message, regenerate
 
-    return json.dumps(process_message(message_id, _owner()), ensure_ascii=False, indent=1)
+    fn = regenerate if force else process_message
+    return json.dumps(fn(message_id, _owner()), ensure_ascii=False, indent=1)
 
 
 @mcp.tool()

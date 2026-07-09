@@ -398,6 +398,7 @@ function openDetail(id) {
       <div class="actions">
         <button class="approve" onclick="decide('${draft.id}','approved',this)">✓ Approve &amp; Send</button>
         <button class="reject" onclick="startEdit('${draft.id}')">✎ Edit</button>
+        <button class="reject" onclick="regenerateMsg('${id}',this)">↻ Regenerate</button>
         <button class="reject" onclick="decide('${draft.id}','rejected',this)">✗ Reject</button>
       </div></div>`;
   } else if (rec && rec.needs_context) {
@@ -408,7 +409,8 @@ function openDetail(id) {
   } else if (draft && draft.status === "rejected") {
     html += `<div class="meta">Draft rejected.</div>`;
   } else if (rec && rec.action !== "reply") {
-    html += `<div class="meta">Handled — action <b>${esc(rec.action)}</b>, no reply needed.</div>`;
+    html += `<div class="meta">Handled — action <b>${esc(rec.action)}</b>, no reply needed.
+      <button class="reject" style="margin-left:8px" onclick="regenerateMsg('${id}',this)">↻ Regenerate</button></div>`;
   } else if (!rec) {
     html += `<div class="meta">Not processed yet — hit Sync.</div>`;
   }
@@ -428,6 +430,11 @@ async function decide(id, decision, btn) {
       : `<div class="meta">Rejected.</div>`;
     await loadAll();
   } catch (e) { alert("Failed: " + e.message); btn.disabled = false; }
+}
+async function regenerateMsg(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = "Regenerating…"; }
+  try { await j(`/messages/${id}/regenerate`, {method:"POST"}); await loadAll(); openDetail(id); }
+  catch (e) { alert("Regenerate failed: " + e.message); if (btn) { btn.disabled = false; btn.textContent = "↻ Regenerate"; } }
 }
 function startEdit(id) {
   const box = document.querySelector(`[data-draft="${id}"]`);

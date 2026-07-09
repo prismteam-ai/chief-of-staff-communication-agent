@@ -95,7 +95,11 @@ def process_message(message_id: str, owner: str) -> dict:
         "If the message requires tracked follow-up work (a deliverable, a deadline, an owed action), "
         "set task_title (imperative, <=70 chars) and task_detail (what, who, by when) — even when the "
         "action is 'reply', a reply can still need a task. Otherwise leave them null. "
-        "Honor executive_preferences as standing rules (tone, length, what to do) — they override defaults."
+        "executive_preferences are EXPLICIT standing instructions the executive typed. Apply them "
+        "literally, and let them OVERRIDE the inferred style samples whenever they conflict — tone, "
+        "length, formality, greeting/sign-off, humor. The style samples show the executive's default "
+        "voice; a preference is a deliberate override of it, so the draft MUST visibly reflect every "
+        "preference even when the past samples differ."
     )
     user = json.dumps(
         {
@@ -188,8 +192,9 @@ def redraft_with_context(message_id: str, owner: str, user_context: str) -> dict
         "You are a chief-of-staff communication agent. The executive has just supplied "
         "the missing context you asked for — treat it as authoritative and now draft the "
         "reply in their voice (action MUST be 'reply'). Ground the reply in that context "
-        "plus the thread history; do not contradict it. Keep the style concise and matched "
-        "to the samples. Honor executive_preferences as standing rules. "
+        "plus the thread history; do not contradict it. Match the executive's style samples, but "
+        "executive_preferences are explicit standing instructions that OVERRIDE the samples on tone, "
+        "length, formality, and sign-off whenever they conflict — the draft MUST visibly reflect them. "
         "task_title/task_detail only if real follow-up work is implied."
     )
     user = json.dumps(
@@ -239,6 +244,21 @@ def redraft_with_context(message_id: str, owner: str, user_context: str) -> dict
             "style_notes": out.get("style_notes"), "model": s.chat_deployment,
         }).execute().data[0]
     return {"message_id": message_id, "draft": draft, **out}
+
+
+def regenerate(message_id: str, owner: str) -> dict:
+    """Re-run the brain on a message that was ALREADY processed, honoring the CURRENT
+    knowledge layer (preferences + org facts). process_message is idempotent — it won't
+    re-draft once a recommendation exists — so changing a preference doesn't retroactively
+    rewrite old drafts. This clears the prior recommendation/draft(s) (and any pending
+    approvals on them) for THIS message and re-runs, so the fresh draft reflects the latest
+    preferences. Owner-scoped; nothing sends (a regenerated draft still awaits approval)."""
+    drafts = sb().table("drafts").select("id").eq("owner_id", owner).eq("message_id", message_id).execute().data
+    for d in drafts:  # approvals FK-reference drafts; clear them so the draft rows can go
+        sb().table("approvals").delete().eq("draft_id", d["id"]).execute()
+    sb().table("drafts").delete().eq("owner_id", owner).eq("message_id", message_id).execute()
+    sb().table("recommendations").delete().eq("owner_id", owner).eq("message_id", message_id).execute()
+    return process_message(message_id, owner)
 
 
 def process_pending(owner: str, limit: int = 50) -> list[dict]:

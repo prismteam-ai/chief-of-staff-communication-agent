@@ -27,7 +27,7 @@ from .auth import User
 from .auth import list_mcp_tokens, mint_mcp_token, owner_for_token, revoke_mcp_token
 from .auth import login as auth_login
 from .auth import require_user
-from .brain import process_pending
+from .brain import process_pending, regenerate
 from .db import sb
 from .ingest import ingest_for_owner
 from .mcp_server import mcp as mcp_app_server
@@ -383,6 +383,14 @@ def answer_context(message_id: str, a: ContextAnswer, user: User = Depends(requi
     if not a.context.strip():
         raise HTTPException(422, "context is required")
     return redraft_with_context(message_id, user.id, a.context.strip())
+
+
+@api.post("/messages/{message_id}/regenerate")
+def message_regenerate(message_id: str, user: User = Depends(require_user)) -> dict:
+    """Re-run the brain on this message honoring the CURRENT knowledge layer (preferences +
+    org facts). Use after editing Knowledge so the draft reflects the new rules — the normal
+    triage is idempotent and won't retroactively rewrite old drafts. Owner-scoped."""
+    return regenerate(message_id, user.id)
 
 
 # --- Connections (self-serve channel setup) ----------------------------------
