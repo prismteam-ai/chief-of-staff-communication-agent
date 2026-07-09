@@ -285,12 +285,19 @@ _CHANNEL_META = {
     "whatsapp": {"label": "WhatsApp (Twilio sandbox)", "method": "paste"},
     "x": {"label": "X", "method": "oauth"},
     "linkedin": {"label": "LinkedIn", "method": "gateway"},
+    "telegram": {"label": "Telegram", "method": "paste"},
+    "discord": {"label": "Discord", "method": "paste"},
+    "slack": {"label": "Slack", "method": "paste"},
 }
 
 
 @api.get("/connections")
 def connections() -> dict:
-    from .connectors import x_api
+    # live-ness comes from the actual connector registry — a channel is "live" when
+    # a real (non-fixture) connector is registered for it. Truly modular: a new
+    # connector shows up here automatically, no per-channel special-casing.
+    from .connectors.base import get
+    from .connectors.fixture import FixtureConnector
 
     tokens = sb().table("connector_tokens").select("channel, account_handle, connected_at").execute().data
     by_channel: dict = {}
@@ -302,8 +309,15 @@ def connections() -> dict:
     }
     channels = []
     for ch, meta in _CHANNEL_META.items():
+        conn = None
+        try:
+            conn = get(ch)
+        except LookupError:
+            pass
+        live = conn is not None and not isinstance(conn, FixtureConnector)
         accts = [t["account_handle"] for t in by_channel.get(ch, [])]
-        live = bool(accts) or (ch == "x" and x_api.available())
+        if live and not accts and getattr(conn, "account_handle", None):
+            accts = [conn.account_handle]
         channels.append({
             "channel": ch, "label": meta["label"], "method": meta["method"],
             "start": meta.get("start"), "connected": live,

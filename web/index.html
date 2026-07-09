@@ -12,6 +12,7 @@
     --grid: #e1e0d9; --border: rgba(11,11,11,0.10);
     --ch-gmail: #2a78d6; --ch-email: #1baf7a; --ch-sms: #eda100;
     --ch-whatsapp: #008300; --ch-x: #4a3aa7; --ch-linkedin: #e34948;
+    --ch-telegram: #229ed9; --ch-discord: #5865f2; --ch-slack: #7c3a6f;
     --good: #0ca30c; --critical: #d03b3b; --good-text: #006300; --accent: #2a78d6;
   }
   @media (prefers-color-scheme: dark) {
@@ -21,6 +22,7 @@
       --grid: #2c2c2a; --border: rgba(255,255,255,0.10);
       --ch-gmail: #3987e5; --ch-email: #199e70; --ch-sms: #c98500;
       --ch-whatsapp: #008300; --ch-x: #9085e9; --ch-linkedin: #e66767;
+      --ch-telegram: #3aabe0; --ch-discord: #7f8bf5; --ch-slack: #b07aa3;
       --good-text: #0ca30c; --accent: #3987e5;
     }
   }
@@ -178,7 +180,7 @@
 <script>
 const API = (window.API_BASE || "") + "/api";
 const CH = ["gmail","email","sms","whatsapp","x","linkedin"];
-const chColor = c => `var(--ch-${c})`;
+const chColor = c => `var(--ch-${c}, var(--accent))`;   // unknown channels fall back to accent
 const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const fmtSecs = s => s == null ? "—" : (s < 60 ? Math.round(s) + "s" : s < 3600 ? Math.round(s/60) + "m" : (s/3600).toFixed(1) + "h");
 const ago = t => { const d=(Date.now()-new Date(t))/1000; return d<60?Math.round(d)+"s":d<3600?Math.round(d/60)+"m":d<86400?Math.round(d/3600)+"h":Math.round(d/86400)+"d"; };
@@ -353,8 +355,11 @@ function renderDash() {
   ];
   document.getElementById("tiles").innerHTML = tiles.map(x =>
     `<div class="tile${x.alert?' alert':''}${x.good?' good':''}"><div class="v">${esc(x.v)}</div><div class="l">${esc(x.l)}</div></div>`).join("");
-  const max = Math.max(1, ...CH.map(c => d.channel_breakdown[c]?.total || 0));
-  document.getElementById("bars").innerHTML = CH.map(c => {
+  // data-driven: known channels first (fixed order), then any new channel present in the data
+  const present = Object.keys(d.channel_breakdown || {});
+  const chans = [...CH, ...present.filter(c => !CH.includes(c))].filter(c => d.channel_breakdown[c]);
+  const max = Math.max(1, ...chans.map(c => d.channel_breakdown[c]?.total || 0));
+  document.getElementById("bars").innerHTML = chans.map(c => {
     const s = d.channel_breakdown[c] || {total:0, pending:0};
     return `<div class="barrow"><span class="name"><span class="chip" style="background:${chColor(c)}"></span>${c}</span>
       <span class="track"><span class="bar" style="width:${(s.total/max)*100}%;background:${chColor(c)}"></span></span>

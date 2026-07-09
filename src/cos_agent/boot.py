@@ -10,7 +10,7 @@ CHANNELS = ["gmail", "email", "sms", "whatsapp", "x", "linkedin"]
 for _ch in CHANNELS:
     register(FixtureConnector(_ch))
 
-# credential-gated real connectors override their fixture
+# credential-gated real connectors override their fixture / add new channels
 if x_api.available():
     register(x_api.XConnector())
 
@@ -19,3 +19,8 @@ if os.environ.get("GOOGLE_CLIENT_ID"):
 
     for _acct in gmail_api.stored_accounts():
         register(gmail_api.GmailConnector(_acct["account_handle"], _acct["refresh_token"]))
+
+from .connectors import telegram  # noqa: E402
+
+if telegram.available():
+    register(telegram.TelegramConnector())
