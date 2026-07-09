@@ -13,7 +13,7 @@ from openai import AzureOpenAI
 
 from .config import settings
 from .db import sb
-from .rag import search
+from .rag import get_preferences, search
 
 RECOMMEND_SCHEMA = {
     "type": "object",
@@ -94,7 +94,8 @@ def process_message(message_id: str, owner: str) -> dict:
         "instead of inventing a variant. "
         "If the message requires tracked follow-up work (a deliverable, a deadline, an owed action), "
         "set task_title (imperative, <=70 chars) and task_detail (what, who, by when) — even when the "
-        "action is 'reply', a reply can still need a task. Otherwise leave them null."
+        "action is 'reply', a reply can still need a task. Otherwise leave them null. "
+        "Honor executive_preferences as standing rules (tone, length, what to do) — they override defaults."
     )
     user = json.dumps(
         {
@@ -108,6 +109,7 @@ def process_message(message_id: str, owner: str) -> dict:
             "retrieved_context": related_block,
             "known_topic_keys": known_topics,
             "executive_style_samples": style,
+            "executive_preferences": get_preferences(owner),
         },
         ensure_ascii=False,
     )
@@ -187,7 +189,8 @@ def redraft_with_context(message_id: str, owner: str, user_context: str) -> dict
         "the missing context you asked for — treat it as authoritative and now draft the "
         "reply in their voice (action MUST be 'reply'). Ground the reply in that context "
         "plus the thread history; do not contradict it. Keep the style concise and matched "
-        "to the samples. task_title/task_detail only if real follow-up work is implied."
+        "to the samples. Honor executive_preferences as standing rules. "
+        "task_title/task_detail only if real follow-up work is implied."
     )
     user = json.dumps(
         {
@@ -197,6 +200,7 @@ def redraft_with_context(message_id: str, owner: str, user_context: str) -> dict
             "thread_history": history,
             "retrieved_context": related_block,
             "executive_style_samples": style,
+            "executive_preferences": get_preferences(owner),
         },
         ensure_ascii=False,
     )

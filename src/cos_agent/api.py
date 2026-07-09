@@ -30,7 +30,14 @@ from .brain import process_pending
 from .db import sb
 from .ingest import ingest_for_owner
 from .mcp_server import mcp as mcp_app_server
-from .rag import index_messages, search
+from .rag import (
+    add_knowledge_item,
+    delete_knowledge_item,
+    index_messages,
+    list_knowledge,
+    search,
+    update_knowledge_item,
+)
 from .send import ApprovalRequired, send_draft
 
 log = logging.getLogger(__name__)
@@ -282,6 +289,41 @@ def asana_links(user: User = Depends(require_user)) -> list[dict]:
         sb().table("asana_links").select("message_id, task_url, task_gid, action, created_at")
         .eq("owner_id", user.id).order("created_at", desc=True).execute().data
     )
+
+
+# --- Knowledge layer (user preferences + org knowledge → RAG) ----------------
+class KnowledgeBody(BaseModel):
+    kind: str   # preference | org
+    text: str
+
+
+@api.get("/knowledge")
+def knowledge_list(user: User = Depends(require_user)) -> list[dict]:
+    return list_knowledge(user.id)
+
+
+@api.post("/knowledge")
+def knowledge_add(k: KnowledgeBody, user: User = Depends(require_user)) -> dict:
+    if k.kind not in ("preference", "org"):
+        raise HTTPException(422, "kind must be preference|org")
+    if not k.text.strip():
+        raise HTTPException(422, "text is required")
+    return add_knowledge_item(user.id, k.kind, k.text.strip())
+
+
+@api.put("/knowledge/{source_id:path}")
+def knowledge_edit(source_id: str, k: KnowledgeBody, user: User = Depends(require_user)) -> dict:
+    if k.kind not in ("preference", "org"):
+        raise HTTPException(422, "kind must be preference|org")
+    if not k.text.strip():
+        raise HTTPException(422, "text is required")
+    return update_knowledge_item(user.id, source_id, k.kind, k.text.strip())
+
+
+@api.delete("/knowledge/{source_id:path}")
+def knowledge_delete(source_id: str, user: User = Depends(require_user)) -> dict:
+    delete_knowledge_item(user.id, source_id)
+    return {"deleted": source_id}
 
 
 @api.get("/search")

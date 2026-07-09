@@ -152,6 +152,26 @@ def sync() -> str:
 
 
 @mcp.tool()
+def add_knowledge(kind: str, text: str) -> str:
+    """Teach the agent a lasting fact so it drafts + recommends better. kind='preference' for a
+    standing rule (e.g. 'keep replies short', 'I decline Friday meetings') or kind='org' for
+    organizational knowledge (e.g. 'Acme is our biggest client', 'Q3 launch is Sept 15'). Embedded
+    into the knowledge layer and used in future recommendations + drafts."""
+    from .rag import add_knowledge_item
+
+    k = kind if kind in ("preference", "org") else "preference"
+    return json.dumps(add_knowledge_item(_owner(), k, text), ensure_ascii=False)
+
+
+@mcp.tool()
+def list_knowledge() -> str:
+    """List the preferences + organizational knowledge the agent has been taught."""
+    from .rag import list_knowledge as _lk
+
+    return json.dumps(_lk(_owner()), ensure_ascii=False, default=str)
+
+
+@mcp.tool()
 def dashboard_stats() -> str:
     """Communication volume, response status, overdue count, pending approvals, per-channel breakdown."""
     from .api import _dashboard

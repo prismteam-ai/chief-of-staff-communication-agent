@@ -1,6 +1,8 @@
 """RAG layer: embed store content into rag_documents (pgvector), search via rpc."""
 from __future__ import annotations
 
+import uuid
+
 from openai import AzureOpenAI
 
 from .config import settings
@@ -83,3 +85,43 @@ def search(query: str, owner: str, match_count: int = 6) -> list[dict]:
         "rag_search", {"query_embedding": vec, "match_count": match_count, "p_owner": owner}
     ).execute()
     return res.data
+
+
+# --- Knowledge layer (user preferences + org knowledge) ----------------------
+# The RAG AC's 3rd/4th inputs: things the user TEACHES the agent. Stored as
+# rag_documents with source_type preference|org and a "kb:" source_id (to tell them
+# apart from message/asana/derived docs). They flow into drafting two ways: preferences
+# are injected into every draft (always-on rules); org facts surface via semantic search.
+def get_preferences(owner: str, limit: int = 30) -> list[str]:
+    rows = (
+        sb().table("rag_documents").select("content")
+        .eq("owner_id", owner).eq("source_type", "preference").like("source_id", "kb:%")
+        .order("created_at").limit(limit).execute().data
+    )
+    return [r["content"] for r in rows]
+
+
+def list_knowledge(owner: str) -> list[dict]:
+    rows = (
+        sb().table("rag_documents").select("source_id, source_type, content, created_at")
+        .eq("owner_id", owner).like("source_id", "kb:%").order("created_at").execute().data
+    )
+    return [{"id": r["source_id"], "kind": r["source_type"], "text": r["content"],
+             "created_at": r["created_at"]} for r in rows]
+
+
+def add_knowledge_item(owner: str, kind: str, text: str) -> dict:
+    sid = f"kb:{kind}:{uuid.uuid4().hex[:12]}"
+    index_knowledge(owner, kind, sid, text, {"kind": kind, "user_authored": True})
+    return {"id": sid, "kind": kind, "text": text}
+
+
+def update_knowledge_item(owner: str, source_id: str, kind: str, text: str) -> dict:
+    # kind may have changed (→ different source_type); delete the old row, then re-index
+    sb().table("rag_documents").delete().eq("owner_id", owner).eq("source_id", source_id).execute()
+    index_knowledge(owner, kind, source_id, text, {"kind": kind, "user_authored": True})
+    return {"id": source_id, "kind": kind, "text": text}
+
+
+def delete_knowledge_item(owner: str, source_id: str) -> None:
+    sb().table("rag_documents").delete().eq("owner_id", owner).eq("source_id", source_id).like("source_id", "kb:%").execute()

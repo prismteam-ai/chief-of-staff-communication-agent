@@ -157,6 +157,14 @@
   .cx-connect { background: var(--accent); color: #fff; border-color: transparent; }
   .cx-cancel { background: transparent; color: var(--ink-2); }
 
+  /* Knowledge */
+  .kb-text { flex: 1; }
+  .kb-btns { display: flex; gap: 6px; }
+  .kb-add { display: flex; gap: 8px; margin: 8px 0 4px; }
+  .kb-add input, .kb-editin { flex: 1; padding: 8px 10px; font: inherit; border: 1px solid var(--grid);
+                              border-radius: 8px; background: var(--page); color: var(--ink); }
+  .row .kb-btns button { padding: 5px 10px; }
+
   @media (max-width: 900px) { .kanban { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 560px) { .kanban { grid-template-columns: 1fr; } }
 </style>
@@ -196,6 +204,7 @@
     <nav id="nav">
       <button data-tab="incoming" class="active">Incoming</button>
       <button data-tab="insights">Insights</button>
+      <button data-tab="knowledge">Knowledge</button>
       <button data-tab="conn">Connections</button>
     </nav>
     <span class="hbtns">
@@ -220,6 +229,11 @@
     <div class="bars" id="bars" role="img" aria-label="Inbound messages per channel"></div>
     <h2 id="people-h">People · cross-channel</h2>
     <div id="people"></div>
+  </section>
+
+  <section class="panel" id="panel-knowledge">
+    <p class="meta" style="margin-bottom:12px">Teach the agent — these feed every recommendation &amp; draft. Preferences are standing rules applied to every reply; organizational knowledge is facts it can cite.</p>
+    <div id="knowledge"></div>
   </section>
 
   <section class="panel" id="panel-conn">
@@ -266,13 +280,14 @@ document.getElementById("nav").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   TAB = b.dataset.tab; clearErr();
   [...document.querySelectorAll("#nav button")].forEach(x => x.classList.toggle("active", x === b));
-  ["incoming","insights","conn"].forEach(t =>
+  ["incoming","insights","knowledge","conn"].forEach(t =>
     document.getElementById("panel-"+t).classList.toggle("active", t === TAB));
   renderTab();
 });
 function renderTab() {
   if (TAB === "incoming") renderIncoming();
   else if (TAB === "insights") renderInsights();
+  else if (TAB === "knowledge") renderKnowledge();
   else if (TAB === "conn") renderConn();
 }
 
@@ -460,6 +475,56 @@ async function openPerson(name) {
         <div style="margin-top:5px">${esc(m.body_text)}</div></div>`).join("")}`;
     document.getElementById("dt-overlay").style.display = "flex";
   } catch (e) { alert("Failed: " + e.message); }
+}
+
+/* ---- Knowledge (preferences + org facts → RAG) ---- */
+const KB = {
+  preference: {title:"Preferences", hint:"standing rules — e.g. “keep replies short”, “I decline Friday meetings”", ph:"Add a preference…"},
+  org: {title:"Organizational knowledge", hint:"facts it can cite — e.g. “Acme is our biggest client”, “Q3 launch is Sept 15”", ph:"Add a fact…"},
+};
+async function renderKnowledge() {
+  const el = document.getElementById("knowledge");
+  el.innerHTML = `<div class="empty">Loading…</div>`;
+  try {
+    const items = await j("/knowledge"); clearErr();
+    el.innerHTML = ["preference","org"].map(kind => {
+      const list = items.filter(i => i.kind === kind);
+      const rows = list.length ? list.map(kbRow).join("") : `<div class="empty" style="padding:12px 16px">Nothing yet.</div>`;
+      return `<h2>${KB[kind].title}</h2><div class="meta" style="margin:-4px 0 8px">${KB[kind].hint}</div>
+        <div class="rows">${rows}</div>
+        <div class="kb-add"><input id="kb-in-${kind}" placeholder="${esc(KB[kind].ph)}"
+             onkeydown="if(event.key==='Enter')addKnowledge('${kind}')">
+          <button class="cta" onclick="addKnowledge('${kind}')">Add</button></div>`;
+    }).join("");
+  } catch (e) { el.innerHTML = `<div class="empty">Failed: ${esc(e.message)}</div>`; }
+}
+function kbRow(i) {
+  return `<div class="row" data-kb="${esc(i.id)}"><div class="kb-text">${esc(i.text)}</div>
+    <div class="kb-btns"><button onclick="editKnowledge('${esc(i.id)}','${i.kind}')">Edit</button>
+      <button onclick="delKnowledge('${esc(i.id)}')">Delete</button></div></div>`;
+}
+async function addKnowledge(kind) {
+  const inp = document.getElementById("kb-in-"+kind), text = inp.value.trim(); if (!text) return;
+  try { await j("/knowledge", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({kind, text})}); renderKnowledge(); }
+  catch (e) { alert("Failed: " + e.message); }
+}
+async function delKnowledge(id) {
+  if (!confirm("Delete this?")) return;
+  try { await j("/knowledge/" + encodeURIComponent(id), {method:"DELETE"}); renderKnowledge(); }
+  catch (e) { alert("Failed: " + e.message); }
+}
+function editKnowledge(id, kind) {
+  const row = document.querySelector(`[data-kb="${CSS.escape(id)}"]`);
+  const cur = row.querySelector(".kb-text").textContent;
+  row.innerHTML = `<input class="kb-editin" value="${esc(cur)}">
+    <div class="kb-btns"><button class="cta" onclick="saveKnowledge('${esc(id)}','${kind}',this)">Save</button>
+      <button onclick="renderKnowledge()">Cancel</button></div>`;
+  row.querySelector(".kb-editin").focus();
+}
+async function saveKnowledge(id, kind, btn) {
+  const text = btn.closest(".row").querySelector(".kb-editin").value.trim(); if (!text) return;
+  try { await j("/knowledge/" + encodeURIComponent(id), {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({kind, text})}); renderKnowledge(); }
+  catch (e) { alert("Failed: " + e.message); }
 }
 
 /* ---- Connections ---- */
