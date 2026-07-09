@@ -1,5 +1,16 @@
 # Chief of Staff Communication Agent — Solution
 
+## Deliverables
+
+| | |
+|---|---|
+| **Live app** | **http://89.167.5.247:8090/** — deployed, click through with a browser (not localhost) |
+| **Demo video** | **https://youtu.be/6n1SF78LJmo** |
+| **Owner login** | `owner` / `owner1234` — approve, send, edit style & connections |
+| **Grader login** | `demo` / `demo1234` — read-only; no OAuth required of the grader |
+
+---
+
 A unified assistant that pulls an executive's messages from every channel, understands them
 with RAG, recommends the next action, drafts a reply **in the executive's voice**, links the
 work to **Asana**, and gates every send behind human approval. Goal: every message answered in
