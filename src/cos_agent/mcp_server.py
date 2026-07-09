@@ -157,11 +157,13 @@ def answer_context(message_id: str, context: str) -> str:
 
 
 @mcp.tool()
-def create_asana_task(message_id: str, title: str, detail: str) -> str:
-    """Create an Asana task from a communication; links it and indexes it into RAG."""
+def create_asana_task(message_id: str, title: str, detail: str, due: str = "") -> str:
+    """Create an Asana task from a communication; links it and indexes it into RAG.
+    due: optional deadline as 'YYYY-MM-DD' (set it when the message implies one)."""
     from .asana import task_from_message
 
-    return json.dumps(task_from_message(message_id, _owner(), title, detail), ensure_ascii=False)
+    return json.dumps(task_from_message(message_id, _owner(), title, detail, due=due or None),
+                      ensure_ascii=False)
 
 
 @mcp.tool()

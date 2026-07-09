@@ -560,8 +560,8 @@ async function renderConn() {
       : x.method==="oauth" ? "Google consent (our app)"
       : x.method==="unavailable" ? "no public messaging API"
       : "bring your own credentials";
-    const reconf = x => x.method==="oauth" ? `<button onclick="oauthConnect()">Reconfigure</button>`
-      : CONNECT_FORMS[x.channel] ? `<button onclick="openConnect('${x.channel}')">Reconfigure</button>` : "";
+    const reconf = x => x.method==="oauth" ? `<button onclick="oauthConnect()">Re-authorize</button>`
+      : CONNECT_FORMS[x.channel] ? `<button onclick='openConnect(${JSON.stringify(x.channel)}, ${JSON.stringify((x.accounts&&x.accounts[0])||"")})'>Reconfigure</button>` : "";
     const btn = x => x.connected
       ? `<span class="pill live">live</span>${reconf(x)}<button class="danger" onclick="disconnectChannel('${x.channel}','${esc(x.label)}')">Disconnect</button>`
       : x.method==="unavailable" ? `<span class="pill na">unavailable</span>`
@@ -574,7 +574,7 @@ async function renderConn() {
     const asanaRow = `<div class="row"><div><div class="name">📋 Asana</div>
         <div class="sub">${asana.connected?'workspace connected · tasks created from communications':'paste a personal access token'}</div></div>
       <div class="row-actions">${asana.connected
-        ? `<span class="pill live">live</span><button onclick="openConnect('asana')">Reconfigure</button><button class="danger" onclick="disconnectChannel('asana','Asana')">Disconnect</button>`
+        ? `<span class="pill live">live</span><button onclick="openConnect('asana','asana')">Reconfigure</button><button class="danger" onclick="disconnectChannel('asana','Asana')">Disconnect</button>`
         : `<button onclick="openConnect('asana')">Connect</button>`}</div></div>`;
     const live = c.channels.filter(x => x.connected);
     const avail = c.channels.filter(x => !x.connected);
@@ -764,20 +764,29 @@ const CONNECT_FORMS = {
   },
 };
 let CX_CHANNEL = null;
-function openConnect(channel) {
+const HANDLE_FIELD = {email:"email", telegram:"phone", x:"self_handle", sms:"from_number", whatsapp:"from_number"};
+function openConnect(channel, acct) {
   const f = CONNECT_FORMS[channel];
   if (!f) { alert("This channel connects via a one-time login script — see the setup docs."); return; }
   CX_CHANNEL = channel;
-  document.getElementById("cx-title").textContent = f.title;
+  const reconf = acct !== undefined && acct !== null;
+  document.getElementById("cx-title").textContent = reconf ? "Reconfigure " + f.title.replace(/^Connect\s+/i, "") : f.title;
   document.getElementById("cx-help").innerHTML = f.help;
   document.getElementById("cx-steps").innerHTML = (f.steps || []).map(s => `<li>${s}</li>`).join("");
   const noteEl = document.getElementById("cx-note");
-  if (f.note) { noteEl.innerHTML = f.note; noteEl.style.display = "block"; }
+  const acctLabel = (acct && acct !== "asana") ? ` (${esc(acct)})` : "";
+  const rnote = reconf
+    ? `<b>Updating your existing connection${acctLabel}.</b> Re-enter the credential below to replace it — for your security the stored secret is never shown back, so this box starts empty.`
+    : "";
+  if (rnote || f.note) { noteEl.innerHTML = [rnote, f.note].filter(Boolean).join("<br><br>"); noteEl.style.display = "block"; }
   else { noteEl.style.display = "none"; }
-  document.getElementById("cx-fields").innerHTML = f.fields.map(fl =>
-    `<div class="cx-field"><label>${esc(fl.label)}</label>
-       <input data-k="${fl.k}" type="${fl.type}" placeholder="${esc(fl.ph||'')}" ${fl.req?'required':''}>
-       ${fl.hint ? `<div class="cx-fhint">${esc(fl.hint)}</div>` : ""}</div>`).join("");
+  const hf = HANDLE_FIELD[channel];
+  document.getElementById("cx-fields").innerHTML = f.fields.map(fl => {
+    const pf = (reconf && fl.k === hf && acct && acct !== "asana") ? ` value="${esc(acct)}"` : "";
+    return `<div class="cx-field"><label>${esc(fl.label)}</label>
+       <input data-k="${fl.k}" type="${fl.type}" placeholder="${esc(fl.ph||'')}" ${fl.req?'required':''}${pf}>
+       ${fl.hint ? `<div class="cx-fhint">${esc(fl.hint)}</div>` : ""}</div>`;
+  }).join("");
   document.getElementById("cx-msg").textContent = "";
   document.getElementById("cx-overlay").style.display = "flex";
 }

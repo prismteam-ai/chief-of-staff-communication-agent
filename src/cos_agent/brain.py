@@ -27,10 +27,11 @@ RECOMMEND_SCHEMA = {
         "topic_key": {"type": ["string", "null"]},
         "task_title": {"type": ["string", "null"]},
         "task_detail": {"type": ["string", "null"]},
+        "task_due": {"type": ["string", "null"]},
     },
     "required": [
         "action", "rationale", "needs_context", "context_question",
-        "draft_body", "style_notes", "topic_key", "task_title", "task_detail",
+        "draft_body", "style_notes", "topic_key", "task_title", "task_detail", "task_due",
     ],
     "additionalProperties": False,
 }
@@ -95,6 +96,10 @@ def process_message(message_id: str, owner: str) -> dict:
         "If the message requires tracked follow-up work (a deliverable, a deadline, an owed action), "
         "set task_title (imperative, <=70 chars) and task_detail (what, who, by when) — even when the "
         "action is 'reply', a reply can still need a task. Otherwise leave them null. "
+        "task_due: if the message implies a deadline, resolve it to an ABSOLUTE date 'YYYY-MM-DD' "
+        "relative to the incoming message's sent_at — e.g. 'by end of day today' → the sent_at date, "
+        "'by Friday' → the first Friday on/after sent_at, 'next week' → sent_at + 7 days. If no deadline "
+        "is implied, task_due is null. "
         "executive_preferences are EXPLICIT standing instructions the executive typed. Apply them "
         "literally, and let them OVERRIDE the inferred style samples whenever they conflict — tone, "
         "length, formality, greeting/sign-off, humor. The style samples show the executive's default "
@@ -159,7 +164,8 @@ def process_message(message_id: str, owner: str) -> dict:
         from .asana import task_from_message  # local import: avoids cycle at module load
 
         try:
-            task = task_from_message(message_id, owner, out["task_title"], out.get("task_detail") or out["rationale"])
+            task = task_from_message(message_id, owner, out["task_title"],
+                                     out.get("task_detail") or out["rationale"], due=out.get("task_due"))
             out["asana_task_url"] = task.get("permalink_url")
         except Exception as e:  # task failure never blocks the reply path
             out["asana_error"] = f"{type(e).__name__}: {e}"

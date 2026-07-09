@@ -9,6 +9,8 @@ Workspace is auto-resolved from the token via /users/me — the user only pastes
 """
 from __future__ import annotations
 
+import re
+
 import httpx
 
 from .db import sb
@@ -60,9 +62,11 @@ class RealAsana:
         self._project = r.json()["data"]["gid"]
         return self._project
 
-    def create_task(self, name: str, notes: str) -> dict:
+    def create_task(self, name: str, notes: str, due_on: str | None = None) -> dict:
         data = {"name": name, "notes": notes, "workspace": self._workspace_gid(),
                 "projects": [self._project_gid()]}
+        if due_on and re.fullmatch(r"\d{4}-\d{2}-\d{2}", due_on.strip()):  # guard: Asana 400s on a bad date
+            data["due_on"] = due_on.strip()
         r = httpx.post(f"{ASANA_API}/tasks", headers=self._h, json={"data": data}, timeout=30)
         r.raise_for_status()
         return r.json()["data"]
@@ -91,8 +95,10 @@ def client(owner: str) -> RealAsana | None:
     return RealAsana(tok["refresh_token"]) if tok else None
 
 
-def task_from_message(message_id: str, owner: str, title: str, detail: str) -> dict:
+def task_from_message(message_id: str, owner: str, title: str, detail: str,
+                      due: str | None = None) -> dict:
     """Create an Asana task in the OWNER's workspace + record the link + index into RAG.
+    `due` is an optional 'YYYY-MM-DD' deadline the brain resolved from the message.
     Raises AsanaNotConnected if the tenant hasn't connected Asana (brain catches it, so a
     reply is never blocked by a missing Asana connection)."""
     c = client(owner)
@@ -107,7 +113,7 @@ def task_from_message(message_id: str, owner: str, title: str, detail: str) -> d
         f"{detail}\n\n---\nSource communication ({msg['channel']}, {msg['sent_at']}) from {sender}:\n"
         f"{msg['body_text']}\n\nmessage_id: {message_id}"
     )
-    task = c.create_task(name=title, notes=notes)
+    task = c.create_task(name=title, notes=notes, due_on=due)
     sb().table("asana_links").insert(
         {
             "owner_id": owner,
