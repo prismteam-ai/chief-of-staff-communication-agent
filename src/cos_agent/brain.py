@@ -13,7 +13,7 @@ from openai import AzureOpenAI
 
 from .config import settings
 from .db import sb
-from .rag import get_preferences, search
+from .rag import get_org_knowledge, get_preferences, search
 
 RECOMMEND_SCHEMA = {
     "type": "object",
@@ -99,7 +99,9 @@ def process_message(message_id: str, owner: str) -> dict:
         "literally, and let them OVERRIDE the inferred style samples whenever they conflict — tone, "
         "length, formality, greeting/sign-off, humor. The style samples show the executive's default "
         "voice; a preference is a deliberate override of it, so the draft MUST visibly reflect every "
-        "preference even when the past samples differ."
+        "preference even when the past samples differ. "
+        "organizational_knowledge are standing facts about the executive's company/business — treat "
+        "them as ground truth, never contradict them, and use them wherever they inform the reply."
     )
     user = json.dumps(
         {
@@ -114,6 +116,7 @@ def process_message(message_id: str, owner: str) -> dict:
             "known_topic_keys": known_topics,
             "executive_style_samples": style,
             "executive_preferences": get_preferences(owner),
+            "organizational_knowledge": get_org_knowledge(owner),
         },
         ensure_ascii=False,
     )
@@ -195,6 +198,7 @@ def redraft_with_context(message_id: str, owner: str, user_context: str) -> dict
         "plus the thread history; do not contradict it. Match the executive's style samples, but "
         "executive_preferences are explicit standing instructions that OVERRIDE the samples on tone, "
         "length, formality, and sign-off whenever they conflict — the draft MUST visibly reflect them. "
+        "organizational_knowledge are standing facts about the business — treat them as ground truth. "
         "task_title/task_detail only if real follow-up work is implied."
     )
     user = json.dumps(
@@ -206,6 +210,7 @@ def redraft_with_context(message_id: str, owner: str, user_context: str) -> dict
             "retrieved_context": related_block,
             "executive_style_samples": style,
             "executive_preferences": get_preferences(owner),
+            "organizational_knowledge": get_org_knowledge(owner),
         },
         ensure_ascii=False,
     )

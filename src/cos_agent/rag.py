@@ -101,6 +101,18 @@ def get_preferences(owner: str, limit: int = 30) -> list[str]:
     return [r["content"] for r in rows]
 
 
+def get_org_knowledge(owner: str, limit: int = 30) -> list[str]:
+    """User-authored organizational facts (kb:org). These are a small curated set the exec
+    typed, so they're injected into every draft as always-on context — unlike message history
+    (which is retrieved by similarity), one org fact would otherwise never win top-k retrieval."""
+    rows = (
+        sb().table("rag_documents").select("content")
+        .eq("owner_id", owner).eq("source_type", "org").like("source_id", "kb:%")
+        .order("created_at").limit(limit).execute().data
+    )
+    return [r["content"] for r in rows]
+
+
 def list_knowledge(owner: str) -> list[dict]:
     rows = (
         sb().table("rag_documents").select("source_id, source_type, content, created_at")
