@@ -24,6 +24,7 @@ from pydantic import BaseModel
 
 from . import boot  # noqa: F401  (kept for import compatibility; connectors are per-owner now)
 from .auth import User
+from .auth import list_mcp_tokens, mint_mcp_token, owner_for_token, revoke_mcp_token
 from .auth import login as auth_login
 from .auth import require_user
 from .brain import process_pending
@@ -326,6 +327,29 @@ def knowledge_delete(source_id: str, user: User = Depends(require_user)) -> dict
     return {"deleted": source_id}
 
 
+class McpTokenBody(BaseModel):
+    label: str | None = None
+
+
+@api.get("/mcp-tokens")
+def mcp_tokens_list(user: User = Depends(require_user)) -> list[dict]:
+    """This tenant's active Cursor tokens (masked — the raw value is shown only once, at mint)."""
+    return list_mcp_tokens(user.id)
+
+
+@api.post("/mcp-tokens")
+def mcp_token_create(b: McpTokenBody = McpTokenBody(), user: User = Depends(require_user)) -> dict:
+    """Mint a Cursor PAT bound to THIS signed-in tenant. The raw token is returned once."""
+    return mint_mcp_token(user.id, (b.label or "").strip() or None)
+
+
+@api.delete("/mcp-tokens/{token_id}")
+def mcp_token_revoke(token_id: str, user: User = Depends(require_user)) -> dict:
+    if not revoke_mcp_token(user.id, token_id):
+        raise HTTPException(404, "token not found")
+    return {"revoked": token_id}
+
+
 @api.get("/search")
 def rag_search_endpoint(q: str, user: User = Depends(require_user)) -> list[dict]:
     return search(q, user.id)
@@ -492,9 +516,12 @@ app.include_router(api)
 
 
 class _MCPAuth:
-    """The MCP surface exposes send/Asana-write tools — it gets the same gate as
-    the REST API. Accepts a Supabase JWT or the static MCP_AUTH_TOKEN (simpler
-    to configure in Cursor's headers)."""
+    """Identity-driven gate for the MCP surface. The bearer token must resolve to an
+    owner — a Cursor PAT (minted in the UI) or a Supabase session JWT. No valid token
+    → 401 telling the caller to sign in and generate a token. The tenant a tool acts on
+    is that same owner (mcp_server._owner reads the same header), so whoever signed in
+    IS whose data Cursor sees — never a hardcoded pin. (Do NOT regress: no anonymous
+    MCP access; no builder-controlled owner.)"""
 
     def __init__(self, inner):
         self.inner = inner
@@ -504,19 +531,14 @@ class _MCPAuth:
             headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
             auth = headers.get("authorization", "")
             token = auth.split(" ", 1)[1].strip() if auth.lower().startswith("bearer ") else ""
-            static = os.environ.get("MCP_AUTH_TOKEN", "")
-            ok = bool(static) and token == static
-            if not ok and token:
-                try:
-                    await asyncio.to_thread(sb().auth.get_user, token)
-                    ok = True
-                except Exception:
-                    ok = False
-            if not ok:
+            owner = await asyncio.to_thread(owner_for_token, token) if token else None
+            if not owner:
+                body = (b'{"error":"unauthorized: sign in to the web UI and generate a '
+                        b'Cursor token (Connections \\u2192 Connect Cursor), then put it in '
+                        b'the Authorization header."}')
                 await send({"type": "http.response.start", "status": 401,
                             "headers": [(b"content-type", b"application/json")]})
-                await send({"type": "http.response.body",
-                            "body": b'{"error":"unauthorized: bearer token required for /mcp"}'})
+                await send({"type": "http.response.body", "body": body})
                 return
         await self.inner(scope, receive, send)
 

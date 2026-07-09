@@ -4,11 +4,12 @@ Run (Cursor mcp.json):  uv run cos-mcp     (stdio transport)
 Exposes RAG retrieval, queue state, drafting, the approval action, and Asana —
 the human in Cursor is the approver; the approval gate stays absolute.
 
-TENANCY: every tool operates within ONE tenant, resolved from MCP_OWNER_ID (the
-owner_id whose data this MCP serves). A self-hosted user sets it to their own id;
-the shipped demo config sets it to the demo tenant, so a grader's Cursor session
-is isolated exactly like the web UI. (Per-JWT owner resolution — one MCP serving
-many tenants by their bearer token — is a documented follow-up.)
+TENANCY: identity-driven. Each tool call resolves its tenant from WHO authenticated —
+the bearer token on the request (a Cursor PAT minted in the web UI, or a Supabase JWT)
+maps to its owner_id, and the tool acts only on that tenant. One hosted MCP serves every
+user by their own token; a grader's demo token can never read another tenant's data.
+(`MCP_OWNER_ID` remains only a fallback for a stdio self-host, where there is no HTTP
+request to carry an identity.)
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from . import boot  # noqa: F401  (import-compat; connectors are per-owner)
+from .auth import owner_for_token
 from .db import sb
 
 _hosts = ["localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*"]
@@ -36,10 +38,28 @@ mcp = FastMCP(
 
 
 def _owner() -> str:
-    owner = os.environ.get("MCP_OWNER_ID")
-    if not owner:
-        raise RuntimeError("MCP_OWNER_ID not set — the MCP surface needs a tenant to scope to")
-    return owner
+    """Resolve the tenant for THIS request from who authenticated — never a hardcoded
+    pin. Over HTTP (Cursor), read the bearer token off the request the SDK attaches to
+    the tool's context and map it to its owner. Fall back to MCP_OWNER_ID ONLY for a
+    stdio self-host, where there is no HTTP request. Raise if neither yields a tenant."""
+    try:
+        req = mcp.get_context().request_context.request  # Starlette request, per-tool-call
+        if req is not None:
+            auth = req.headers.get("authorization", "")
+            token = auth.split(" ", 1)[1].strip() if auth.lower().startswith("bearer ") else ""
+            owner = owner_for_token(token)
+            if owner:
+                return owner
+            raise RuntimeError("MCP request has no valid tenant token — sign in to the web UI "
+                               "and generate a Cursor token")
+    except RuntimeError:
+        raise
+    except Exception:
+        pass  # no HTTP request in scope (stdio) — fall through to the env fallback
+    env = os.environ.get("MCP_OWNER_ID")
+    if env:
+        return env
+    raise RuntimeError("no authenticated tenant on this MCP request")
 
 
 @mcp.tool()

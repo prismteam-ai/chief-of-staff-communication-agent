@@ -22,23 +22,37 @@ mcp.json + plugin.json           plugin manifest → the hosted MCP runtime
 
 ## Connect it in Cursor
 
-Add the MCP server (Settings → MCP, or `.cursor/mcp.json` in any workspace). The
-repo's `mcp.json` is the template — replace the token with the `MCP_AUTH_TOKEN`
-shipped with the demo credentials:
+The MCP surface is **identity-driven**: the token you present *is* your identity, and
+Cursor then acts on exactly the tenant you signed into the web UI as — your channels,
+your data. There is no shared/static token and no hardcoded tenant.
+
+1. **Sign in to the web UI** as the user you want Cursor to act as (e.g. the demo
+   account shipped with the submission, or your own account).
+2. Go to **Connections → Connect Cursor → Generate Cursor token**. It shows a token
+   (once) and the ready-to-paste config.
+3. Add it to Cursor (Settings → **MCP**, or `~/.cursor/mcp.json`):
 
 ```json
 {
   "mcpServers": {
     "chief-of-staff-comms": {
       "url": "https://cos-comms-agent.whitewave-2a3d27b9.eastus2.azurecontainerapps.io/mcp/",
-      "headers": { "Authorization": "Bearer <MCP_AUTH_TOKEN from the demo creds>" }
+      "headers": { "Authorization": "Bearer <your Cursor token from the web UI>" }
     }
   }
 }
 ```
 
-(Trailing slash on `/mcp/` is required. A Supabase session JWT from `/api/login`
-is also accepted in place of the static token.)
+4. Restart Cursor.
+
+The token is a **long-lived, revocable personal access token** bound to your `owner_id`
+(revoke it anytime from the same panel). A raw Supabase session JWT from `/api/login`
+also works but expires in ~1h — the Cursor token is the durable path. Trailing slash on
+`/mcp/` is required. No valid token → the server returns **401** and tells you to sign in
+and generate one; there is no anonymous access.
+
+> **Isolation:** two different users' tokens hit the same URL but only ever see their
+> own tenant — the grader's demo token can never read your inbox, and vice-versa.
 
 Cursor's agent now has these tools:
 

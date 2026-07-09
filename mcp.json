@@ -3,7 +3,7 @@
     "chief-of-staff-comms": {
       "url": "https://cos-comms-agent.whitewave-2a3d27b9.eastus2.azurecontainerapps.io/mcp/",
       "headers": {
-        "Authorization": "Bearer REPLACE_WITH_MCP_AUTH_TOKEN"
+        "Authorization": "Bearer PASTE_YOUR_CURSOR_TOKEN_FROM_THE_WEB_UI"
       }
     }
   }

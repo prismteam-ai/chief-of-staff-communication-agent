@@ -147,10 +147,21 @@
   .cx-help a { color: var(--accent); }
   .cx-help code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
                   background: var(--page); padding: 1px 5px; border-radius: 4px; }
+  .cx-steps { margin: 0 0 14px; padding-left: 18px; color: var(--ink-2); font-size: 12.5px; line-height: 1.65; }
+  .cx-steps li { margin-bottom: 3px; }
+  .cx-steps a { color: var(--accent); }
+  .cx-steps code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
+                   background: var(--page); padding: 1px 5px; border-radius: 4px; }
+  .cx-note { font-size: 12px; color: var(--ink-2); background: var(--page); border: 1px solid var(--grid);
+             border-radius: 8px; padding: 8px 10px; margin-bottom: 14px; line-height: 1.6; }
+  .cx-note b { color: var(--ink); }
+  .cx-note code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
   .cx-field { margin-bottom: 10px; }
   .cx-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
   .cx-field input { width: 100%; padding: 8px 10px; font: inherit; border: 1px solid var(--grid);
                     border-radius: 8px; background: var(--page); color: var(--ink); }
+  .cx-fhint { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
+  .cx-fhint a { color: var(--accent); }
   #cx-msg { color: var(--critical); font-size: 12px; min-height: 16px; }
   .cx-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
   .cx-actions button { font: inherit; border-radius: 8px; padding: 8px 16px; cursor: pointer; border: 1px solid var(--border); }
@@ -189,6 +200,8 @@
   <form id="cx-card" class="modal" onsubmit="submitConnect(event)">
     <h1 id="cx-title" style="font-size:16px;margin-bottom:8px"></h1>
     <div id="cx-help" class="cx-help"></div>
+    <ol id="cx-steps" class="cx-steps"></ol>
+    <div id="cx-note" class="cx-note" style="display:none"></div>
     <div id="cx-fields"></div>
     <div id="cx-msg"></div>
     <div class="cx-actions">
@@ -556,8 +569,55 @@ async function renderConn() {
       ? `<h2>Connected</h2><div class="rows">${live.map(rowHtml).join("")}${asana.connected?asanaRow:""}</div>` : "";
     el.innerHTML = connectedBlock +
       `<h2>Available</h2><div class="rows">${avail.map(rowHtml).join("")}${asana.connected?"":asanaRow}</div>
-       <p class="meta" style="margin-top:12px">X, SMS and WhatsApp run on your own (paid) provider accounts — the platforms charge, but you can connect them. LinkedIn has no public personal-messaging API.</p>`;
+       <p class="meta" style="margin-top:12px">X, SMS and WhatsApp run on your own (paid) provider accounts — the platforms charge, but you can connect them. LinkedIn has no public personal-messaging API.</p>
+       <div id="cursor-panel"></div>`;
+    renderCursor();
   } catch (e) { el.innerHTML = `<div class="empty">Failed: ${esc(e.message)}</div>`; }
+}
+
+/* ---- Connect Cursor (per-user MCP token) ---- */
+const MCP_URL = location.origin + "/mcp/";
+function mcpSnippet(tok) {
+  return JSON.stringify({mcpServers: {"chief-of-staff-comms":
+    {url: MCP_URL, headers: {Authorization: "Bearer " + tok}}}}, null, 2);
+}
+async function renderCursor() {
+  const el = document.getElementById("cursor-panel"); if (!el) return;
+  let toks = [];
+  try { toks = await j("/mcp-tokens"); } catch (e) { /* signed-out handled by j() */ return; }
+  const rows = toks.length ? toks.map(t => `<div class="row"><div>
+      <div class="name">🔑 ${esc(t.label||'Cursor')}</div>
+      <div class="sub">${esc(t.masked)} · created ${new Date(t.created_at).toLocaleDateString()}</div></div>
+      <div><button onclick="revokeMcp('${t.id}')">Revoke</button></div></div>`).join("")
+    : `<div class="meta" style="padding:4px 0 8px">No Cursor tokens yet.</div>`;
+  el.innerHTML = `<h2 style="margin-top:22px">Connect Cursor</h2>
+    <p class="meta">Use this agent inside Cursor. Generate a token tied to <b>your</b> login — Cursor then acts as you (your channels, your data, the same approval gate). It’s a personal token: keep it private, revoke anytime.</p>
+    <div class="rows">${rows}</div>
+    <div style="margin-top:10px"><button class="cta" onclick="genMcp()">Generate Cursor token</button></div>
+    <div id="mcp-reveal"></div>`;
+}
+async function genMcp() {
+  try {
+    const r = await j("/mcp-tokens", {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"});
+    document.getElementById("mcp-reveal").innerHTML = `<div class="cx-note" style="margin-top:12px">
+      <b>Copy this now — the token is shown only once.</b><br>
+      1. Cursor → Settings → <b>MCP</b> → add server (or edit <code>~/.cursor/mcp.json</code>).<br>
+      2. Paste this, then restart Cursor:
+      <pre id="mcp-json" style="white-space:pre-wrap;user-select:all;background:var(--page);padding:8px;border-radius:6px;margin:8px 0;font-size:11.5px;overflow-x:auto">${esc(mcpSnippet(r.token))}</pre>
+      <button class="cta" onclick="copyMcp()">Copy config</button>
+      <button onclick="document.getElementById('mcp-reveal').innerHTML='';renderCursor()">Done</button></div>`;
+  } catch (e) { alert("Could not generate token: " + e.message); }
+}
+function copyMcp() {
+  const t = document.getElementById("mcp-json"); if (!t) return;
+  navigator.clipboard.writeText(t.textContent).then(
+    () => { const b = event.target; const o = b.textContent; b.textContent = "Copied ✓"; setTimeout(()=>b.textContent=o, 1500); },
+    () => alert("Copy failed — select the text manually."));
+}
+async function revokeMcp(id) {
+  if (!confirm("Revoke this Cursor token? Any Cursor using it stops working immediately.")) return;
+  try { await j("/mcp-tokens/" + id, {method:"DELETE"}); renderCursor(); }
+  catch (e) { alert("Revoke failed: " + e.message); }
 }
 async function oauthConnect() {
   try { const r = await j("/oauth/google/start"); location.href = r.url; }
@@ -566,36 +626,68 @@ async function oauthConnect() {
 const CONNECT_FORMS = {
   email: {
     title: "Connect email (IMAP)",
-    help: `Works with Fastmail, Outlook / Microsoft 365, Yahoo, iCloud, or Gmail via an app-password.
-           Use an <b>app password</b>, not your login password
-           (<a href="https://support.google.com/mail/answer/185833" target="_blank" rel="noopener">how</a>).`,
+    help: `Connect any IMAP mailbox — Zoho, Fastmail, Gmail, Yahoo, iCloud, Outlook / Microsoft 365.
+           The agent reads your inbox and, once you approve a draft, replies <b>as you</b>.`,
+    steps: [
+      `In your mail provider, turn on <b>IMAP access</b> (usually Settings → Mail → IMAP → enable, then save).`,
+      `Create an <b>app password</b> — a provider-generated password for apps. Your normal login
+       password will not work over IMAP.
+       <a href="https://www.zoho.com/mail/help/app-passwords.html" target="_blank" rel="noopener">Zoho</a> ·
+       <a href="https://support.google.com/mail/answer/185833" target="_blank" rel="noopener">Gmail</a> ·
+       <a href="https://www.fastmail.help/hc/en-us/articles/360058752854" target="_blank" rel="noopener">Fastmail</a> ·
+       <a href="https://support.apple.com/102654" target="_blank" rel="noopener">iCloud</a>`,
+      `Enter your address + that app password below, then <b>Connect</b> — we run one sync immediately.`,
+    ],
+    note: `<b>IMAP host</b> is auto-detected for common providers. Only fill the host field if yours
+           isn't listed: &nbsp;Zoho <code>imap.zoho.com</code> · Gmail <code>imap.gmail.com</code> ·
+           Fastmail <code>imap.fastmail.com</code> · Yahoo <code>imap.mail.yahoo.com</code> ·
+           iCloud <code>imap.mail.me.com</code> · Outlook/M365 <code>outlook.office365.com</code>.`,
     fields: [
-      {k:"email", label:"Email address", type:"email", ph:"you@company.com", req:true},
-      {k:"password", label:"App password", type:"password", ph:"xxxx xxxx xxxx xxxx", req:true},
-      {k:"imap_host", label:"IMAP host (optional — auto-detected)", type:"text", ph:"imap.gmail.com"},
+      {k:"email", label:"Email address", type:"email", ph:"you@company.com", req:true,
+       hint:"The mailbox you want the agent to manage."},
+      {k:"password", label:"App password", type:"password", ph:"xxxx xxxx xxxx xxxx", req:true,
+       hint:"The app-specific password from step 2 — not your login password."},
+      {k:"imap_host", label:"IMAP host (optional — auto-detected)", type:"text", ph:"imap.zoho.com",
+       hint:"Leave blank unless your provider isn't in the list above (e.g. Zoho needs imap.zoho.com)."},
     ],
     build: v => ({account_handle: v.email,
       secret: JSON.stringify(v.imap_host ? {password:v.password, imap_host:v.imap_host} : {password:v.password})}),
   },
   telegram: {
     title: "Connect Telegram (your account)",
-    help: `Reads your <b>personal</b> Telegram via MTProto (not a bot). Get api_id/api_hash at
-           <a href="https://my.telegram.org" target="_blank" rel="noopener">my.telegram.org</a> → API development tools,
-           then run <code>uv run python scripts/telegram_login.py</code> locally — it logs in
-           (phone + the code Telegram texts you) and prints a blob. Paste it below.`,
+    help: `Reads and replies on your <b>personal</b> Telegram via MTProto (your own account, not a bot) —
+           so the agent sees your real 1:1 chats.`,
+    steps: [
+      `Go to <a href="https://my.telegram.org" target="_blank" rel="noopener">my.telegram.org</a> → <b>API development tools</b>
+       and create an app to get your <code>api_id</code> and <code>api_hash</code>.`,
+      `On your machine, run <code>uv run python scripts/telegram_login.py</code>. It asks for your phone,
+       then the login code Telegram texts you, and prints a one-line JSON blob.`,
+      `Paste that whole blob into <b>Session blob</b> below. It stays in your tenant; we never see your password.`,
+    ],
+    note: `The session blob authorizes read + send on your account. Keep it private — treat it like a password.`,
     fields: [
-      {k:"phone", label:"Your phone / handle (label only)", type:"text", ph:"+1 555 123 4567", req:true},
-      {k:"blob", label:"Session blob (from telegram_login.py)", type:"password", ph:'{"api_id":…,"api_hash":"…","session":"…"}', req:true},
+      {k:"phone", label:"Your phone / handle (label only)", type:"text", ph:"+1 555 123 4567", req:true,
+       hint:"Just a label shown in Connections — not used to log in."},
+      {k:"blob", label:"Session blob (from telegram_login.py)", type:"password", ph:'{"api_id":…,"api_hash":"…","session":"…"}', req:true,
+       hint:"The full JSON line the script printed."},
     ],
     build: v => ({account_handle: v.phone, secret: v.blob}),
   },
   x: {
     title: "Connect X · Twitter DMs",
-    help: `Your own X app with DM access (X charges for the DM API). Provide an OAuth2 user token
-           with <code>dm.read dm.write</code>, your numeric user id, and handle.`,
+    help: `Reads and sends <b>your</b> X DMs. Needs your own X app with DM access — X charges for the DM API,
+           so this runs on your paid X developer account.`,
+    steps: [
+      `In the <a href="https://developer.x.com/en/portal/dashboard" target="_blank" rel="noopener">X developer portal</a>,
+       create an app and enable <b>OAuth 2.0</b> with scopes <code>dm.read</code> <code>dm.write</code> (+ <code>tweet.read users.read</code>).`,
+      `Generate an <b>OAuth2 user access token</b> for your own account (not the app-only bearer token).`,
+      `Find your <b>numeric user id</b> (e.g. via <a href="https://developer.x.com/en/docs/x-api/users/lookup/introduction" target="_blank" rel="noopener">users lookup</a>), then paste all three below.`,
+    ],
     fields: [
-      {k:"access_token", label:"OAuth2 user access token", type:"password", req:true},
-      {k:"self_user_id", label:"Your numeric X user id", type:"text", ph:"1234567890", req:true},
+      {k:"access_token", label:"OAuth2 user access token", type:"password", req:true,
+       hint:"The per-user token with dm.read + dm.write."},
+      {k:"self_user_id", label:"Your numeric X user id", type:"text", ph:"1234567890", req:true,
+       hint:"Numeric id, not the @handle — used to tell your own messages apart."},
       {k:"self_handle", label:"Your handle", type:"text", ph:"@you", req:true},
     ],
     build: v => ({account_handle: v.self_handle,
@@ -603,35 +695,52 @@ const CONNECT_FORMS = {
   },
   sms: {
     title: "Connect SMS · Twilio",
-    help: `Reads/sends the SMS on <b>your own Twilio number</b> (a business line you own — not
-           your personal cell; no API can read carrier texts). From the
-           <a href="https://console.twilio.com" target="_blank" rel="noopener">Twilio console</a>; Twilio charges per number + message.`,
+    help: `Reads and sends SMS on <b>your own Twilio number</b> — a business line you own. (No API can read
+           carrier texts from your personal cell, so this is a Twilio number, not your phone.)`,
+    steps: [
+      `In the <a href="https://console.twilio.com" target="_blank" rel="noopener">Twilio console</a>, buy/select a phone number with SMS enabled.`,
+      `Copy your <b>Account SID</b> and <b>Auth Token</b> from the console dashboard.`,
+      `Paste them below with that number. Twilio charges per number + per message.`,
+    ],
     fields: [
-      {k:"account_sid", label:"Account SID", type:"text", ph:"AC…", req:true},
+      {k:"account_sid", label:"Account SID", type:"text", ph:"AC…", req:true, hint:"Starts with AC — from the console dashboard."},
       {k:"auth_token", label:"Auth Token", type:"password", req:true},
-      {k:"from_number", label:"Your Twilio number", type:"text", ph:"+15551234567", req:true},
+      {k:"from_number", label:"Your Twilio number", type:"text", ph:"+15551234567", req:true,
+       hint:"E.164 format, e.g. +15551234567."},
     ],
     build: v => ({account_handle: v.from_number,
       secret: JSON.stringify({account_sid:v.account_sid, auth_token:v.auth_token, from_number:v.from_number})}),
   },
   whatsapp: {
     title: "Connect WhatsApp · Twilio",
-    help: `Reads/sends via <b>your Twilio WhatsApp sender</b> (WhatsApp Business — personal WhatsApp
-           has no API). Sandbox or approved number; same Twilio credentials as SMS.`,
+    help: `Reads and sends via <b>your Twilio WhatsApp sender</b> (WhatsApp Business — personal WhatsApp has no API).`,
+    steps: [
+      `In Twilio, set up a <b>WhatsApp sender</b> — the
+       <a href="https://www.twilio.com/docs/whatsapp/sandbox" target="_blank" rel="noopener">sandbox</a> for testing,
+       or an approved business number for production.`,
+      `Use the <b>same Account SID + Auth Token</b> as SMS (one Twilio account covers both).`,
+      `Paste them below with your WhatsApp-enabled number.`,
+    ],
     fields: [
-      {k:"account_sid", label:"Account SID", type:"text", ph:"AC…", req:true},
+      {k:"account_sid", label:"Account SID", type:"text", ph:"AC…", req:true, hint:"Same SID as your Twilio SMS."},
       {k:"auth_token", label:"Auth Token", type:"password", req:true},
-      {k:"from_number", label:"Your WhatsApp-enabled number", type:"text", ph:"+14155238886", req:true},
+      {k:"from_number", label:"Your WhatsApp-enabled number", type:"text", ph:"+14155238886", req:true,
+       hint:"The sandbox number, or your approved WhatsApp sender."},
     ],
     build: v => ({account_handle: v.from_number,
       secret: JSON.stringify({account_sid:v.account_sid, auth_token:v.auth_token, from_number:v.from_number})}),
   },
   asana: {
     title: "Connect Asana",
-    help: `Paste a <b>Personal Access Token</b> —
-           <a href="https://app.asana.com/0/my-apps" target="_blank" rel="noopener">app.asana.com → Apps → Personal access tokens</a>.
-           Tasks land in your own workspace, in a "Chief of Staff" project.`,
-    fields: [{k:"pat", label:"Personal Access Token", type:"password", ph:"1/1216…", req:true}],
+    help: `Lets the agent create and update <b>follow-up tasks</b> in your own Asana workspace, in a
+           "Chief of Staff" project it creates.`,
+    steps: [
+      `Open <a href="https://app.asana.com/0/my-apps" target="_blank" rel="noopener">app.asana.com → Apps → Personal access tokens</a>.`,
+      `Click <b>Create new token</b>, name it (e.g. "Chief of Staff"), and copy it — Asana shows it once.`,
+      `Paste it below. Tasks link back to the message that created them.`,
+    ],
+    fields: [{k:"pat", label:"Personal Access Token", type:"password", ph:"2/1216…", req:true,
+      hint:"The token from step 2 — starts with a number and a slash."}],
     build: v => ({account_handle:"asana", secret: v.pat}),
   },
 };
@@ -642,9 +751,14 @@ function openConnect(channel) {
   CX_CHANNEL = channel;
   document.getElementById("cx-title").textContent = f.title;
   document.getElementById("cx-help").innerHTML = f.help;
+  document.getElementById("cx-steps").innerHTML = (f.steps || []).map(s => `<li>${s}</li>`).join("");
+  const noteEl = document.getElementById("cx-note");
+  if (f.note) { noteEl.innerHTML = f.note; noteEl.style.display = "block"; }
+  else { noteEl.style.display = "none"; }
   document.getElementById("cx-fields").innerHTML = f.fields.map(fl =>
     `<div class="cx-field"><label>${esc(fl.label)}</label>
-       <input data-k="${fl.k}" type="${fl.type}" placeholder="${esc(fl.ph||'')}" ${fl.req?'required':''}></div>`).join("");
+       <input data-k="${fl.k}" type="${fl.type}" placeholder="${esc(fl.ph||'')}" ${fl.req?'required':''}>
+       ${fl.hint ? `<div class="cx-fhint">${esc(fl.hint)}</div>` : ""}</div>`).join("");
   document.getElementById("cx-msg").textContent = "";
   document.getElementById("cx-overlay").style.display = "flex";
 }
