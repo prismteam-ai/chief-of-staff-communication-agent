@@ -1,0 +1,7 @@
+{
+  "name": "chief-of-staff-comms",
+  "description": "Chief of Staff Communication Agent — triage every channel, draft in your voice, approve to send, link to Asana. Agent + skills + commands wired to the hosted runtime.",
+  "version": "0.1.0",
+  "author": "Arthur Cho",
+  "mcp": "mcp.json"
+}

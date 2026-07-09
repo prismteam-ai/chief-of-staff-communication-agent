@@ -1,0 +1,290 @@
+"""Brain: per inbound message → recommendation + style-matched draft.
+
+Context assembly is dynamic injection only (CLAUDE.md: no hardcoded example
+names in prompts — an ancestor bot greeted real users as "Sarah").
+Every claim the brain makes cites retrieved context; low confidence routes
+to needs_context instead of a made-up answer.
+"""
+from __future__ import annotations
+
+import json
+
+from openai import AzureOpenAI
+
+from .config import settings
+from .db import sb
+from .rag import get_org_knowledge, get_preferences, search
+
+RECOMMEND_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "action": {"enum": ["reply", "create_task", "link_task", "delegate", "archive", "needs_context"]},
+        "rationale": {"type": "string"},
+        "needs_context": {"type": "boolean"},
+        "context_question": {"type": ["string", "null"]},
+        "draft_body": {"type": ["string", "null"]},
+        "style_notes": {"type": ["string", "null"]},
+        "topic_key": {"type": ["string", "null"]},
+        "task_title": {"type": ["string", "null"]},
+        "task_detail": {"type": ["string", "null"]},
+        "task_due": {"type": ["string", "null"]},
+    },
+    "required": [
+        "action", "rationale", "needs_context", "context_question",
+        "draft_body", "style_notes", "topic_key", "task_title", "task_detail", "task_due",
+    ],
+    "additionalProperties": False,
+}
+
+
+def _chat_client() -> AzureOpenAI:
+    s = settings()
+    return AzureOpenAI(
+        api_key=s.azure_chat_key, azure_endpoint=s.azure_chat_endpoint, api_version="2024-06-01"
+    )
+
+
+def _style_corpus(owner: str, limit: int = 8) -> list[str]:
+    """This tenant's actual outbound messages = style few-shot, injected dynamically.
+    Returns the raw message text ONLY — no channel/metadata prefix, or the model mimics
+    the tag and it leaks into the drafted reply (observed: a real send went out prefixed
+    "[gmail] …")."""
+    res = (
+        sb().table("messages").select("body_text").eq("owner_id", owner)
+        .eq("direction", "outbound").order("sent_at", desc=True).limit(limit).execute()
+    )
+    return [r["body_text"] for r in res.data if r.get("body_text")]
+
+
+def _thread_history(owner: str, thread_id: str, limit: int = 10) -> list[str]:
+    res = (
+        sb().table("messages").select("direction, sender, body_text, sent_at").eq("owner_id", owner)
+        .eq("thread_id", thread_id).order("sent_at", desc=True).limit(limit).execute()
+    )
+    return [
+        f"{r['sent_at']} {r['sender'].get('display_name') or r['sender'].get('handle')} ({r['direction']}): {r['body_text']}"
+        for r in reversed(res.data)
+    ]
+
+
+def process_message(message_id: str, owner: str) -> dict:
+    """Recommend + draft for one inbound message. Idempotent per message. Owner-scoped."""
+    existing = sb().table("recommendations").select("id").eq("message_id", message_id).eq("owner_id", owner).execute()
+    if existing.data:
+        return {"message_id": message_id, "skipped": "already processed"}
+
+    msg = sb().table("messages").select("*").eq("id", message_id).eq("owner_id", owner).single().execute().data
+    history = _thread_history(owner, msg["thread_id"])
+    style = _style_corpus(owner)
+    known_topics = sorted(
+        {r["topic_key"] for r in sb().table("topic_links").select("topic_key").eq("owner_id", owner).execute().data}
+    )
+    related = search(msg["body_text"], owner, match_count=5)
+    related_block = "\n".join(
+        f"- ({r['source_type']}, sim {r['similarity']:.2f}) {r['content'][:220]}" for r in related
+    )
+
+    system = (
+        "You are a chief-of-staff communication agent for an executive. "
+        "For the incoming message, decide the next action and, when action is 'reply', "
+        "draft the response in the executive's voice using the style samples. "
+        "Ground every factual claim in the thread history or retrieved context; "
+        "if you cannot answer confidently, use action 'needs_context' and ask one precise question. "
+        "topic_key: a short kebab-case slug naming the person/project/decision this message belongs to, "
+        "consistent across channels. If the message belongs to one of known_topic_keys, REUSE that exact key "
+        "instead of inventing a variant. "
+        "If the message requires tracked follow-up work (a deliverable, a deadline, an owed action), "
+        "set task_title (imperative, <=70 chars) and task_detail (what, who, by when) — even when the "
+        "action is 'reply', a reply can still need a task. Otherwise leave them null. "
+        "task_due: if the message implies a deadline, resolve it to an ABSOLUTE date 'YYYY-MM-DD' "
+        "relative to the incoming message's sent_at — e.g. 'by end of day today' → the sent_at date, "
+        "'by Friday' → the first Friday on/after sent_at, 'next week' → sent_at + 7 days. If no deadline "
+        "is implied, task_due is null. "
+        "executive_preferences are EXPLICIT standing instructions the executive typed. Apply them "
+        "literally, and let them OVERRIDE the inferred style samples whenever they conflict — tone, "
+        "length, formality, greeting/sign-off, humor. The style samples show the executive's default "
+        "voice; a preference is a deliberate override of it, so the draft MUST visibly reflect every "
+        "preference even when the past samples differ. "
+        "organizational_knowledge are standing facts about the executive's company/business — treat "
+        "them as ground truth, never contradict them, and use them wherever they inform the reply."
+    )
+    user = json.dumps(
+        {
+            "incoming_message": {
+                "channel": msg["channel"],
+                "from": msg["sender"],
+                "body": msg["body_text"],
+                "sent_at": msg["sent_at"],
+            },
+            "thread_history": history,
+            "retrieved_context": related_block,
+            "known_topic_keys": known_topics,
+            "executive_style_samples": style,
+            "executive_preferences": get_preferences(owner),
+            "organizational_knowledge": get_org_knowledge(owner),
+        },
+        ensure_ascii=False,
+    )
+
+    s = settings()
+    res = _chat_client().chat.completions.create(
+        model=s.chat_deployment,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "recommendation", "schema": RECOMMEND_SCHEMA, "strict": True},
+        },
+    )
+    out = json.loads(res.choices[0].message.content)
+
+    sb().table("recommendations").insert(
+        {
+            "owner_id": owner,
+            "message_id": message_id,
+            "action": out["action"],
+            "rationale": out["rationale"],
+            "needs_context": out["needs_context"],
+            "context_question": out.get("context_question"),
+            "model": s.chat_deployment,
+        }
+    ).execute()
+
+    if out["action"] == "reply" and out.get("draft_body"):
+        sb().table("drafts").insert(
+            {
+                "owner_id": owner,
+                "message_id": message_id,
+                "body": out["draft_body"],
+                "style_notes": out.get("style_notes"),
+                "model": s.chat_deployment,
+            }
+        ).execute()
+
+    if out.get("task_title"):
+        from .asana import task_from_message  # local import: avoids cycle at module load
+
+        try:
+            task = task_from_message(message_id, owner, out["task_title"],
+                                     out.get("task_detail") or out["rationale"], due=out.get("task_due"))
+            out["asana_task_url"] = task.get("permalink_url")
+        except Exception as e:  # task failure never blocks the reply path
+            out["asana_error"] = f"{type(e).__name__}: {e}"
+
+    if out.get("topic_key"):
+        sb().table("topic_links").upsert(
+            {
+                "owner_id": owner,
+                "topic_key": out["topic_key"],
+                "message_id": message_id,
+                "reason": out["rationale"][:200],
+                "confidence": 0.7,
+            },
+            on_conflict="topic_key,message_id",
+        ).execute()
+
+    return {"message_id": message_id, **out}
+
+
+def redraft_with_context(message_id: str, owner: str, user_context: str) -> dict:
+    """Answer a needs-context question: re-draft one message using the executive's
+    supplied context as authoritative. Flips the recommendation to a reply + draft.
+    This is the closing half of criterion 21 (prompt for context → act on it)."""
+    msg = sb().table("messages").select("*").eq("id", message_id).eq("owner_id", owner).single().execute().data
+    history = _thread_history(owner, msg["thread_id"])
+    style = _style_corpus(owner)
+    related = search(msg["body_text"], owner, match_count=5)
+    related_block = "\n".join(
+        f"- ({r['source_type']}, sim {r['similarity']:.2f}) {r['content'][:220]}" for r in related
+    )
+
+    system = (
+        "You are a chief-of-staff communication agent. The executive has just supplied "
+        "the missing context you asked for — treat it as authoritative and now draft the "
+        "reply in their voice (action MUST be 'reply'). Ground the reply in that context "
+        "plus the thread history; do not contradict it. Match the executive's style samples, but "
+        "executive_preferences are explicit standing instructions that OVERRIDE the samples on tone, "
+        "length, formality, and sign-off whenever they conflict — the draft MUST visibly reflect them. "
+        "organizational_knowledge are standing facts about the business — treat them as ground truth. "
+        "task_title/task_detail only if real follow-up work is implied."
+    )
+    user = json.dumps(
+        {
+            "incoming_message": {"channel": msg["channel"], "from": msg["sender"],
+                                 "body": msg["body_text"], "sent_at": msg["sent_at"]},
+            "executive_provided_context": user_context,
+            "thread_history": history,
+            "retrieved_context": related_block,
+            "executive_style_samples": style,
+            "executive_preferences": get_preferences(owner),
+            "organizational_knowledge": get_org_knowledge(owner),
+        },
+        ensure_ascii=False,
+    )
+    s = settings()
+    res = _chat_client().chat.completions.create(
+        model=s.chat_deployment,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "recommendation", "schema": RECOMMEND_SCHEMA, "strict": True},
+        },
+    )
+    out = json.loads(res.choices[0].message.content)
+
+    # record the supplied context on the message's thread as org knowledge for future RAG
+    from .rag import index_knowledge
+
+    try:
+        index_knowledge(owner, "preference", f"context-{message_id}",
+                        f"Executive-provided context re: {msg['body_text'][:80]} — {user_context}")
+    except Exception:
+        pass
+
+    rec = sb().table("recommendations").select("id").eq("message_id", message_id).eq("owner_id", owner).execute().data
+    fields = {"action": "reply", "needs_context": False, "context_question": None,
+              "rationale": out["rationale"], "model": s.chat_deployment}
+    if rec:
+        sb().table("recommendations").update(fields).eq("message_id", message_id).eq("owner_id", owner).execute()
+    else:
+        sb().table("recommendations").insert({"owner_id": owner, "message_id": message_id, **fields}).execute()
+
+    draft = None
+    if out.get("draft_body"):
+        draft = sb().table("drafts").insert({
+            "owner_id": owner, "message_id": message_id, "body": out["draft_body"],
+            "style_notes": out.get("style_notes"), "model": s.chat_deployment,
+        }).execute().data[0]
+    return {"message_id": message_id, "draft": draft, **out}
+
+
+def regenerate(message_id: str, owner: str) -> dict:
+    """Re-run the brain on a message that was ALREADY processed, honoring the CURRENT
+    knowledge layer (preferences + org facts). process_message is idempotent — it won't
+    re-draft once a recommendation exists — so changing a preference doesn't retroactively
+    rewrite old drafts. This clears the prior recommendation/draft(s) (and any pending
+    approvals on them) for THIS message and re-runs, so the fresh draft reflects the latest
+    preferences. Owner-scoped; nothing sends (a regenerated draft still awaits approval)."""
+    drafts = sb().table("drafts").select("id").eq("owner_id", owner).eq("message_id", message_id).execute().data
+    for d in drafts:  # approvals FK-reference drafts; clear them so the draft rows can go
+        sb().table("approvals").delete().eq("draft_id", d["id"]).execute()
+    sb().table("drafts").delete().eq("owner_id", owner).eq("message_id", message_id).execute()
+    sb().table("recommendations").delete().eq("owner_id", owner).eq("message_id", message_id).execute()
+    return process_message(message_id, owner)
+
+
+def process_pending(owner: str, limit: int = 50) -> list[dict]:
+    """Process this tenant's unhandled inbound messages, NEWEST first — the <5-minute
+    response goal means fresh arrivals get triaged immediately, not after a backlog
+    (defensive: one failure never kills the batch)."""
+    pending = (
+        sb().table("messages").select("id").eq("owner_id", owner)
+        .eq("direction", "inbound").eq("answered_status", "pending")
+        .order("sent_at", desc=True).limit(limit).execute()
+    ).data
+    results = []
+    for row in pending:
+        try:
+            results.append(process_message(row["id"], owner))
+        except Exception as e:
+            results.append({"message_id": row["id"], "error": f"{type(e).__name__}: {e}"})
+    return results

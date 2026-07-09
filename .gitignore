@@ -1,0 +1,19 @@
+# secrets — never committed (Do NOT regress: env-var references only)
+.env
+.env.*
+!.env.example
+# python
+.venv/
+__pycache__/
+*.pyc
+# data & snapshots
+data/raw/
+comms-checks/
+# os/editor
+.DS_Store
+.playwright-mcp/
+data/outbox/
+data/asana_outbox/
+*.png
+client_secret*.json
+*credentials*.json
