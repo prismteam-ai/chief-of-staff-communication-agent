@@ -538,8 +538,9 @@ const CONNECT_FORMS = {
   },
   sms: {
     title: "Connect SMS · Twilio",
-    help: `Your own Twilio account (Twilio charges per number + message). From the
-           <a href="https://console.twilio.com" target="_blank" rel="noopener">Twilio console</a>.`,
+    help: `Reads/sends the SMS on <b>your own Twilio number</b> (a business line you own — not
+           your personal cell; no API can read carrier texts). From the
+           <a href="https://console.twilio.com" target="_blank" rel="noopener">Twilio console</a>; Twilio charges per number + message.`,
     fields: [
       {k:"account_sid", label:"Account SID", type:"text", ph:"AC…", req:true},
       {k:"auth_token", label:"Auth Token", type:"password", req:true},
@@ -550,7 +551,8 @@ const CONNECT_FORMS = {
   },
   whatsapp: {
     title: "Connect WhatsApp · Twilio",
-    help: `Your Twilio WhatsApp sender (sandbox or approved number). Same Twilio credentials as SMS.`,
+    help: `Reads/sends via <b>your Twilio WhatsApp sender</b> (WhatsApp Business — personal WhatsApp
+           has no API). Sandbox or approved number; same Twilio credentials as SMS.`,
     fields: [
       {k:"account_sid", label:"Account SID", type:"text", ph:"AC…", req:true},
       {k:"auth_token", label:"Auth Token", type:"password", req:true},
