@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chief of Staff — Demo Flow</title>
+<style>
+  :root{
+    --bg:#0b0f17; --panel:#121826; --panel2:#0f1420; --border:#1e2636;
+    --muted:#8b95a7; --text:#e6eaf2; --accent:#7c8cff; --accent2:#a78bfa;
+    --good:#34d399; --asana:#f06a6a;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(1100px 640px at 72% -12%, #161d2e 0%, var(--bg) 55%);
+    color:var(--text); font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  .deck{height:100vh; width:100vw; position:relative}
+  .slide{
+    position:absolute; inset:0; display:none; flex-direction:column;
+    padding:4.5vh 6vw 12vh; opacity:0; transition:opacity .3s ease;
+  }
+  .slide.active{display:flex; opacity:1}
+
+  .head{display:flex; align-items:baseline; gap:1rem; margin-bottom:2vh}
+  .beat{font-size:.8rem; letter-spacing:.2em; text-transform:uppercase; color:var(--accent2); font-weight:800}
+  h1{font-size:clamp(1.4rem,2.7vw,2.2rem); font-weight:800; letter-spacing:-.02em}
+
+  .body{display:flex; gap:2.2rem; flex:1; min-height:0; align-items:center}
+  .shot{
+    flex:1 1 62%; min-width:0; height:100%; display:flex; align-items:center; justify-content:center;
+  }
+  .shot img{
+    max-width:100%; max-height:100%; border-radius:.8rem; border:1px solid var(--border);
+    box-shadow:0 24px 60px rgba(0,0,0,.5);
+  }
+  .caption{flex:1 1 38%; min-width:240px; display:flex; flex-direction:column; gap:1.3rem}
+  .line{}
+  .line .k{font-size:.72rem; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); font-weight:800; margin-bottom:.45rem; display:flex; align-items:center; gap:.4rem}
+  .line.say .k{color:var(--accent)}
+  .line.show .k{color:var(--good)}
+  .line p{font-size:clamp(.95rem,1.25vw,1.15rem); line-height:1.5}
+  .line.say p{font-size:clamp(1.05rem,1.5vw,1.35rem); font-weight:600}
+  .pill{display:inline-block; font-size:.78rem; font-weight:700; color:var(--asana); border:1px solid var(--asana); border-radius:999px; padding:.2rem .7rem; margin-top:.3rem}
+
+  /* outro */
+  .outro{align-items:center; justify-content:center; text-align:center}
+  .outro h1{font-size:clamp(2rem,4vw,3.2rem)}
+  .outro .sub{color:var(--muted); font-size:clamp(1rem,1.6vw,1.3rem); margin-top:1rem; max-width:60ch}
+  .outro .chips{display:flex; gap:.6rem; flex-wrap:wrap; justify-content:center; margin-top:2.4vh}
+  .chip{font-size:.85rem; font-weight:600; background:var(--panel); border:1px solid var(--border); border-radius:.6rem; padding:.5rem .8rem}
+
+  /* nav */
+  .side{
+    position:absolute; top:50%; transform:translateY(-50%); z-index:30;
+    width:52px; height:52px; border-radius:999px; cursor:pointer;
+    background:var(--panel); border:1px solid var(--border); color:var(--text);
+    display:flex; align-items:center; justify-content:center; font-size:1.5rem;
+    transition:background .15s,border-color .15s,color .15s;
+  }
+  .side:hover{background:var(--panel2); border-color:var(--accent); color:var(--accent)}
+  .side.prev{left:1.4vw} .side.next{right:1.4vw}
+  .nav{position:absolute; bottom:2.2vh; right:3vw; display:flex; align-items:center; gap:1rem; color:var(--muted); font-size:.82rem; z-index:20}
+  .dots{display:flex; gap:.5rem}
+  .dot{width:10px; height:10px; border-radius:999px; background:var(--border); cursor:pointer}
+  .dot.on{background:var(--accent)}
+  .brand{position:absolute; bottom:2.2vh; left:3vw; font-size:.82rem; color:var(--muted); font-weight:600; z-index:20}
+  .brand b{color:var(--text)}
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- 1 -->
+  <section class="slide active">
+    <div class="head"><span class="beat">Beat 1 · Hook</span><h1>Prove it is live</h1></div>
+    <div class="body">
+      <div class="shot"><img src="shots/01_login.png" alt="login"></div>
+      <div class="caption">
+        <div class="line say"><div class="k">🗣 Say</div><p>"A Chief of Staff agent. Every channel in, drafts in your voice, linked to Asana, nothing sends without approval. And it is live — this is the hosted URL."</p></div>
+        <div class="line show"><div class="k">🖱 Show</div><p>Point at the URL bar (not localhost). Click <b>owner / owner1234</b> and sign in.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide">
+    <div class="head"><span class="beat">Beat 2 · The problem</span><h1>One overloaded inbox</h1></div>
+    <div class="body">
+      <div class="shot"><img src="shots/02_inbox.png" alt="inbox"></div>
+      <div class="caption">
+        <div class="line say"><div class="k">🗣 Say</div><p>"The week. 147 messages across Gmail, X, and WhatsApp — investors, board, a candidate, a customer escalation, press."</p></div>
+        <div class="line show"><div class="k">🖱 Show</div><p>The inbox. Point at the <b>147</b> count, the channel filters, the red <b>awaiting</b> flags.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide">
+    <div class="head"><span class="beat">Beat 3 · The core loop</span><h1>The agent reasons, live</h1></div>
+    <div class="body">
+      <div class="shot"><img src="shots/03_agent.png" alt="agent reasoning"></div>
+      <div class="caption">
+        <div class="line say"><div class="k">🗣 Say</div><p>"Open the term sheet from Sarah Lin. It builds a context pack, triages urgent, and decides: reply and update the Asana task — grounded in real facts."</p></div>
+        <div class="line show"><div class="k">🖱 Show</div><p>Click Sarah Lin. Point at <b>Agent Reasoning</b> (retrieve → triage → REPLY + UPDATE_TASK) and the <b>Hard Facts</b> panel (deadline, linked task, policy).</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide">
+    <div class="head"><span class="beat">Beat 4 · The voice</span><h1>Style is controlled, not hoped for</h1></div>
+    <div class="body">
+      <div class="shot"><img src="shots/04_style.png" alt="style page"></div>
+      <div class="caption">
+        <div class="line say"><div class="k">🗣 Say</div><p>"The draft is in the exec's voice. Learned from sent mail, and I pin it explicitly — the «Пиши, сокращай» info-style. Short, facts over adjectives, no em dashes."</p></div>
+        <div class="line show"><div class="k">🖱 Show</div><p>Open the <b>Style</b> page. Show the learned profile, Voice, and the pinned Rules. Then back to the draft.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide">
+    <div class="head"><span class="beat">Beat 5 · The payoff</span><h1>Approve → a real Asana write</h1></div>
+    <div class="body">
+      <div class="shot"><img src="shots/03_agent.png" alt="approve and execute"></div>
+      <div class="caption">
+        <div class="line say"><div class="k">🗣 Say</div><p>"Nothing sends on its own. I approve — and that just wrote to my real Asana over the live API. Real data, not a mock."</p></div>
+        <div class="line show"><div class="k">🖱 Show</div><p>Click <b>Approve</b>. Switch to the second tab on <b>app.asana.com</b> and refresh — the task shows the new comment.</p><span class="pill">Asana — real API</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide">
+    <div class="head"><span class="beat">Beat 6 · Boundaries</span><h1>Real vs mock, and a hard access gate</h1></div>
+    <div class="body">
+      <div class="shot"><img src="shots/05_connections.png" alt="connections"></div>
+      <div class="caption">
+        <div class="line say"><div class="k">🗣 Say</div><p>"Asana is real; the other channels are mock, so a grader never touches OAuth. Every channel is one connector interface. And the demo user is read-only — approve is blocked on the server."</p></div>
+        <div class="line show"><div class="k">🖱 Show</div><p>Open <b>Connections</b> (Asana real, rest mock). Sign out, log in as <b>demo / demo1234</b>, try to approve — blocked.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide outro">
+    <div class="head" style="justify-content:center"><span class="beat">Beat 7 · Close</span></div>
+    <h1>Deployed. And working.</h1>
+    <div class="sub">Multi-channel ingestion · RAG-grounded recommendations · style-matched drafts · a hard approval gate · a real write to Asana.</div>
+    <div class="chips">
+      <span class="chip">Live URL + demo logins</span>
+      <span class="chip">Setup in SOLUTION.md</span>
+      <span class="chip">Thanks for watching</span>
+    </div>
+  </section>
+
+  <div class="brand"><b>Chief of Staff</b> · Demo flow</div>
+  <button class="side prev" aria-label="Previous">‹</button>
+  <button class="side next" aria-label="Next">›</button>
+  <div class="nav"><div class="dots"></div><span class="count">1 / 7</span></div>
+</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const dotsWrap=document.querySelector('.dots');
+  const count=document.querySelector('.count');
+  let i=0;
+  slides.forEach((_,n)=>{const d=document.createElement('div');d.className='dot'+(n===0?' on':'');d.onclick=()=>go(n);dotsWrap.appendChild(d)});
+  const dots=[...document.querySelectorAll('.dot')];
+  function go(n){
+    i=(n+slides.length)%slides.length;
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    dots.forEach((d,k)=>d.classList.toggle('on',k===i));
+    count.textContent=(i+1)+' / '+slides.length;
+  }
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();go(i+1);}
+    if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1);}
+  });
+  document.querySelector('.side.next').onclick=()=>go(i+1);
+  document.querySelector('.side.prev').onclick=()=>go(i-1);
+</script>
+</body>
+</html>

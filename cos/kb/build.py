@@ -94,7 +94,10 @@ def build_kb() -> KB:
     # ---- ingest (real connectors + client against the mock) -----------------
     messages: list[Message] = []
     for conn in all_connectors():
-        messages.extend(conn.list_incoming())
+        try:
+            messages.extend(conn.list_incoming())
+        except Exception:  # noqa: BLE001 — one channel failing must not empty the inbox
+            continue
     asana = AsanaClient()
     tasks = asana.list_tasks()
     projects = asana.list_projects()

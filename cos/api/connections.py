@@ -99,19 +99,40 @@ def all_status() -> dict:
     return {"mode": s.mode, "providers": [status_for(p) for p in PROVIDERS]}
 
 
+# Real API host per provider (mirrors _points_at_real). Switching a provider only
+# repoints THAT provider's base URL — the global MODE is never touched, so flipping
+# one channel can never break the others (e.g. Asana real while Gmail stays on the mock).
+_REAL_HOST = {
+    "gmail": "https://gmail.googleapis.com",
+    "x": "https://api.twitter.com",
+    "whatsapp": "https://graph.facebook.com",
+    "asana": "https://app.asana.com/api/1.0",
+}
+_BASE_ENV = {
+    "gmail": "GMAIL_BASE_URL", "x": "X_BASE_URL",
+    "whatsapp": "WHATSAPP_BASE_URL", "asana": "ASANA_BASE_URL",
+}
+
+
 def apply_update(provider: str, mode: str, credentials: dict[str, str]) -> dict:
-    """Flip the process mode and, in real mode, inject this provider's creds. Returns the
-    new status. Caller is responsible for rebuilding any cached KB."""
+    """Repoint a single provider between its mock and real base URL (and inject creds in
+    real mode). Per-provider only — never flips the global MODE, so one channel's change
+    cannot take down the others. Caller rebuilds any cached KB."""
     if provider not in PROVIDERS:
         raise ValueError(f"unknown provider: {provider}")
     mode = (mode or "mock").lower()
     if mode not in ("mock", "real"):
         raise ValueError(f"mode must be mock|real, got {mode}")
-    os.environ["MODE"] = mode
+    s = get_settings()
+    mock_root = f"http://{s.mock_host}:{s.mock_port}"
     if mode == "real":
+        os.environ[_BASE_ENV[provider]] = _REAL_HOST[provider]
         for field, value in (credentials or {}).items():
             env = _CRED_ENV.get(provider, {}).get(field)
             if env and value:
                 os.environ[env] = value
+    else:
+        os.environ[_BASE_ENV[provider]] = (
+            mock_root + "/api/1.0" if provider == "asana" else mock_root)
     get_settings.cache_clear()
     return status_for(provider)
