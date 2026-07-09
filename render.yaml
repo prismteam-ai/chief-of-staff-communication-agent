@@ -21,15 +21,25 @@ services:
         sync: false
       - key: AZURE_OPENAI_EMBED_DEPLOYMENT
         value: text-embedding-3-small
+      # Google OAuth (Gmail connect) + MCP auth/scope — secrets set in the dashboard
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        value: https://cos-comms-agent.onrender.com/api/oauth/google/callback
+      - key: MCP_AUTH_TOKEN
+        sync: false
+      # MCP surface scopes to this tenant (the demo tenant for the shipped Cursor config)
+      - key: MCP_OWNER_ID
+        sync: false
+      - key: PUBLIC_HOST
+        value: cos-comms-agent.onrender.com
       - key: AUTOSYNC
         value: "1"
       - key: AUTOSYNC_INTERVAL_S
         value: "300"
-      # optional real-provider credentials (connectors stay in fixture mode without them)
-      - key: ASANA_ACCESS_TOKEN
-        sync: false
-      - key: ASANA_WORKSPACE_GID
-        sync: false
+      # optional real-provider credentials (channel unavailable to a tenant without them)
       - key: X_USER_ACCESS_TOKEN
         sync: false
       - key: X_SELF_USER_ID

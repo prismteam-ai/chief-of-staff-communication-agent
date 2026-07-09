@@ -6,11 +6,10 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 
-# application
+# application (no data/ — real-only, per-tenant; connectors resolve from the DB)
 COPY README.md ./
 COPY src ./src
 COPY web ./web
-COPY data/fixtures ./data/fixtures
 COPY migrations ./migrations
 COPY scripts ./scripts
 RUN uv sync --frozen --no-dev
