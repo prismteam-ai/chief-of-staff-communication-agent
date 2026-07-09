@@ -126,6 +126,26 @@
                        background: var(--accent); color: #fff; cursor: pointer; }
   #login-msg { color: var(--critical); font-size: 13px; min-height: 18px; margin-top: 8px; }
   @media (max-width: 720px) { .work { grid-template-columns: 1fr; } .rail { max-height: 40vh; } }
+
+  /* connect modal (guided per-channel credential entry) */
+  #cx-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none;
+                align-items: center; justify-content: center; z-index: 20; padding: 16px; }
+  #cx-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+             padding: 24px; width: 440px; max-width: 100%; max-height: 90vh; overflow-y: auto; }
+  #cx-card h1 { font-size: 16px; margin-bottom: 8px; }
+  .cx-help { color: var(--ink-2); font-size: 13px; line-height: 1.5; margin-bottom: 14px; }
+  .cx-help a { color: var(--accent); }
+  .cx-help code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+                  background: var(--page); padding: 1px 5px; border-radius: 4px; }
+  .cx-field { margin-bottom: 10px; }
+  .cx-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .cx-field input { width: 100%; padding: 8px 10px; font: inherit; border: 1px solid var(--grid);
+                    border-radius: 8px; background: var(--page); color: var(--ink); }
+  #cx-msg { color: var(--critical); font-size: 12px; min-height: 16px; }
+  .cx-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+  .cx-actions button { font: inherit; border-radius: 8px; padding: 8px 16px; cursor: pointer; border: 1px solid var(--border); }
+  .cx-connect { background: var(--accent); color: #fff; border-color: transparent; }
+  .cx-cancel { background: transparent; color: var(--ink-2); }
 </style>
 </head>
 <body>
@@ -137,6 +157,18 @@
     <input id="li-pass" type="password" placeholder="password" autocomplete="current-password" required>
     <button type="submit">Sign in</button>
     <div id="login-msg"></div>
+  </form>
+</div>
+<div id="cx-overlay" onclick="if(event.target===this)closeConnect()">
+  <form id="cx-card" onsubmit="submitConnect(event)">
+    <h1 id="cx-title"></h1>
+    <div id="cx-help" class="cx-help"></div>
+    <div id="cx-fields"></div>
+    <div id="cx-msg"></div>
+    <div class="cx-actions">
+      <button type="button" class="cx-cancel" onclick="closeConnect()">Cancel</button>
+      <button type="submit" class="cx-connect">Connect</button>
+    </div>
   </form>
 </div>
 <main>
@@ -381,17 +413,18 @@ async function renderConn() {
         <div class="sub">${x.connected ? esc(x.accounts.join(", ")||"connected") : (x.method==="oauth"?"Google consent (our app)":"paste app-password / token")}</div></div>
       <div>${x.connected ? `<span class="pill live">live</span>` :
         x.method==="oauth" ? `<button class="cta" onclick="oauthConnect()">Connect</button>` :
-        `<button onclick="pasteConnect('${x.channel}','${esc(x.label)}')">Connect</button>`}</div></div>`;
+        CONNECT_FORMS[x.channel] ? `<button onclick="openConnect('${x.channel}')">Connect</button>` :
+        `<span class="pill">via login script</span>`}</div></div>`;
     const asanaRow = `<div class="row"><div><div class="name">✅ Asana</div>
         <div class="sub">${asana.connected?'workspace connected · tasks created from communications':'not connected'}</div></div>
-      <div>${asana.connected?'<span class="pill live">live</span>':'<button onclick="pasteConnect(\'asana\',\'Asana\')">Connect</button>'}</div></div>`;
+      <div>${asana.connected?'<span class="pill live">live</span>':'<button onclick="openConnect(\'asana\')">Connect</button>'}</div></div>`;
     const hasConnected = live.length || asana.connected;
     el.innerHTML =
       `<div class="syncbar"><button class="cta" onclick="syncNow(this)">↻ Sync now</button>
         <span class="meta">pull the latest from your connected channels</span></div>` +
       (hasConnected ? `<h2>Connected</h2><div class="rows">${live.map(rowHtml).join("")}${asana.connected?asanaRow:""}</div>` : "") +
       `<h2>Available</h2><div class="rows">${avail.map(rowHtml).join("")}${asana.connected?"":asanaRow}</div>
-       <p class="meta" style="margin-top:12px">Connect Gmail opens Google's consent (our registered app). Other email (IMAP) and Telegram ask for a credential in one field. Every channel is a real integration — your account, your data, isolated to your login.</p>`;
+       <p class="meta" style="margin-top:12px">Connect Gmail opens Google's consent (our registered app). Other email (IMAP) and Asana open a short guided form with instructions. Every channel is a real integration — your account, your data, isolated to your login.</p>`;
   } catch (e) { el.innerHTML = `<div class="empty">Failed: ${esc(e.message)}</div>`; }
 }
 async function syncNow(btn) {
@@ -406,13 +439,55 @@ async function oauthConnect() {
   try { const r = await j("/oauth/google/start"); location.href = r.url; }
   catch (e) { alert("Could not start Google connect: " + e.message); }
 }
-async function pasteConnect(channel, label) {
-  const handle = prompt(`${label}: account/handle (e.g. address or number)`); if (!handle) return;
-  const secret = prompt(`${label}: token / app password`); if (!secret) return;
-  try { await j(`/channels/${channel}/connect`, {method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({account_handle: handle, secret})});
-    renderConn();
-  } catch (e) { alert("Failed: " + e.message); }
+// per-channel guided connect forms — the user pastes credentials here (never in chat),
+// with instructions + where-to-get-it links. build() maps fields → the connect payload.
+const CONNECT_FORMS = {
+  email: {
+    title: "Connect email (IMAP)",
+    help: `Works with Fastmail, Outlook / Microsoft 365, Yahoo, iCloud, or Gmail via an app-password.
+           Use an <b>app password</b>, not your login password
+           (<a href="https://support.google.com/mail/answer/185833" target="_blank" rel="noopener">how to create one</a>).`,
+    fields: [
+      {k:"email", label:"Email address", type:"email", ph:"you@company.com", req:true},
+      {k:"password", label:"App password", type:"password", ph:"xxxx xxxx xxxx xxxx", req:true},
+      {k:"imap_host", label:"IMAP host (optional — auto-detected from your address)", type:"text", ph:"imap.gmail.com"},
+    ],
+    build: v => ({account_handle: v.email,
+      secret: JSON.stringify(v.imap_host ? {password:v.password, imap_host:v.imap_host} : {password:v.password})}),
+  },
+  asana: {
+    title: "Connect Asana",
+    help: `Paste a <b>Personal Access Token</b> — create one at
+           <a href="https://app.asana.com/0/my-apps" target="_blank" rel="noopener">app.asana.com → Apps → Personal access tokens</a>.
+           Tasks are created in your own workspace.`,
+    fields: [{k:"pat", label:"Personal Access Token", type:"password", ph:"1/1216…", req:true}],
+    build: v => ({account_handle:"asana", secret: v.pat}),
+  },
+};
+let CX_CHANNEL = null;
+function openConnect(channel) {
+  const f = CONNECT_FORMS[channel];
+  if (!f) { alert("This channel connects via a one-time login script — see the setup docs."); return; }
+  CX_CHANNEL = channel;
+  document.getElementById("cx-title").textContent = f.title;
+  document.getElementById("cx-help").innerHTML = f.help;
+  document.getElementById("cx-fields").innerHTML = f.fields.map(fl =>
+    `<div class="cx-field"><label>${esc(fl.label)}</label>
+       <input data-k="${fl.k}" type="${fl.type}" placeholder="${esc(fl.ph||'')}" ${fl.req?'required':''}></div>`).join("");
+  document.getElementById("cx-msg").textContent = "";
+  document.getElementById("cx-overlay").style.display = "flex";
+}
+function closeConnect() { document.getElementById("cx-overlay").style.display = "none"; CX_CHANNEL = null; }
+async function submitConnect(ev) {
+  ev.preventDefault();
+  const f = CONNECT_FORMS[CX_CHANNEL]; if (!f) return;
+  const v = {}; document.querySelectorAll("#cx-fields input").forEach(i => v[i.dataset.k] = i.value.trim());
+  const msg = document.getElementById("cx-msg"); msg.textContent = "Connecting…";
+  try {
+    await j(`/channels/${CX_CHANNEL}/connect`, {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(f.build(v))});
+    closeConnect(); renderConn();
+  } catch (e) { msg.textContent = "Failed: " + e.message; }
 }
 
 /* ---- People (cross-channel contacts) ---- */
