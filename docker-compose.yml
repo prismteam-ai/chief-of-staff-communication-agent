@@ -1,0 +1,121 @@
+services:
+  # Provider mocks (Gmail / X / WhatsApp / Asana), one FastAPI app.
+  mocks:
+    build: .
+    command: uvicorn cos.mocks.app:app --host 0.0.0.0 --port 8900
+    ports:
+      - "8900:8900"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8900/')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # A2A role agents (separately addressable HTTP services). One command per role.
+  engineering:
+    build: .
+    command: python -m cos.agents.a2a.launch engineering
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.1}
+    ports: ["8901:8901"]
+  cfo:
+    build: .
+    command: python -m cos.agents.a2a.launch cfo
+    environment: {OPENAI_API_KEY: "${OPENAI_API_KEY:-}", OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.1}"}
+    ports: ["8902:8902"]
+  recruiter:
+    build: .
+    command: python -m cos.agents.a2a.launch recruiter
+    environment: {OPENAI_API_KEY: "${OPENAI_API_KEY:-}", OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.1}"}
+    ports: ["8903:8903"]
+  scheduler:
+    build: .
+    command: python -m cos.agents.a2a.launch scheduler
+    environment: {OPENAI_API_KEY: "${OPENAI_API_KEY:-}", OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.1}"}
+    ports: ["8904:8904"]
+
+  # Gradio UI to explore the RAG + graph + agent. Talks to the mocks + role agents.
+  ui:
+    build: .
+    command: python -m cos.ui.app
+    environment:
+      MODE: mock
+      MOCK_HOST: mocks
+      GMAIL_BASE_URL: http://mocks:8900
+      X_BASE_URL: http://mocks:8900
+      WHATSAPP_BASE_URL: http://mocks:8900
+      ASANA_BASE_URL: http://mocks:8900/api/1.0
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.1}
+      A2A_ENGINEERING_URL: http://engineering:8901
+      A2A_CFO_URL: http://cfo:8902
+      A2A_RECRUITER_URL: http://recruiter:8903
+      A2A_SCHEDULER_URL: http://scheduler:8904
+    ports:
+      - "7860:7860"
+    depends_on:
+      mocks:
+        condition: service_healthy
+
+  # App API (FastAPI) — the product backend the Next.js frontend calls.
+  api:
+    build: .
+    command: uvicorn cos.api.app:app --host 0.0.0.0 --port 8000
+    environment:
+      MODE: mock
+      MOCK_HOST: mocks
+      MOCK_PORT: "8900"
+      GMAIL_BASE_URL: http://mocks:8900
+      X_BASE_URL: http://mocks:8900
+      WHATSAPP_BASE_URL: http://mocks:8900
+      ASANA_BASE_URL: http://mocks:8900/api/1.0
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.1}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-dev-insecure-change-me-in-production-0123456789}
+      API_CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      A2A_ENGINEERING_URL: http://engineering:8901
+      A2A_CFO_URL: http://cfo:8902
+      A2A_RECRUITER_URL: http://recruiter:8903
+      A2A_SCHEDULER_URL: http://scheduler:8904
+    ports:
+      - "8000:8000"
+    depends_on:
+      mocks:
+        condition: service_healthy
+
+  # Postgres — users + connection state for the web app.
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cos
+      POSTGRES_PASSWORD: cos
+      POSTGRES_DB: cos
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - cos_pgdata:/var/lib/postgresql/data
+
+  # Next.js frontend — login, chat, per-channel context, approval, connections.
+  web:
+    build: ./web
+    environment:
+      DATABASE_URL: postgresql://cos:cos@postgres:5432/cos?schema=public
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-dev-insecure-change-me-in-production-0123456789}
+      COS_API_URL: http://api:8000
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+volumes:
+  cos_pgdata:

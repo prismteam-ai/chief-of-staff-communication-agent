@@ -1,0 +1,32 @@
+{
+  "name": "Northstar",
+  "hq": "Palo Alto, CA",
+  "stage": "Series A (closing)",
+  "one_liner": "AI infrastructure startup; flagship is the Northstar API.",
+  "fundraise": {
+    "round": "Series A",
+    "lead": "Sequoia (example)",
+    "amount": "$18M",
+    "target_close": "2026-07-18",
+    "confidential": true
+  },
+  "product": {"name": "Northstar API", "v2_launch": "2026-07-25"},
+  "team": [
+    {"name": "Nadia Cohen", "role": "CFO", "owns": "finance, tax, invoices"},
+    {"name": "Victor Ruiz", "role": "Head of Engineering", "owns": "outages, product, SEV"},
+    {"name": "Mia Anders", "role": "Recruiter", "owns": "hiring logistics"}
+  ],
+  "investors": [
+    {"name": "Sequoia (example)", "contact": "Sarah Lin", "status": "leading Series A"},
+    {"name": "Northwind", "contact": "Priya Nair", "status": "existing seed investor"},
+    {"name": "Meridian VC", "contact": "Greg Salinas", "status": "prospective Series A"}
+  ],
+  "customers": [
+    {"name": "MegaCorp", "tier": "enterprise", "contact": "Dana Fox",
+     "note": "largest customer"}
+  ],
+  "partners": [
+    {"name": "Acme Partners", "contact": "Marcus Bell", "status": "LOI in progress"},
+    {"name": "Integrately", "contact": "Ravi Desai", "status": "integration winding down"}
+  ]
+}

@@ -1,0 +1,365 @@
+{
+  "messages": [
+    {
+      "id": "wamid.0050000000000000000000",
+      "from": "14155550117",
+      "timestamp": "1782712800",
+      "type": "text",
+      "text": {
+        "body": "did you get a chance to look at the deck? board is asking for it early"
+      }
+    },
+    {
+      "id": "wamid.0090000000000000000000",
+      "from": "14155550115",
+      "timestamp": "1782781200",
+      "type": "text",
+      "text": {
+        "body": "Hi Dmitrii \u2014 landlord needs a decision on the lease renewal by Friday. Same terms, 3-year. Want me to counter on the rent?"
+      }
+    },
+    {
+      "id": "wamid.0100000000000000000000",
+      "from": "12125550120",
+      "timestamp": "1781668800",
+      "type": "text",
+      "text": {
+        "body": "Dmitrii \u2014 your API has been down for 2 hours and my whole team is blocked. This is unacceptable, we need an ETA NOW."
+      }
+    },
+    {
+      "id": "wamid.0510000000000000000000",
+      "from": "14155551013",
+      "timestamp": "1781758800",
+      "type": "text",
+      "text": {
+        "body": "Following up on speaking invitation. Any update on your side?"
+      }
+    },
+    {
+      "id": "wamid.0550000000000000000000",
+      "from": "14155551024",
+      "timestamp": "1781586000",
+      "type": "text",
+      "text": {
+        "body": "We'd love your input on renewal question. Attaching details."
+      }
+    },
+    {
+      "id": "wamid.0580000000000000000000",
+      "from": "14155551011",
+      "timestamp": "1781830800",
+      "type": "text",
+      "text": {
+        "body": "Quick one \u2014 customer question. Do you have 15 minutes this week?"
+      }
+    },
+    {
+      "id": "wamid.0610000000000000000000",
+      "from": "14155551018",
+      "timestamp": "1781582400",
+      "type": "text",
+      "text": {
+        "body": "Quick one \u2014 customer question. Do you have 15 minutes this week?"
+      }
+    },
+    {
+      "id": "wamid.0611000000000000000000",
+      "from": "14155551018",
+      "timestamp": "1781596800",
+      "type": "text",
+      "text": {
+        "body": "Just bumping this \u2014 thanks!"
+      }
+    },
+    {
+      "id": "wamid.0640000000000000000000",
+      "from": "14155551024",
+      "timestamp": "1781420400",
+      "type": "text",
+      "text": {
+        "body": "We'd love your input on product feedback. Attaching details."
+      }
+    },
+    {
+      "id": "wamid.0660000000000000000000",
+      "from": "14155551017",
+      "timestamp": "1781683200",
+      "type": "text",
+      "text": {
+        "body": "Quick one \u2014 product feedback. Do you have 15 minutes this week?"
+      }
+    },
+    {
+      "id": "wamid.0670000000000000000000",
+      "from": "14155551003",
+      "timestamp": "1782115200",
+      "type": "text",
+      "text": {
+        "body": "Hi Dmitrii, customer question. Could you take a look and let me know by Monday?"
+      }
+    },
+    {
+      "id": "wamid.0671000000000000000000",
+      "from": "14155551003",
+      "timestamp": "1782129600",
+      "type": "text",
+      "text": {
+        "body": "Just bumping this \u2014 thanks!"
+      }
+    },
+    {
+      "id": "wamid.0710000000000000000000",
+      "from": "14155551019",
+      "timestamp": "1781395200",
+      "type": "text",
+      "text": {
+        "body": "Quick one \u2014 customer question. Do you have 15 minutes this week?"
+      }
+    },
+    {
+      "id": "wamid.0720000000000000000000",
+      "from": "14155551003",
+      "timestamp": "1782464400",
+      "type": "text",
+      "text": {
+        "body": "Following up on press inquiry. Any update on your side?"
+      }
+    },
+    {
+      "id": "wamid.0721000000000000000000",
+      "from": "14155551003",
+      "timestamp": "1782478800",
+      "type": "text",
+      "text": {
+        "body": "Just bumping this \u2014 thanks!"
+      }
+    },
+    {
+      "id": "wamid.0740000000000000000000",
+      "from": "14155551004",
+      "timestamp": "1781596800",
+      "type": "text",
+      "text": {
+        "body": "Following up on vendor invoice. Any update on your side?"
+      }
+    },
+    {
+      "id": "wamid.0800000000000000000000",
+      "from": "14155551026",
+      "timestamp": "1782460800",
+      "type": "text",
+      "text": {
+        "body": "Following up on intro request. Any update on your side?"
+      }
+    },
+    {
+      "id": "wamid.0820000000000000000000",
+      "from": "14155551008",
+      "timestamp": "1781431200",
+      "type": "text",
+      "text": {
+        "body": "We'd love your input on vendor invoice. Attaching details."
+      }
+    },
+    {
+      "id": "wamid.0830000000000000000000",
+      "from": "14155551026",
+      "timestamp": "1782216000",
+      "type": "text",
+      "text": {
+        "body": "Quick one \u2014 speaking invitation. Do you have 15 minutes this week?"
+      }
+    },
+    {
+      "id": "wamid.0920000000000000000000",
+      "from": "14155551022",
+      "timestamp": "1782806400",
+      "type": "text",
+      "text": {
+        "body": "Following up on renewal question. Any update on your side?"
+      }
+    },
+    {
+      "id": "wamid.1030000000000000000000",
+      "from": "14155551024",
+      "timestamp": "1781222400",
+      "type": "text",
+      "text": {
+        "body": "We'd love your input on partnership idea. Attaching details."
+      }
+    },
+    {
+      "id": "wamid.1120000000000000000000",
+      "from": "14155551005",
+      "timestamp": "1782352800",
+      "type": "text",
+      "text": {
+        "body": "Hi Dmitrii, product feedback. Could you take a look and let me know by the 15th?"
+      }
+    },
+    {
+      "id": "wamid.1300000000000000000000",
+      "from": "14155551023",
+      "timestamp": "1782558000",
+      "type": "text",
+      "text": {
+        "body": "Hi Dmitrii, product feedback. Could you take a look and let me know by Monday?"
+      }
+    }
+  ],
+  "contacts": [
+    {
+      "wa_id": "14155550117",
+      "profile": {
+        "name": "Emma Wright"
+      }
+    },
+    {
+      "wa_id": "14155550115",
+      "profile": {
+        "name": "Ana Garc\u00eda"
+      }
+    },
+    {
+      "wa_id": "12125550120",
+      "profile": {
+        "name": "Dana Fox"
+      }
+    },
+    {
+      "wa_id": "14155551013",
+      "profile": {
+        "name": "Phillip Ryan"
+      }
+    },
+    {
+      "wa_id": "14155551024",
+      "profile": {
+        "name": "Erik Williams"
+      }
+    },
+    {
+      "wa_id": "14155551011",
+      "profile": {
+        "name": "Julie King"
+      }
+    },
+    {
+      "wa_id": "14155551018",
+      "profile": {
+        "name": "Timothy Duncan"
+      }
+    },
+    {
+      "wa_id": "14155551017",
+      "profile": {
+        "name": "Amy Jones"
+      }
+    },
+    {
+      "wa_id": "14155551003",
+      "profile": {
+        "name": "Abigail Shaffer"
+      }
+    },
+    {
+      "wa_id": "14155551019",
+      "profile": {
+        "name": "Jeff Owens"
+      }
+    },
+    {
+      "wa_id": "14155551004",
+      "profile": {
+        "name": "Gregory Baker"
+      }
+    },
+    {
+      "wa_id": "14155551026",
+      "profile": {
+        "name": "Jennifer Silva"
+      }
+    },
+    {
+      "wa_id": "14155551008",
+      "profile": {
+        "name": "Rodney Trujillo"
+      }
+    },
+    {
+      "wa_id": "14155551022",
+      "profile": {
+        "name": "John Lewis"
+      }
+    },
+    {
+      "wa_id": "14155551005",
+      "profile": {
+        "name": "Shannon Ray"
+      }
+    },
+    {
+      "wa_id": "14155551023",
+      "profile": {
+        "name": "Rachel Mitchell"
+      }
+    }
+  ],
+  "sent": [
+    {
+      "id": "wamid.0581000000000000000000",
+      "to": "14155551011",
+      "timestamp": "1781845200",
+      "type": "text",
+      "text": {
+        "body": "Appreciate it. Let me loop in the team and get back to you."
+      }
+    },
+    {
+      "id": "wamid.0641000000000000000000",
+      "to": "14155551024",
+      "timestamp": "1781434800",
+      "type": "text",
+      "text": {
+        "body": "Thanks \u2014 taking a look now, will revert shortly."
+      }
+    },
+    {
+      "id": "wamid.0711000000000000000000",
+      "to": "14155551019",
+      "timestamp": "1781409600",
+      "type": "text",
+      "text": {
+        "body": "Appreciate it. Let me loop in the team and get back to you."
+      }
+    },
+    {
+      "id": "wamid.0821000000000000000000",
+      "to": "14155551008",
+      "timestamp": "1781445600",
+      "type": "text",
+      "text": {
+        "body": "Appreciate it. Let me loop in the team and get back to you."
+      }
+    },
+    {
+      "id": "wamid.0831000000000000000000",
+      "to": "14155551026",
+      "timestamp": "1782230400",
+      "type": "text",
+      "text": {
+        "body": "Got it, this works for me. Let's proceed."
+      }
+    },
+    {
+      "id": "wamid.1301000000000000000000",
+      "to": "14155551023",
+      "timestamp": "1782572400",
+      "type": "text",
+      "text": {
+        "body": "Got it, this works for me. Let's proceed."
+      }
+    }
+  ]
+}

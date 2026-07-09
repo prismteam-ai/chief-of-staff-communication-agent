@@ -1,0 +1,4548 @@
+{
+  "messages": [
+    {
+      "id": "gmailmsg-001-0",
+      "threadId": "gmthr-001",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781766000000",
+      "snippet": "Hi Dmitrii, great catching up. Attaching the draft term sheet \u2014 we'd love to lea",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Sarah Lin <sarah.lin@sequoia-example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Series A term sheet \u2014 next steps"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 18 Jun 2026 07:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SGkgRG1pdHJpaSwgZ3JlYXQgY2F0Y2hpbmcgdXAuIEF0dGFjaGluZyB0aGUgZHJhZnQgdGVybSBzaGVldCDigJQgd2UnZCBsb3ZlIHRvIGxlYWQgeW91ciBTZXJpZXMgQS4gQ2FuIHlvdSByZXZpZXcgdGhlIHZhbHVhdGlvbiBhbmQgYm9hcmQgdGVybXMgYW5kIHNlbmQgdGhvdWdodHMgYnkgRnJpZGF5Pw==",
+          "size": 170
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-001-1",
+      "threadId": "gmthr-001",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1781780400000",
+      "snippet": "Thanks Sarah, this is exciting. Reviewing with counsel now, will revert with com",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Sarah Lin <sarah.lin@sequoia-example.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Series A term sheet \u2014 next steps"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 18 Jun 2026 11:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIFNhcmFoLCB0aGlzIGlzIGV4Y2l0aW5nLiBSZXZpZXdpbmcgd2l0aCBjb3Vuc2VsIG5vdywgd2lsbCByZXZlcnQgd2l0aCBjb21tZW50cyBUaHVyc2RheS4=",
+          "size": 95
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-001-2",
+      "threadId": "gmthr-001",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781798400000",
+      "snippet": "Perfect. One open question: are you open to a board observer seat for us in addi",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Sarah Lin <sarah.lin@sequoia-example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Series A term sheet \u2014 next steps"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 18 Jun 2026 16:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "UGVyZmVjdC4gT25lIG9wZW4gcXVlc3Rpb246IGFyZSB5b3Ugb3BlbiB0byBhIGJvYXJkIG9ic2VydmVyIHNlYXQgZm9yIHVzIGluIGFkZGl0aW9uIHRvIHRoZSBvbmUgYm9hcmQgc2VhdD8=",
+          "size": 107
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-003-0",
+      "threadId": "gmthr-003",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782345600000",
+      "snippet": "Reviewed Sequoia's draft. Two calls need YOU: (1) they want a board-observer sea",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Rachel Kim <rachel.kim@coudert-example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Re: Series A \u2014 open terms"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 25 Jun 2026 00:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "UmV2aWV3ZWQgU2VxdW9pYSdzIGRyYWZ0LiBUd28gY2FsbHMgbmVlZCBZT1U6ICgxKSB0aGV5IHdhbnQgYSBib2FyZC1vYnNlcnZlciBzZWF0IG9uIHRvcCBvZiB0aGUgYm9hcmQgc2VhdCwgKDIpIHByby1yYXRhIHJpZ2h0cyBhdCAxLjV4LiBIb3cgYWdncmVzc2l2ZSBkbyB5b3Ugd2FudCB0byBiZT8gSSBjYW4gcHVzaCBiYWNrIG9uIGJvdGggYnV0IG5lZWQgeW91ciByZWFkLg==",
+          "size": 214
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-004-0",
+      "threadId": "gmthr-004",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782039600000",
+      "snippet": "Sharing the Q3 board deck skeleton. Please fill in the revenue and hiring slides",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Emma Wright <emma.wright@boardco.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Q3 board deck \u2014 draft for review"
+          },
+          {
+            "name": "Date",
+            "value": "Sun, 21 Jun 2026 11:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "U2hhcmluZyB0aGUgUTMgYm9hcmQgZGVjayBza2VsZXRvbi4gUGxlYXNlIGZpbGwgaW4gdGhlIHJldmVudWUgYW5kIGhpcmluZyBzbGlkZXMgYmVmb3JlIHdlIGNpcmN1bGF0ZSB0byB0aGUgYm9hcmQgb24gdGhlIDEydGgu",
+          "size": 126
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-004-1",
+      "threadId": "gmthr-004",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1782054000000",
+      "snippet": "Got it Emma \u2014 I'll take the revenue slide, can you own hiring?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Emma Wright <emma.wright@boardco.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Q3 board deck \u2014 draft for review"
+          },
+          {
+            "name": "Date",
+            "value": "Sun, 21 Jun 2026 15:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "R290IGl0IEVtbWEg4oCUIEknbGwgdGFrZSB0aGUgcmV2ZW51ZSBzbGlkZSwgY2FuIHlvdSBvd24gaGlyaW5nPw==",
+          "size": 62
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-006-0",
+      "threadId": "gmthr-006",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782630000000",
+      "snippet": "Following up on our chat about the Head of Sales role. I'm very interested \u2014 att",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Tom Reyes <tom.reyes@candidatemail.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Head of Sales \u2014 Tom Reyes"
+          },
+          {
+            "name": "Date",
+            "value": "Sun, 28 Jun 2026 07:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIG9uIG91ciBjaGF0IGFib3V0IHRoZSBIZWFkIG9mIFNhbGVzIHJvbGUuIEknbSB2ZXJ5IGludGVyZXN0ZWQg4oCUIGF0dGFjaGluZyBteSA5MC1kYXkgcGxhbi4=",
+          "size": 102
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-008-0",
+      "threadId": "gmthr-008",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782172800000",
+      "snippet": "Proposal attached. If the integration terms work, we can co-market at the summit",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Marcus Bell <marcus@acme-partners.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Acme \u00d7 your team \u2014 partnership proposal"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 23 Jun 2026 00:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "UHJvcG9zYWwgYXR0YWNoZWQuIElmIHRoZSBpbnRlZ3JhdGlvbiB0ZXJtcyB3b3JrLCB3ZSBjYW4gY28tbWFya2V0IGF0IHRoZSBzdW1taXQuIENhbiB3ZSBnZXQgYW4gTE9JIHNpZ25lZCBieSB0aGUgMTV0aD8=",
+          "size": 119
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-013-0",
+      "threadId": "gmthr-013",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782093600000",
+      "snippet": "Hey Dmitrii \u2014 I know you're close with Sarah Lin at Sequoia. Any chance you'd in",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Leo Martin <leo@leomartin.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Intro to Sarah at Sequoia?"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 22 Jun 2026 02:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SGV5IERtaXRyaWkg4oCUIEkga25vdyB5b3UncmUgY2xvc2Ugd2l0aCBTYXJhaCBMaW4gYXQgU2VxdW9pYS4gQW55IGNoYW5jZSB5b3UnZCBpbnRybyBtZT8gUmFpc2luZyBteSBzZWVkIGFuZCBzaGUncyBwZXJmZWN0Lg==",
+          "size": 122
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-014-0",
+      "threadId": "gmthr-014",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781247600000",
+      "snippet": "Quick question on the R&D credit for your Q2 filing \u2014 which entity should we boo",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Bill Turner <bill@turner-accounting.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Q2 tax filing \u2014 question"
+          },
+          {
+            "name": "Date",
+            "value": "Fri, 12 Jun 2026 07:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "UXVpY2sgcXVlc3Rpb24gb24gdGhlIFImRCBjcmVkaXQgZm9yIHlvdXIgUTIgZmlsaW5nIOKAlCB3aGljaCBlbnRpdHkgc2hvdWxkIHdlIGJvb2sgdGhlIGNvbnRyYWN0b3IgY29zdHMgdW5kZXI_",
+          "size": 109
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-015-0",
+      "threadId": "gmthr-015",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1781341200000",
+      "snippet": "Hi Greg \u2014 following up from our call. We'd love to have Meridian in the round, t",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Greg Salinas <greg@meridian-vc.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Room in the Series A?"
+          },
+          {
+            "name": "Date",
+            "value": "Sat, 13 Jun 2026 09:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SGkgR3JlZyDigJQgZm9sbG93aW5nIHVwIGZyb20gb3VyIGNhbGwuIFdlJ2QgbG92ZSB0byBoYXZlIE1lcmlkaWFuIGluIHRoZSByb3VuZCwgdGhlcmUncyByb29tIGZvciAkNTAway4gQ2FuIHlvdSBjb25maXJtIGJ5IGVuZCBvZiB3ZWVrPw==",
+          "size": 134
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-016-0",
+      "threadId": "gmthr-016",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782734400000",
+      "snippet": "Thanks for the June update, numbers look strong.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Priya Nair <priya.nair@northwind.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "June investor update \u2014 thanks"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 29 Jun 2026 12:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIGZvciB0aGUgSnVuZSB1cGRhdGUsIG51bWJlcnMgbG9vayBzdHJvbmcu",
+          "size": 48
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-016-1",
+      "threadId": "gmthr-016",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1782748800000",
+      "snippet": "Appreciate it Priya! Let's catch up next month.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Priya Nair <priya.nair@northwind.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "June investor update \u2014 thanks"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 29 Jun 2026 16:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "QXBwcmVjaWF0ZSBpdCBQcml5YSEgTGV0J3MgY2F0Y2ggdXAgbmV4dCBtb250aC4=",
+          "size": 47
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-017-0",
+      "threadId": "gmthr-017",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782259200000",
+      "snippet": "Hi CEO, I help startups 10x their outbound with our AI SDR. Got 15 min this week",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Chad Miller <chad@growthhackerpro.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "10x your pipeline in 30 days \ud83d\ude80"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 24 Jun 2026 00:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SGkgQ0VPLCBJIGhlbHAgc3RhcnR1cHMgMTB4IHRoZWlyIG91dGJvdW5kIHdpdGggb3VyIEFJIFNEUi4gR290IDE1IG1pbiB0aGlzIHdlZWsgZm9yIGEgcXVpY2sgZGVtbz8gSnVzdCBuZWVkIGEgY3JlZGl0IGNhcmQgdG8gc3RhcnQgdGhlIHRyaWFsLg==",
+          "size": 142
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-018-0",
+      "threadId": "gmthr-018",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782126000000",
+      "snippet": "Would love to catch up and hear about the raise \u2014 do you have 30 minutes next we",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Sam Patel <sam.patel@futureco.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Grab 30 min next week?"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 22 Jun 2026 11:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V291bGQgbG92ZSB0byBjYXRjaCB1cCBhbmQgaGVhciBhYm91dCB0aGUgcmFpc2Ug4oCUIGRvIHlvdSBoYXZlIDMwIG1pbnV0ZXMgbmV4dCB3ZWVrPyBGbGV4aWJsZSBvbiB0aW1pbmcu",
+          "size": 103
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-019-0",
+      "threadId": "gmthr-019",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782298800000",
+      "snippet": "Heads up \u2014 we've decided to sunset the Integrately integration on our side, so n",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Ravi Desai <ravi@integrately-example.in>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Winding down the integration"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 24 Jun 2026 11:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SGVhZHMgdXAg4oCUIHdlJ3ZlIGRlY2lkZWQgdG8gc3Vuc2V0IHRoZSBJbnRlZ3JhdGVseSBpbnRlZ3JhdGlvbiBvbiBvdXIgc2lkZSwgc28gbm8gbmVlZCB0byBrZWVwIHRoZSBqb2ludCB3b3JrIGl0ZW0gb3Blbi4gVGhhbmtzIGZvciB0aGUgZWZmb3J0IQ==",
+          "size": 143
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-020-0",
+      "threadId": "gmthr-020",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781856000000",
+      "snippet": "We need your Q4 volume commitment by the 15th to lock pricing. Forecast attached",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Kenji Watanabe <kenji@supply-example.jp>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Q4 supply commitments"
+          },
+          {
+            "name": "Date",
+            "value": "Fri, 19 Jun 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UgbmVlZCB5b3VyIFE0IHZvbHVtZSBjb21taXRtZW50IGJ5IHRoZSAxNXRoIHRvIGxvY2sgcHJpY2luZy4gRm9yZWNhc3QgYXR0YWNoZWQu",
+          "size": 81
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-021-0",
+      "threadId": "gmthr-021",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1770289200000",
+      "snippet": "Thanks again for the time last month, really helpful.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Sarah Lin <sarah.lin@sequoia-example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 05 Feb 2026 11:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIGFnYWluIGZvciB0aGUgdGltZSBsYXN0IG1vbnRoLCByZWFsbHkgaGVscGZ1bC4=",
+          "size": 53
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-021-1",
+      "threadId": "gmthr-021",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1770303600000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Sarah Lin <sarah.lin@sequoia-example.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 05 Feb 2026 15:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-022-0",
+      "threadId": "gmthr-022",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1770688800000",
+      "snippet": "Great to reconnect. Here's the doc I mentioned.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Sarah Lin <sarah.lin@sequoia-example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 10 Feb 2026 02:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "R3JlYXQgdG8gcmVjb25uZWN0LiBIZXJlJ3MgdGhlIGRvYyBJIG1lbnRpb25lZC4=",
+          "size": 47
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-022-1",
+      "threadId": "gmthr-022",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1770703200000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Sarah Lin <sarah.lin@sequoia-example.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 10 Feb 2026 06:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-023-0",
+      "threadId": "gmthr-023",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1776996000000",
+      "snippet": "Following up from our last call \u2014 sharing the notes we discussed.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Marcus Bell <marcus@acme-partners.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Fri, 24 Apr 2026 02:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIGZyb20gb3VyIGxhc3QgY2FsbCDigJQgc2hhcmluZyB0aGUgbm90ZXMgd2UgZGlzY3Vzc2VkLg==",
+          "size": 65
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-023-1",
+      "threadId": "gmthr-023",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1777010400000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Marcus Bell <marcus@acme-partners.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Fri, 24 Apr 2026 06:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-024-0",
+      "threadId": "gmthr-024",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1774753200000",
+      "snippet": "Appreciated the intro \u2014 closing the loop on it.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Priya Nair <priya.nair@northwind.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Recap"
+          },
+          {
+            "name": "Date",
+            "value": "Sun, 29 Mar 2026 03:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "QXBwcmVjaWF0ZWQgdGhlIGludHJvIOKAlCBjbG9zaW5nIHRoZSBsb29wIG9uIGl0Lg==",
+          "size": 47
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-024-1",
+      "threadId": "gmthr-024",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1774767600000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Priya Nair <priya.nair@northwind.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Recap"
+          },
+          {
+            "name": "Date",
+            "value": "Sun, 29 Mar 2026 07:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-025-0",
+      "threadId": "gmthr-025",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1778148000000",
+      "snippet": "Thanks again for the time last month, really helpful.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Priya Nair <priya.nair@northwind.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Recap"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 07 May 2026 10:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIGFnYWluIGZvciB0aGUgdGltZSBsYXN0IG1vbnRoLCByZWFsbHkgaGVscGZ1bC4=",
+          "size": 53
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-025-1",
+      "threadId": "gmthr-025",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1778162400000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Priya Nair <priya.nair@northwind.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Recap"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 07 May 2026 14:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-026-0",
+      "threadId": "gmthr-026",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1776211200000",
+      "snippet": "Quick recap of where we landed on the last item.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Priya Nair <priya.nair@northwind.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 15 Apr 2026 00:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "UXVpY2sgcmVjYXAgb2Ygd2hlcmUgd2UgbGFuZGVkIG9uIHRoZSBsYXN0IGl0ZW0u",
+          "size": 48
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-026-1",
+      "threadId": "gmthr-026",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1776225600000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Priya Nair <priya.nair@northwind.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 15 Apr 2026 04:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-027-0",
+      "threadId": "gmthr-027",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1778558400000",
+      "snippet": "Great to reconnect. Here's the doc I mentioned.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Tom Reyes <tom.reyes@candidatemail.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Recap"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 12 May 2026 04:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "R3JlYXQgdG8gcmVjb25uZWN0LiBIZXJlJ3MgdGhlIGRvYyBJIG1lbnRpb25lZC4=",
+          "size": 47
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-027-1",
+      "threadId": "gmthr-027",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1778572800000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Tom Reyes <tom.reyes@candidatemail.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Recap"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 12 May 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-028-0",
+      "threadId": "gmthr-028",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1771732800000",
+      "snippet": "Thanks again for the time last month, really helpful.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Tom Reyes <tom.reyes@candidatemail.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Catching up"
+          },
+          {
+            "name": "Date",
+            "value": "Sun, 22 Feb 2026 04:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIGFnYWluIGZvciB0aGUgdGltZSBsYXN0IG1vbnRoLCByZWFsbHkgaGVscGZ1bC4=",
+          "size": 53
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-028-1",
+      "threadId": "gmthr-028",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1771747200000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Tom Reyes <tom.reyes@candidatemail.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Catching up"
+          },
+          {
+            "name": "Date",
+            "value": "Sun, 22 Feb 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-029-0",
+      "threadId": "gmthr-029",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1770206400000",
+      "snippet": "Quick recap of where we landed on the last item.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Ana Garc\u00eda <ana@lease-realty.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 04 Feb 2026 12:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "UXVpY2sgcmVjYXAgb2Ygd2hlcmUgd2UgbGFuZGVkIG9uIHRoZSBsYXN0IGl0ZW0u",
+          "size": 48
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-029-1",
+      "threadId": "gmthr-029",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1770220800000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Ana Garc\u00eda <ana@lease-realty.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 04 Feb 2026 16:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-030-0",
+      "threadId": "gmthr-030",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1773730800000",
+      "snippet": "Thanks again for the time last month, really helpful.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "David Okafor <david@fintech-news.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Catching up"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 17 Mar 2026 07:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIGFnYWluIGZvciB0aGUgdGltZSBsYXN0IG1vbnRoLCByZWFsbHkgaGVscGZ1bC4=",
+          "size": 53
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-030-1",
+      "threadId": "gmthr-030",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1773745200000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "David Okafor <david@fintech-news.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Catching up"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 17 Mar 2026 11:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-031-0",
+      "threadId": "gmthr-031",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1774958400000",
+      "snippet": "Thanks again for the time last month, really helpful.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "David Okafor <david@fintech-news.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 31 Mar 2026 12:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIGFnYWluIGZvciB0aGUgdGltZSBsYXN0IG1vbnRoLCByZWFsbHkgaGVscGZ1bC4=",
+          "size": 53
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-031-1",
+      "threadId": "gmthr-031",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1774972800000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "David Okafor <david@fintech-news.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 31 Mar 2026 16:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-032-0",
+      "threadId": "gmthr-032",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1779087600000",
+      "snippet": "Quick recap of where we landed on the last item.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Emma Wright <emma.wright@boardco.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 18 May 2026 07:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "UXVpY2sgcmVjYXAgb2Ygd2hlcmUgd2UgbGFuZGVkIG9uIHRoZSBsYXN0IGl0ZW0u",
+          "size": 48
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-032-1",
+      "threadId": "gmthr-032",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1779102000000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Emma Wright <emma.wright@boardco.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 18 May 2026 11:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-033-0",
+      "threadId": "gmthr-033",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1770595200000",
+      "snippet": "Thanks again for the time last month, really helpful.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Emma Wright <emma.wright@boardco.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 09 Feb 2026 00:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIGFnYWluIGZvciB0aGUgdGltZSBsYXN0IG1vbnRoLCByZWFsbHkgaGVscGZ1bC4=",
+          "size": 53
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-033-1",
+      "threadId": "gmthr-033",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1770609600000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Emma Wright <emma.wright@boardco.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 09 Feb 2026 04:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-034-0",
+      "threadId": "gmthr-034",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1776934800000",
+      "snippet": "Thanks again for the time last month, really helpful.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Emma Wright <emma.wright@boardco.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 23 Apr 2026 09:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIGFnYWluIGZvciB0aGUgdGltZSBsYXN0IG1vbnRoLCByZWFsbHkgaGVscGZ1bC4=",
+          "size": 53
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-034-1",
+      "threadId": "gmthr-034",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1776949200000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Emma Wright <emma.wright@boardco.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 23 Apr 2026 13:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-035-0",
+      "threadId": "gmthr-035",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1779699600000",
+      "snippet": "Appreciated the intro \u2014 closing the loop on it.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Kenji Watanabe <kenji@supply-example.jp>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 25 May 2026 09:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "QXBwcmVjaWF0ZWQgdGhlIGludHJvIOKAlCBjbG9zaW5nIHRoZSBsb29wIG9uIGl0Lg==",
+          "size": 47
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-035-1",
+      "threadId": "gmthr-035",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1779714000000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Kenji Watanabe <kenji@supply-example.jp>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 25 May 2026 13:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-036-0",
+      "threadId": "gmthr-036",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1770606000000",
+      "snippet": "Great to reconnect. Here's the doc I mentioned.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Rachel Kim <rachel.kim@coudert-example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 09 Feb 2026 03:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "R3JlYXQgdG8gcmVjb25uZWN0LiBIZXJlJ3MgdGhlIGRvYyBJIG1lbnRpb25lZC4=",
+          "size": 47
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-036-1",
+      "threadId": "gmthr-036",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1770620400000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Rachel Kim <rachel.kim@coudert-example.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 09 Feb 2026 07:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-037-0",
+      "threadId": "gmthr-037",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1779447600000",
+      "snippet": "Thanks again for the time last month, really helpful.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Rachel Kim <rachel.kim@coudert-example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Recap"
+          },
+          {
+            "name": "Date",
+            "value": "Fri, 22 May 2026 11:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIGFnYWluIGZvciB0aGUgdGltZSBsYXN0IG1vbnRoLCByZWFsbHkgaGVscGZ1bC4=",
+          "size": 53
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-037-1",
+      "threadId": "gmthr-037",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1779462000000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Rachel Kim <rachel.kim@coudert-example.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Recap"
+          },
+          {
+            "name": "Date",
+            "value": "Fri, 22 May 2026 15:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-038-0",
+      "threadId": "gmthr-038",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1772254800000",
+      "snippet": "Following up from our last call \u2014 sharing the notes we discussed.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dana Fox <dana.fox@megacorp.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Sat, 28 Feb 2026 05:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIGZyb20gb3VyIGxhc3QgY2FsbCDigJQgc2hhcmluZyB0aGUgbm90ZXMgd2UgZGlzY3Vzc2VkLg==",
+          "size": 65
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-038-1",
+      "threadId": "gmthr-038",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1772269200000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dana Fox <dana.fox@megacorp.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Sat, 28 Feb 2026 09:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-039-0",
+      "threadId": "gmthr-039",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1771326000000",
+      "snippet": "Following up from our last call \u2014 sharing the notes we discussed.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dana Fox <dana.fox@megacorp.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Catching up"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 17 Feb 2026 11:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIGZyb20gb3VyIGxhc3QgY2FsbCDigJQgc2hhcmluZyB0aGUgbm90ZXMgd2UgZGlzY3Vzc2VkLg==",
+          "size": 65
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-039-1",
+      "threadId": "gmthr-039",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1771340400000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dana Fox <dana.fox@megacorp.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Catching up"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 17 Feb 2026 15:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-040-0",
+      "threadId": "gmthr-040",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1771905600000",
+      "snippet": "Thanks again for the time last month, really helpful.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dana Fox <dana.fox@megacorp.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Recap"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 24 Feb 2026 04:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIGFnYWluIGZvciB0aGUgdGltZSBsYXN0IG1vbnRoLCByZWFsbHkgaGVscGZ1bC4=",
+          "size": 53
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-040-1",
+      "threadId": "gmthr-040",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1771920000000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dana Fox <dana.fox@megacorp.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Recap"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 24 Feb 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-041-0",
+      "threadId": "gmthr-041",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1771840800000",
+      "snippet": "Appreciated the intro \u2014 closing the loop on it.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Leo Martin <leo@leomartin.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 23 Feb 2026 10:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "QXBwcmVjaWF0ZWQgdGhlIGludHJvIOKAlCBjbG9zaW5nIHRoZSBsb29wIG9uIGl0Lg==",
+          "size": 47
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-041-1",
+      "threadId": "gmthr-041",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1771855200000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Leo Martin <leo@leomartin.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 23 Feb 2026 14:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-042-0",
+      "threadId": "gmthr-042",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1778896800000",
+      "snippet": "Quick recap of where we landed on the last item.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Leo Martin <leo@leomartin.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Catching up"
+          },
+          {
+            "name": "Date",
+            "value": "Sat, 16 May 2026 02:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "UXVpY2sgcmVjYXAgb2Ygd2hlcmUgd2UgbGFuZGVkIG9uIHRoZSBsYXN0IGl0ZW0u",
+          "size": 48
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-042-1",
+      "threadId": "gmthr-042",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1778911200000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Leo Martin <leo@leomartin.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Catching up"
+          },
+          {
+            "name": "Date",
+            "value": "Sat, 16 May 2026 06:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-043-0",
+      "threadId": "gmthr-043",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1775102400000",
+      "snippet": "Appreciated the intro \u2014 closing the loop on it.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Leo Martin <leo@leomartin.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 02 Apr 2026 04:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "QXBwcmVjaWF0ZWQgdGhlIGludHJvIOKAlCBjbG9zaW5nIHRoZSBsb29wIG9uIGl0Lg==",
+          "size": 47
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-043-1",
+      "threadId": "gmthr-043",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1775116800000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Leo Martin <leo@leomartin.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 02 Apr 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-044-0",
+      "threadId": "gmthr-044",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1778486400000",
+      "snippet": "Appreciated the intro \u2014 closing the loop on it.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Bill Turner <bill@turner-accounting.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 11 May 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "QXBwcmVjaWF0ZWQgdGhlIGludHJvIOKAlCBjbG9zaW5nIHRoZSBsb29wIG9uIGl0Lg==",
+          "size": 47
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-044-1",
+      "threadId": "gmthr-044",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1778500800000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Bill Turner <bill@turner-accounting.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 11 May 2026 12:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-045-0",
+      "threadId": "gmthr-045",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1774494000000",
+      "snippet": "Following up from our last call \u2014 sharing the notes we discussed.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Bill Turner <bill@turner-accounting.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Catching up"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 26 Mar 2026 03:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIGZyb20gb3VyIGxhc3QgY2FsbCDigJQgc2hhcmluZyB0aGUgbm90ZXMgd2UgZGlzY3Vzc2VkLg==",
+          "size": 65
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-045-1",
+      "threadId": "gmthr-045",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1774508400000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Bill Turner <bill@turner-accounting.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Catching up"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 26 Mar 2026 07:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-046-0",
+      "threadId": "gmthr-046",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1775638800000",
+      "snippet": "Great to reconnect. Here's the doc I mentioned.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Sam Patel <sam.patel@futureco.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 08 Apr 2026 09:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "R3JlYXQgdG8gcmVjb25uZWN0LiBIZXJlJ3MgdGhlIGRvYyBJIG1lbnRpb25lZC4=",
+          "size": 47
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-046-1",
+      "threadId": "gmthr-046",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1775653200000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Sam Patel <sam.patel@futureco.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Following up"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 08 Apr 2026 13:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-047-0",
+      "threadId": "gmthr-047",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1770091200000",
+      "snippet": "Great to reconnect. Here's the doc I mentioned.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Sam Patel <sam.patel@futureco.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Catching up"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 03 Feb 2026 04:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "R3JlYXQgdG8gcmVjb25uZWN0LiBIZXJlJ3MgdGhlIGRvYyBJIG1lbnRpb25lZC4=",
+          "size": 47
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-047-1",
+      "threadId": "gmthr-047",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1770105600000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Sam Patel <sam.patel@futureco.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Catching up"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 03 Feb 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-048-0",
+      "threadId": "gmthr-048",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1771981200000",
+      "snippet": "Thanks again for the time last month, really helpful.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Sam Patel <sam.patel@futureco.example>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 25 Feb 2026 01:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIGFnYWluIGZvciB0aGUgdGltZSBsYXN0IG1vbnRoLCByZWFsbHkgaGVscGZ1bC4=",
+          "size": 53
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-048-1",
+      "threadId": "gmthr-048",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1771995600000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Sam Patel <sam.patel@futureco.example>"
+          },
+          {
+            "name": "Subject",
+            "value": "Notes from our call"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 25 Feb 2026 05:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-049-0",
+      "threadId": "gmthr-049",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1772701200000",
+      "snippet": "Great to reconnect. Here's the doc I mentioned.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Ravi Desai <ravi@integrately-example.in>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Catching up"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 05 Mar 2026 09:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "R3JlYXQgdG8gcmVjb25uZWN0LiBIZXJlJ3MgdGhlIGRvYyBJIG1lbnRpb25lZC4=",
+          "size": 47
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-049-1",
+      "threadId": "gmthr-049",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1772715600000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Ravi Desai <ravi@integrately-example.in>"
+          },
+          {
+            "name": "Subject",
+            "value": "Catching up"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 05 Mar 2026 13:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-050-0",
+      "threadId": "gmthr-050",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1772438400000",
+      "snippet": "Appreciated the intro \u2014 closing the loop on it.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Ravi Desai <ravi@integrately-example.in>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Recap"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 02 Mar 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "QXBwcmVjaWF0ZWQgdGhlIGludHJvIOKAlCBjbG9zaW5nIHRoZSBsb29wIG9uIGl0Lg==",
+          "size": 47
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-050-1",
+      "threadId": "gmthr-050",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1772452800000",
+      "snippet": "Thanks \u2014 appreciate it. Talk soon.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Ravi Desai <ravi@integrately-example.in>"
+          },
+          {
+            "name": "Subject",
+            "value": "Recap"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 02 Mar 2026 12:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCBhcHByZWNpYXRlIGl0LiBUYWxrIHNvb24u",
+          "size": 34
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-052-0",
+      "threadId": "gmthr-052",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781395200000",
+      "snippet": "Hi Dmitrii, scheduling a call. Could you take a look and let me know by EOD?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Deborah Brennan <ibrandt@example.net>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Scheduling a call"
+          },
+          {
+            "name": "Date",
+            "value": "Sun, 14 Jun 2026 00:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SGkgRG1pdHJpaSwgc2NoZWR1bGluZyBhIGNhbGwuIENvdWxkIHlvdSB0YWtlIGEgbG9vayBhbmQgbGV0IG1lIGtub3cgYnkgRU9EPw==",
+          "size": 76
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-052-1",
+      "threadId": "gmthr-052",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1781409600000",
+      "snippet": "Got it, this works for me. Let's proceed.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Deborah Brennan <ibrandt@example.net>"
+          },
+          {
+            "name": "Subject",
+            "value": "Scheduling a call"
+          },
+          {
+            "name": "Date",
+            "value": "Sun, 14 Jun 2026 04:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "R290IGl0LCB0aGlzIHdvcmtzIGZvciBtZS4gTGV0J3MgcHJvY2VlZC4=",
+          "size": 41
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-054-0",
+      "threadId": "gmthr-054",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781575200000",
+      "snippet": "Following up on scheduling a call. Any update on your side?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Julie King <frazierdanny@example.net>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Scheduling a call"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 16 Jun 2026 02:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIG9uIHNjaGVkdWxpbmcgYSBjYWxsLiBBbnkgdXBkYXRlIG9uIHlvdXIgc2lkZT8=",
+          "size": 59
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-054-1",
+      "threadId": "gmthr-054",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1781589600000",
+      "snippet": "Thanks \u2014 taking a look now, will revert shortly.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Julie King <frazierdanny@example.net>"
+          },
+          {
+            "name": "Subject",
+            "value": "Scheduling a call"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 16 Jun 2026 06:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "VGhhbmtzIOKAlCB0YWtpbmcgYSBsb29rIG5vdywgd2lsbCByZXZlcnQgc2hvcnRseS4=",
+          "size": 48
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-056-0",
+      "threadId": "gmthr-056",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782903600000",
+      "snippet": "Hi Dmitrii, customer question. Could you take a look and let me know by the 15th",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Jennifer Silva <sarah35@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Customer question"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 01 Jul 2026 11:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SGkgRG1pdHJpaSwgY3VzdG9tZXIgcXVlc3Rpb24uIENvdWxkIHlvdSB0YWtlIGEgbG9vayBhbmQgbGV0IG1lIGtub3cgYnkgdGhlIDE1dGg_",
+          "size": 81
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-056-1",
+      "threadId": "gmthr-056",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782918000000",
+      "snippet": "Just bumping this \u2014 thanks!",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Jennifer Silva <sarah35@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Customer question"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 01 Jul 2026 15:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SnVzdCBidW1waW5nIHRoaXMg4oCUIHRoYW5rcyE=",
+          "size": 27
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-057-0",
+      "threadId": "gmthr-057",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782118800000",
+      "snippet": "Hi Dmitrii, demo request. Could you take a look and let me know by Friday?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Anthony Humphrey <millertodd@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Demo request"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 22 Jun 2026 09:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SGkgRG1pdHJpaSwgZGVtbyByZXF1ZXN0LiBDb3VsZCB5b3UgdGFrZSBhIGxvb2sgYW5kIGxldCBtZSBrbm93IGJ5IEZyaWRheT8=",
+          "size": 74
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-057-1",
+      "threadId": "gmthr-057",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1782133200000",
+      "snippet": "Got it, this works for me. Let's proceed.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Anthony Humphrey <millertodd@example.org>"
+          },
+          {
+            "name": "Subject",
+            "value": "Demo request"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 22 Jun 2026 13:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "R290IGl0LCB0aGlzIHdvcmtzIGZvciBtZS4gTGV0J3MgcHJvY2VlZC4=",
+          "size": 41
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-059-0",
+      "threadId": "gmthr-059",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782288000000",
+      "snippet": "We'd love your input on contract for review. Attaching details.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Shannon Ray <williamsjeremy@example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Contract for review"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 24 Jun 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UnZCBsb3ZlIHlvdXIgaW5wdXQgb24gY29udHJhY3QgZm9yIHJldmlldy4gQXR0YWNoaW5nIGRldGFpbHMu",
+          "size": 63
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-060-0",
+      "threadId": "gmthr-060",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781334000000",
+      "snippet": "Hi Dmitrii, product feedback. Could you take a look and let me know by Friday?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Abigail Shaffer <jpeterson@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Product feedback"
+          },
+          {
+            "name": "Date",
+            "value": "Sat, 13 Jun 2026 07:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SGkgRG1pdHJpaSwgcHJvZHVjdCBmZWVkYmFjay4gQ291bGQgeW91IHRha2UgYSBsb29rIGFuZCBsZXQgbWUga25vdyBieSBGcmlkYXk_",
+          "size": 78
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-062-0",
+      "threadId": "gmthr-062",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781506800000",
+      "snippet": "Hi Dmitrii, partnership idea. Could you take a look and let me know by Monday?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Jessica Holmes <wrightcaleb@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Partnership idea"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 15 Jun 2026 07:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SGkgRG1pdHJpaSwgcGFydG5lcnNoaXAgaWRlYS4gQ291bGQgeW91IHRha2UgYSBsb29rIGFuZCBsZXQgbWUga25vdyBieSBNb25kYXk_",
+          "size": 78
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-062-1",
+      "threadId": "gmthr-062",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781521200000",
+      "snippet": "Just bumping this \u2014 thanks!",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Jessica Holmes <wrightcaleb@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Partnership idea"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 15 Jun 2026 11:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SnVzdCBidW1waW5nIHRoaXMg4oCUIHRoYW5rcyE=",
+          "size": 27
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-063-0",
+      "threadId": "gmthr-063",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781744400000",
+      "snippet": "Following up on candidate referral. Any update on your side?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Phillip Ryan <georgetracy@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Candidate referral"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 18 Jun 2026 01:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIG9uIGNhbmRpZGF0ZSByZWZlcnJhbC4gQW55IHVwZGF0ZSBvbiB5b3VyIHNpZGU_",
+          "size": 60
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-068-0",
+      "threadId": "gmthr-068",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782298800000",
+      "snippet": "Hi Dmitrii, renewal question. Could you take a look and let me know by Friday?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Jeff Owens <nuneztracey@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Renewal question"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 24 Jun 2026 11:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SGkgRG1pdHJpaSwgcmVuZXdhbCBxdWVzdGlvbi4gQ291bGQgeW91IHRha2UgYSBsb29rIGFuZCBsZXQgbWUga25vdyBieSBGcmlkYXk_",
+          "size": 78
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-068-1",
+      "threadId": "gmthr-068",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782313200000",
+      "snippet": "Just bumping this \u2014 thanks!",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Jeff Owens <nuneztracey@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Renewal question"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 24 Jun 2026 15:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SnVzdCBidW1waW5nIHRoaXMg4oCUIHRoYW5rcyE=",
+          "size": 27
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-077-0",
+      "threadId": "gmthr-077",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782126000000",
+      "snippet": "Following up on vendor invoice. Any update on your side?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Jonathan Johnson <jennifermiles@example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Vendor invoice"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 22 Jun 2026 11:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIG9uIHZlbmRvciBpbnZvaWNlLiBBbnkgdXBkYXRlIG9uIHlvdXIgc2lkZT8=",
+          "size": 56
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-081-0",
+      "threadId": "gmthr-081",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782867600000",
+      "snippet": "We'd love your input on product feedback. Attaching details.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "John Lewis <kbarrera@example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Product feedback"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 01 Jul 2026 01:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UnZCBsb3ZlIHlvdXIgaW5wdXQgb24gcHJvZHVjdCBmZWVkYmFjay4gQXR0YWNoaW5nIGRldGFpbHMu",
+          "size": 60
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-084-0",
+      "threadId": "gmthr-084",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782792000000",
+      "snippet": "We'd love your input on intro request. Attaching details.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Gregory Baker <blairamanda@example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Intro request"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 30 Jun 2026 04:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UnZCBsb3ZlIHlvdXIgaW5wdXQgb24gaW50cm8gcmVxdWVzdC4gQXR0YWNoaW5nIGRldGFpbHMu",
+          "size": 57
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-084-1",
+      "threadId": "gmthr-084",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1782806400000",
+      "snippet": "Appreciate it. Let me loop in the team and get back to you.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Gregory Baker <blairamanda@example.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Intro request"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 30 Jun 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "QXBwcmVjaWF0ZSBpdC4gTGV0IG1lIGxvb3AgaW4gdGhlIHRlYW0gYW5kIGdldCBiYWNrIHRvIHlvdS4=",
+          "size": 59
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-085-0",
+      "threadId": "gmthr-085",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782090000000",
+      "snippet": "Quick one \u2014 scheduling a call. Do you have 15 minutes this week?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Christopher Smith <teresa28@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Scheduling a call"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 22 Jun 2026 01:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "UXVpY2sgb25lIOKAlCBzY2hlZHVsaW5nIGEgY2FsbC4gRG8geW91IGhhdmUgMTUgbWludXRlcyB0aGlzIHdlZWs_",
+          "size": 64
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-086-0",
+      "threadId": "gmthr-086",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782525600000",
+      "snippet": "Following up on customer question. Any update on your side?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Phillip Ryan <georgetracy@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Customer question"
+          },
+          {
+            "name": "Date",
+            "value": "Sat, 27 Jun 2026 02:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIG9uIGN1c3RvbWVyIHF1ZXN0aW9uLiBBbnkgdXBkYXRlIG9uIHlvdXIgc2lkZT8=",
+          "size": 59
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-088-0",
+      "threadId": "gmthr-088",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782874800000",
+      "snippet": "Hi Dmitrii, contract for review. Could you take a look and let me know by Friday",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Judy Baker <julieryan@example.net>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Contract for review"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 01 Jul 2026 03:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SGkgRG1pdHJpaSwgY29udHJhY3QgZm9yIHJldmlldy4gQ291bGQgeW91IHRha2UgYSBsb29rIGFuZCBsZXQgbWUga25vdyBieSBGcmlkYXk_",
+          "size": 81
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-090-0",
+      "threadId": "gmthr-090",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781586000000",
+      "snippet": "We'd love your input on demo request. Attaching details.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Nicholas Martin <onelson@example.net>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Demo request"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 16 Jun 2026 05:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UnZCBsb3ZlIHlvdXIgaW5wdXQgb24gZGVtbyByZXF1ZXN0LiBBdHRhY2hpbmcgZGV0YWlscy4=",
+          "size": 56
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-094-0",
+      "threadId": "gmthr-094",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782712800000",
+      "snippet": "Quick one \u2014 partnership idea. Do you have 15 minutes this week?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Nicholas Martin <onelson@example.net>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Partnership idea"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 29 Jun 2026 06:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "UXVpY2sgb25lIOKAlCBwYXJ0bmVyc2hpcCBpZGVhLiBEbyB5b3UgaGF2ZSAxNSBtaW51dGVzIHRoaXMgd2Vlaz8=",
+          "size": 63
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-094-1",
+      "threadId": "gmthr-094",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782727200000",
+      "snippet": "Just bumping this \u2014 thanks!",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Nicholas Martin <onelson@example.net>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Partnership idea"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 29 Jun 2026 10:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SnVzdCBidW1waW5nIHRoaXMg4oCUIHRoYW5rcyE=",
+          "size": 27
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-095-0",
+      "threadId": "gmthr-095",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781607600000",
+      "snippet": "We'd love your input on scheduling a call. Attaching details.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Allison Hill <donaldgarcia@example.net>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Scheduling a call"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 16 Jun 2026 11:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UnZCBsb3ZlIHlvdXIgaW5wdXQgb24gc2NoZWR1bGluZyBhIGNhbGwuIEF0dGFjaGluZyBkZXRhaWxzLg==",
+          "size": 61
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-095-1",
+      "threadId": "gmthr-095",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781622000000",
+      "snippet": "Just bumping this \u2014 thanks!",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Allison Hill <donaldgarcia@example.net>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Scheduling a call"
+          },
+          {
+            "name": "Date",
+            "value": "Tue, 16 Jun 2026 15:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SnVzdCBidW1waW5nIHRoaXMg4oCUIHRoYW5rcyE=",
+          "size": 27
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-098-0",
+      "threadId": "gmthr-098",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782518400000",
+      "snippet": "We'd love your input on scheduling a call. Attaching details.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Shannon Ray <williamsjeremy@example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Scheduling a call"
+          },
+          {
+            "name": "Date",
+            "value": "Sat, 27 Jun 2026 00:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UnZCBsb3ZlIHlvdXIgaW5wdXQgb24gc2NoZWR1bGluZyBhIGNhbGwuIEF0dGFjaGluZyBkZXRhaWxzLg==",
+          "size": 61
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-098-1",
+      "threadId": "gmthr-098",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782532800000",
+      "snippet": "Just bumping this \u2014 thanks!",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Shannon Ray <williamsjeremy@example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Scheduling a call"
+          },
+          {
+            "name": "Date",
+            "value": "Sat, 27 Jun 2026 04:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SnVzdCBidW1waW5nIHRoaXMg4oCUIHRoYW5rcyE=",
+          "size": 27
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-100-0",
+      "threadId": "gmthr-100",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782723600000",
+      "snippet": "We'd love your input on customer question. Attaching details.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Rachel Mitchell <smoore@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Customer question"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 29 Jun 2026 09:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UnZCBsb3ZlIHlvdXIgaW5wdXQgb24gY3VzdG9tZXIgcXVlc3Rpb24uIEF0dGFjaGluZyBkZXRhaWxzLg==",
+          "size": 61
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-100-1",
+      "threadId": "gmthr-100",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1782738000000",
+      "snippet": "Got it, this works for me. Let's proceed.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Rachel Mitchell <smoore@example.org>"
+          },
+          {
+            "name": "Subject",
+            "value": "Customer question"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 29 Jun 2026 13:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "R290IGl0LCB0aGlzIHdvcmtzIGZvciBtZS4gTGV0J3MgcHJvY2VlZC4=",
+          "size": 41
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-101-0",
+      "threadId": "gmthr-101",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782619200000",
+      "snippet": "Quick one \u2014 product feedback. Do you have 15 minutes this week?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Amy Jones <heathchad@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Product feedback"
+          },
+          {
+            "name": "Date",
+            "value": "Sun, 28 Jun 2026 04:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "UXVpY2sgb25lIOKAlCBwcm9kdWN0IGZlZWRiYWNrLiBEbyB5b3UgaGF2ZSAxNSBtaW51dGVzIHRoaXMgd2Vlaz8=",
+          "size": 63
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-101-1",
+      "threadId": "gmthr-101",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782633600000",
+      "snippet": "Just bumping this \u2014 thanks!",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Amy Jones <heathchad@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Product feedback"
+          },
+          {
+            "name": "Date",
+            "value": "Sun, 28 Jun 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SnVzdCBidW1waW5nIHRoaXMg4oCUIHRoYW5rcyE=",
+          "size": 27
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-102-0",
+      "threadId": "gmthr-102",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781751600000",
+      "snippet": "Following up on product feedback. Any update on your side?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Jennifer Silva <sarah35@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Product feedback"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 18 Jun 2026 03:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIG9uIHByb2R1Y3QgZmVlZGJhY2suIEFueSB1cGRhdGUgb24geW91ciBzaWRlPw==",
+          "size": 58
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-104-0",
+      "threadId": "gmthr-104",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781254800000",
+      "snippet": "Following up on scheduling a call. Any update on your side?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Jessica Holmes <wrightcaleb@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Scheduling a call"
+          },
+          {
+            "name": "Date",
+            "value": "Fri, 12 Jun 2026 09:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIG9uIHNjaGVkdWxpbmcgYSBjYWxsLiBBbnkgdXBkYXRlIG9uIHlvdXIgc2lkZT8=",
+          "size": 59
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-105-0",
+      "threadId": "gmthr-105",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781503200000",
+      "snippet": "Following up on demo request. Any update on your side?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Judy Baker <julieryan@example.net>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Demo request"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 15 Jun 2026 06:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIG9uIGRlbW8gcmVxdWVzdC4gQW55IHVwZGF0ZSBvbiB5b3VyIHNpZGU_",
+          "size": 54
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-105-1",
+      "threadId": "gmthr-105",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1781517600000",
+      "snippet": "Appreciate it. Let me loop in the team and get back to you.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Judy Baker <julieryan@example.net>"
+          },
+          {
+            "name": "Subject",
+            "value": "Demo request"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 15 Jun 2026 10:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "QXBwcmVjaWF0ZSBpdC4gTGV0IG1lIGxvb3AgaW4gdGhlIHRlYW0gYW5kIGdldCBiYWNrIHRvIHlvdS4=",
+          "size": 59
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-106-0",
+      "threadId": "gmthr-106",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781672400000",
+      "snippet": "Quick one \u2014 vendor invoice. Do you have 15 minutes this week?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Timothy Duncan <esanchez@example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Vendor invoice"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 17 Jun 2026 05:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "UXVpY2sgb25lIOKAlCB2ZW5kb3IgaW52b2ljZS4gRG8geW91IGhhdmUgMTUgbWludXRlcyB0aGlzIHdlZWs_",
+          "size": 61
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-107-0",
+      "threadId": "gmthr-107",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782097200000",
+      "snippet": "We'd love your input on partnership idea. Attaching details.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Rachel Mitchell <smoore@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Partnership idea"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 22 Jun 2026 03:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UnZCBsb3ZlIHlvdXIgaW5wdXQgb24gcGFydG5lcnNoaXAgaWRlYS4gQXR0YWNoaW5nIGRldGFpbHMu",
+          "size": 60
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-108-0",
+      "threadId": "gmthr-108",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781769600000",
+      "snippet": "We'd love your input on partnership idea. Attaching details.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Anthony Humphrey <millertodd@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Partnership idea"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 18 Jun 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UnZCBsb3ZlIHlvdXIgaW5wdXQgb24gcGFydG5lcnNoaXAgaWRlYS4gQXR0YWNoaW5nIGRldGFpbHMu",
+          "size": 60
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-111-0",
+      "threadId": "gmthr-111",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782604800000",
+      "snippet": "We'd love your input on press inquiry. Attaching details.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Jessica Holmes <wrightcaleb@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Press inquiry"
+          },
+          {
+            "name": "Date",
+            "value": "Sun, 28 Jun 2026 00:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UnZCBsb3ZlIHlvdXIgaW5wdXQgb24gcHJlc3MgaW5xdWlyeS4gQXR0YWNoaW5nIGRldGFpbHMu",
+          "size": 57
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-113-0",
+      "threadId": "gmthr-113",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782374400000",
+      "snippet": "We'd love your input on speaking invitation. Attaching details.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "John Lewis <kbarrera@example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Speaking invitation"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 25 Jun 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UnZCBsb3ZlIHlvdXIgaW5wdXQgb24gc3BlYWtpbmcgaW52aXRhdGlvbi4gQXR0YWNoaW5nIGRldGFpbHMu",
+          "size": 63
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-114-0",
+      "threadId": "gmthr-114",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782727200000",
+      "snippet": "Following up on partnership idea. Any update on your side?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Jesse Flowers <mitchellclark@example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Partnership idea"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 29 Jun 2026 10:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIG9uIHBhcnRuZXJzaGlwIGlkZWEuIEFueSB1cGRhdGUgb24geW91ciBzaWRlPw==",
+          "size": 58
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-114-1",
+      "threadId": "gmthr-114",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782741600000",
+      "snippet": "Just bumping this \u2014 thanks!",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Jesse Flowers <mitchellclark@example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Partnership idea"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 29 Jun 2026 14:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SnVzdCBidW1waW5nIHRoaXMg4oCUIHRoYW5rcyE=",
+          "size": 27
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-117-0",
+      "threadId": "gmthr-117",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782475200000",
+      "snippet": "Quick one \u2014 intro request. Do you have 15 minutes this week?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Scott Pierce <pearsonamber@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Intro request"
+          },
+          {
+            "name": "Date",
+            "value": "Fri, 26 Jun 2026 12:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "UXVpY2sgb25lIOKAlCBpbnRybyByZXF1ZXN0LiBEbyB5b3UgaGF2ZSAxNSBtaW51dGVzIHRoaXMgd2Vlaz8=",
+          "size": 60
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-118-0",
+      "threadId": "gmthr-118",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781758800000",
+      "snippet": "We'd love your input on vendor invoice. Attaching details.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Ashley Lee <ltaylor@example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Vendor invoice"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 18 Jun 2026 05:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UnZCBsb3ZlIHlvdXIgaW5wdXQgb24gdmVuZG9yIGludm9pY2UuIEF0dGFjaGluZyBkZXRhaWxzLg==",
+          "size": 58
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-119-0",
+      "threadId": "gmthr-119",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1781240400000",
+      "snippet": "Following up on contract for review. Any update on your side?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Nicholas Martin <onelson@example.net>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Contract for review"
+          },
+          {
+            "name": "Date",
+            "value": "Fri, 12 Jun 2026 05:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIG9uIGNvbnRyYWN0IGZvciByZXZpZXcuIEFueSB1cGRhdGUgb24geW91ciBzaWRlPw==",
+          "size": 61
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-122-0",
+      "threadId": "gmthr-122",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782090000000",
+      "snippet": "Following up on demo request. Any update on your side?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Scott Pierce <pearsonamber@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Demo request"
+          },
+          {
+            "name": "Date",
+            "value": "Mon, 22 Jun 2026 01:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIG9uIGRlbW8gcmVxdWVzdC4gQW55IHVwZGF0ZSBvbiB5b3VyIHNpZGU_",
+          "size": 54
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-124-0",
+      "threadId": "gmthr-124",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782288000000",
+      "snippet": "We'd love your input on partnership idea. Attaching details.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Julie King <frazierdanny@example.net>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Partnership idea"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 24 Jun 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UnZCBsb3ZlIHlvdXIgaW5wdXQgb24gcGFydG5lcnNoaXAgaWRlYS4gQXR0YWNoaW5nIGRldGFpbHMu",
+          "size": 60
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-124-1",
+      "threadId": "gmthr-124",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782302400000",
+      "snippet": "Just bumping this \u2014 thanks!",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Julie King <frazierdanny@example.net>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Partnership idea"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 24 Jun 2026 12:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SnVzdCBidW1waW5nIHRoaXMg4oCUIHRoYW5rcyE=",
+          "size": 27
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-126-0",
+      "threadId": "gmthr-126",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782367200000",
+      "snippet": "We'd love your input on product feedback. Attaching details.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Scott Pierce <pearsonamber@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Product feedback"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 25 Jun 2026 06:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "V2UnZCBsb3ZlIHlvdXIgaW5wdXQgb24gcHJvZHVjdCBmZWVkYmFjay4gQXR0YWNoaW5nIGRldGFpbHMu",
+          "size": 60
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-126-1",
+      "threadId": "gmthr-126",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782381600000",
+      "snippet": "Just bumping this \u2014 thanks!",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Scott Pierce <pearsonamber@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Product feedback"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 25 Jun 2026 10:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "SnVzdCBidW1waW5nIHRoaXMg4oCUIHRoYW5rcyE=",
+          "size": 27
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-129-0",
+      "threadId": "gmthr-129",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "internalDate": "1782547200000",
+      "snippet": "Following up on press inquiry. Any update on your side?",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Jesse Flowers <mitchellclark@example.com>"
+          },
+          {
+            "name": "To",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Press inquiry"
+          },
+          {
+            "name": "Date",
+            "value": "Sat, 27 Jun 2026 08:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "Rm9sbG93aW5nIHVwIG9uIHByZXNzIGlucXVpcnkuIEFueSB1cGRhdGUgb24geW91ciBzaWRlPw==",
+          "size": 55
+        }
+      }
+    },
+    {
+      "id": "gmailmsg-129-1",
+      "threadId": "gmthr-129",
+      "labelIds": [
+        "SENT"
+      ],
+      "internalDate": "1782561600000",
+      "snippet": "Got it, this works for me. Let's proceed.",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Dmitrii Konyrev <konyrevdmitriy@gmail.com>"
+          },
+          {
+            "name": "To",
+            "value": "Jesse Flowers <mitchellclark@example.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Press inquiry"
+          },
+          {
+            "name": "Date",
+            "value": "Sat, 27 Jun 2026 12:00:00 +0000"
+          }
+        ],
+        "body": {
+          "data": "R290IGl0LCB0aGlzIHdvcmtzIGZvciBtZS4gTGV0J3MgcHJvY2VlZC4=",
+          "size": 41
+        }
+      }
+    }
+  ]
+}

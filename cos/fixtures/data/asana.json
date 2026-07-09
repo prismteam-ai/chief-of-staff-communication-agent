@@ -1,0 +1,691 @@
+{
+  "projects": [
+    {
+      "gid": "1201000000000001",
+      "name": "Fundraise"
+    },
+    {
+      "gid": "1201000000000002",
+      "name": "Board"
+    },
+    {
+      "gid": "1201000000000003",
+      "name": "Hiring"
+    },
+    {
+      "gid": "1201000000000004",
+      "name": "Product"
+    },
+    {
+      "gid": "1201000000000005",
+      "name": "Ops"
+    },
+    {
+      "gid": "1201000000000006",
+      "name": "Sales"
+    }
+  ],
+  "tasks": [
+    {
+      "gid": "1204000000000001",
+      "name": "Board approves Series A",
+      "notes": "",
+      "completed": false,
+      "due_on": "2026-07-11",
+      "resource_subtype": "milestone",
+      "is_milestone": true,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000001",
+          "name": "Fundraise"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000001/1204000000000001"
+    },
+    {
+      "gid": "1204000000000002",
+      "name": "Series A closes",
+      "notes": "",
+      "completed": false,
+      "due_on": "2026-07-18",
+      "resource_subtype": "milestone",
+      "is_milestone": true,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000001",
+          "name": "Fundraise"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000001/1204000000000002"
+    },
+    {
+      "gid": "1204000000000003",
+      "name": "Q3 board meeting",
+      "notes": "",
+      "completed": false,
+      "due_on": "2026-07-12",
+      "resource_subtype": "milestone",
+      "is_milestone": true,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000002",
+          "name": "Board"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000002/1204000000000003"
+    },
+    {
+      "gid": "1204000000000004",
+      "name": "Head of Sales offer out",
+      "notes": "",
+      "completed": false,
+      "due_on": "2026-07-09",
+      "resource_subtype": "milestone",
+      "is_milestone": true,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000003",
+          "name": "Hiring"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000003/1204000000000004"
+    },
+    {
+      "gid": "1204000000000005",
+      "name": "v2 launch",
+      "notes": "",
+      "completed": false,
+      "due_on": "2026-07-25",
+      "resource_subtype": "milestone",
+      "is_milestone": true,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000004",
+          "name": "Product"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000004/1204000000000005"
+    },
+    {
+      "gid": "1204000000000006",
+      "name": "Office lease signed",
+      "notes": "",
+      "completed": false,
+      "due_on": "2026-07-04",
+      "resource_subtype": "milestone",
+      "is_milestone": true,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000005",
+          "name": "Ops"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000005/1204000000000006"
+    },
+    {
+      "gid": "1204000000000007",
+      "name": "Acme partnership LOI",
+      "notes": "",
+      "completed": false,
+      "due_on": "2026-07-15",
+      "resource_subtype": "milestone",
+      "is_milestone": true,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000006",
+          "name": "Sales"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000006/1204000000000007"
+    },
+    {
+      "gid": "1202000000000001",
+      "name": "Review Series A term sheet with counsel",
+      "notes": "Valuation + board terms. Sarah wants redline by Friday.",
+      "completed": false,
+      "due_on": "2026-07-07",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000001",
+          "name": "Fundraise"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000001/1202000000000001"
+    },
+    {
+      "gid": "1202000000000002",
+      "name": "Fill revenue slide in Q3 board deck",
+      "notes": "Board circulation on the 12th.",
+      "completed": false,
+      "due_on": "2026-07-10",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000002",
+          "name": "Board"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000002/1202000000000002"
+    },
+    {
+      "gid": "1202000000000003",
+      "name": "Schedule Head of Sales final panel",
+      "notes": "Tom Reyes \u2014 strong.",
+      "completed": false,
+      "due_on": "2026-07-08",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000003",
+          "name": "Hiring"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000003/1202000000000003"
+    },
+    {
+      "gid": "1202000000000004",
+      "name": "Sign Acme LOI",
+      "notes": "Terms under review.",
+      "completed": false,
+      "due_on": "2026-07-15",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000006",
+          "name": "Sales"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000006/1202000000000004"
+    },
+    {
+      "gid": "1202000000000005",
+      "name": "Sign office lease",
+      "notes": "3-year, same terms.",
+      "completed": false,
+      "due_on": "2026-07-04",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000005",
+          "name": "Ops"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000005/1202000000000005"
+    },
+    {
+      "gid": "1202000000000006",
+      "name": "Send June investor update",
+      "notes": "Done.",
+      "completed": true,
+      "due_on": "2026-06-28",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000001",
+          "name": "Fundraise"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000001/1202000000000006"
+    },
+    {
+      "gid": "1202000000000007",
+      "name": "Confirm Q4 supply volume",
+      "notes": "Lock pricing.",
+      "completed": false,
+      "due_on": "2026-07-15",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000005",
+          "name": "Ops"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000005/1202000000000007"
+    },
+    {
+      "gid": "1202000000000008",
+      "name": "X integration with Integrately",
+      "notes": "May be cancelled.",
+      "completed": false,
+      "due_on": "2026-07-20",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000004",
+          "name": "Product"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000004/1202000000000008"
+    },
+    {
+      "gid": "1202900000000001",
+      "name": "Review contract for review",
+      "notes": "Lead upon very act perform.",
+      "completed": false,
+      "due_on": "2026-07-10",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000001",
+          "name": "Fundraise"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000001/1202900000000001"
+    },
+    {
+      "gid": "1202900000000002",
+      "name": "Approve candidate referral",
+      "notes": "You available defense enter value thing these.",
+      "completed": false,
+      "due_on": "2026-06-24",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000005",
+          "name": "Ops"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000005/1202900000000002"
+    },
+    {
+      "gid": "1202900000000003",
+      "name": "Close out partnership idea",
+      "notes": "Expect just myself few worker southern.",
+      "completed": false,
+      "due_on": "2026-07-21",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000003",
+          "name": "Hiring"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000003/1202900000000003"
+    },
+    {
+      "gid": "1202900000000004",
+      "name": "Schedule candidate referral",
+      "notes": "Account stage federal professional voice care break.",
+      "completed": false,
+      "due_on": "2026-06-23",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000005",
+          "name": "Ops"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000005/1202900000000004"
+    },
+    {
+      "gid": "1202900000000005",
+      "name": "Close out press inquiry",
+      "notes": "Score choice example decision.",
+      "completed": false,
+      "due_on": "2026-07-10",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000004",
+          "name": "Product"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000004/1202900000000005"
+    },
+    {
+      "gid": "1202900000000006",
+      "name": "Review speaking invitation",
+      "notes": "Data plant enough major town suffer.",
+      "completed": false,
+      "due_on": "2026-07-17",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000001",
+          "name": "Fundraise"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000001/1202900000000006"
+    },
+    {
+      "gid": "1202900000000007",
+      "name": "Follow up on speaking invitation",
+      "notes": "Plant stop analysis four.",
+      "completed": false,
+      "due_on": "2026-07-17",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000005",
+          "name": "Ops"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000005/1202900000000007"
+    },
+    {
+      "gid": "1202900000000008",
+      "name": "Review candidate referral",
+      "notes": "Pm energy scientist necessary.",
+      "completed": false,
+      "due_on": "2026-07-07",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000001",
+          "name": "Fundraise"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000001/1202900000000008"
+    },
+    {
+      "gid": "1202900000000009",
+      "name": "Review renewal question",
+      "notes": "Night born war real chance along.",
+      "completed": false,
+      "due_on": "2026-07-04",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000003",
+          "name": "Hiring"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000003/1202900000000009"
+    },
+    {
+      "gid": "1202900000000010",
+      "name": "Follow up on candidate referral",
+      "notes": "Old challenge camera final together someone.",
+      "completed": false,
+      "due_on": "2026-07-02",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000004",
+          "name": "Product"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000004/1202900000000010"
+    },
+    {
+      "gid": "1202900000000011",
+      "name": "Close out customer question",
+      "notes": "Together decide economic.",
+      "completed": true,
+      "due_on": "2026-07-18",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000003",
+          "name": "Hiring"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000003/1202900000000011"
+    },
+    {
+      "gid": "1202900000000012",
+      "name": "Close out candidate referral",
+      "notes": "Government nice themselves wind.",
+      "completed": false,
+      "due_on": "2026-06-30",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000004",
+          "name": "Product"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000004/1202900000000012"
+    },
+    {
+      "gid": "1202900000000013",
+      "name": "Prepare intro request",
+      "notes": "Understand door class son.",
+      "completed": true,
+      "due_on": "2026-07-05",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000004",
+          "name": "Product"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000004/1202900000000013"
+    },
+    {
+      "gid": "1202900000000014",
+      "name": "Approve customer question",
+      "notes": "Thing agent say forward.",
+      "completed": false,
+      "due_on": "2026-07-15",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000003",
+          "name": "Hiring"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000003/1202900000000014"
+    },
+    {
+      "gid": "1202900000000015",
+      "name": "Follow up on speaking invitation",
+      "notes": "Soon ten specific environment skin blue.",
+      "completed": false,
+      "due_on": "2026-07-18",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000005",
+          "name": "Ops"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000005/1202900000000015"
+    },
+    {
+      "gid": "1202900000000016",
+      "name": "Follow up on scheduling a call",
+      "notes": "Teach develop staff.",
+      "completed": false,
+      "due_on": "2026-07-07",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000004",
+          "name": "Product"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000004/1202900000000016"
+    },
+    {
+      "gid": "1202900000000017",
+      "name": "Close out candidate referral",
+      "notes": "Glass star the development process huge everything.",
+      "completed": true,
+      "due_on": "2026-07-15",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000004",
+          "name": "Product"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000004/1202900000000017"
+    },
+    {
+      "gid": "1202900000000018",
+      "name": "Prepare vendor invoice",
+      "notes": "Whom evidence political hundred.",
+      "completed": false,
+      "due_on": "2026-07-20",
+      "resource_subtype": "default_task",
+      "is_milestone": false,
+      "assignee": {
+        "gid": "1203000000000001",
+        "name": "Dmitrii Konyrev"
+      },
+      "projects": [
+        {
+          "gid": "1201000000000003",
+          "name": "Hiring"
+        }
+      ],
+      "permalink_url": "https://app.asana.com/0/1201000000000003/1202900000000018"
+    }
+  ],
+  "stories": {}
+}
