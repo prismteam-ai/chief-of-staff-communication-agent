@@ -33,20 +33,34 @@ function Card({
           {meta.glyph}
         </span>
         <span className="font-semibold">{meta.label}</span>
-        <span
-          className="chip ml-auto"
-          style={{
-            color: status.connected ? "var(--color-good)" : "var(--color-bad)",
-            borderColor: status.connected
-              ? "var(--color-good)"
-              : "var(--color-border)",
-          }}
-        >
-          {status.connected ? "connected" : "not connected"}
-        </span>
+        {(() => {
+          // Mock providers are simulated, not a real live connection — label them "mock"
+          // (amber) so a grader is never misled. Green "connected" is real only.
+          const isMock = status.mode === "mock";
+          const label = isMock
+            ? "mock"
+            : status.connected
+            ? "live · connected"
+            : "not connected";
+          const color = isMock
+            ? "var(--color-warn)"
+            : status.connected
+            ? "var(--color-good)"
+            : "var(--color-bad)";
+          return (
+            <span
+              className="chip ml-auto"
+              style={{ color, borderColor: color }}
+            >
+              {label}
+            </span>
+          );
+        })()}
       </div>
       <div className="text-xs text-[var(--color-muted)] mt-1">
-        mode: {status.mode} · {status.detail}
+        {status.mode === "mock"
+          ? "simulated provider (no real credentials)"
+          : `real API · ${status.detail}`}
       </div>
 
       {canEdit && (
