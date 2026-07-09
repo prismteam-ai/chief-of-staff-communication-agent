@@ -131,9 +131,10 @@ class ImapConnector:
             em["In-Reply-To"] = thread_external_id
             em["References"] = thread_external_id
         em.set_content(body)
-        # NOTE: many PaaS hosts (Render, Heroku, …) block outbound SMTP ports (465/587)
-        # to prevent spam — a send there hangs, so the timeout turns it into a fast, clear
-        # error instead of a stuck request. (Gmail send avoids this: it's an HTTPS API.)
+        # NOTE: some hosts block outbound SMTP ports (465/587) to prevent spam — a send
+        # there hangs, so the timeout turns it into a fast, clear error instead of a stuck
+        # request. (This runtime is on Azure Container Apps, which allows 465/587. Gmail
+        # send avoids the issue entirely: it's an HTTPS API.)
         try:
             if self.smtp_port == 465:  # implicit SSL (Yahoo, Gmail, Fastmail)
                 with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, timeout=20) as s:
@@ -147,8 +148,8 @@ class ImapConnector:
         except (OSError, smtplib.SMTPException) as e:
             raise RuntimeError(
                 f"SMTP send to {self.smtp_host}:{self.smtp_port} failed ({type(e).__name__}). "
-                "If hosted on a PaaS that blocks outbound SMTP (Render/Heroku), IMAP send is "
-                "unavailable there — receive/triage still work."
+                "If the host blocks outbound SMTP, IMAP send is unavailable there — "
+                "receive/triage still work."
             ) from e
         return em["Message-ID"] or f"imap-sent-{datetime.now(timezone.utc).timestamp()}"
 

@@ -97,7 +97,7 @@ def login(body: LoginBody) -> dict:
 # --- Google OAuth connect flow ------------------------------------------------
 # The callback is public (browser redirect), so the tenant identity travels inside
 # the signed state: a stateless HMAC over "timestamp:owner_id". That survives
-# Render's idle spin-down between redirect-out and callback-back AND binds the
+# the host's idle spin-down between redirect-out and callback-back AND binds the
 # grant to the tenant who started it — no forged callback can connect gmail into
 # someone else's account.
 def _oauth_secret() -> bytes:

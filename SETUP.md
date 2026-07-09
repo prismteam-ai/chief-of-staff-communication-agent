@@ -62,8 +62,25 @@ credentials in `.env` swaps in its real connector at boot (see `boot.py`):
 | email (IMAP) | IMAP host/user/app-password | connector pending demo mailbox |
 | sms / whatsapp | Twilio credentials | connector pending account approval |
 
-## Deploy (Render)
+## Deploy (Azure Container Apps)
 
-`render.yaml` is the blueprint (Docker runtime, free plan, health check at
-`/api/health`). Set the `sync: false` env vars in the Render dashboard; enable
-`AUTOSYNC=1` so the hosted runtime ingests and processes on a 5-minute loop.
+The runtime is a single Docker container (see `Dockerfile`) on Azure Container Apps —
+chosen because it allows outbound SMTP (submission ports 465/587), which IMAP
+send-as-you needs and which most PaaS hosts block.
+
+```
+az containerapp up \
+  --name cos-comms-agent --resource-group <rg> \
+  --source . --ingress external --target-port 8000 \
+  --env-vars SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… AZURE_OPENAI_… \
+             GOOGLE_CLIENT_ID=… GOOGLE_CLIENT_SECRET=… MCP_AUTH_TOKEN=… \
+             MCP_OWNER_ID=… AUTOSYNC=1 AUTOSYNC_INTERVAL_S=300
+# then, once the FQDN is known:
+az containerapp update -n cos-comms-agent -g <rg> \
+  --set-env-vars GOOGLE_REDIRECT_URI=https://<fqdn>/api/oauth/google/callback PUBLIC_HOST=<fqdn> \
+  --min-replicas 1   # keep one instance for the autosync loop + MCP session
+```
+
+`--min-replicas 1` matters: the sync scheduler and the MCP session live in the process,
+so scale-to-zero would stop them. Add `https://<fqdn>/api/oauth/google/callback` to the
+Google OAuth client's Authorized redirect URIs for Gmail connect.
