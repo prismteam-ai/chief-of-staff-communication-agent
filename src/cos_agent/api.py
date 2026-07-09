@@ -154,7 +154,7 @@ def google_callback(code: str, background: BackgroundTasks, state: str = ""):
     sb().table("connector_tokens").upsert(
         {"owner_id": owner, "channel": "gmail", "account_handle": tokens["email"],
          "refresh_token": tokens["refresh_token"], "scopes": "gmail.readonly gmail.send"},
-        on_conflict="channel,account_handle",
+        on_conflict="owner_id,channel,account_handle",
     ).execute()
     log.info("gmail connected for %s (owner %s)", tokens["email"], owner)
     background.add_task(_run_sync, owner)  # first fetch starts immediately after connect
@@ -461,7 +461,7 @@ def connect_channel(channel: str, c: PasteCredential, background: BackgroundTask
     sb().table("connector_tokens").upsert(
         {"owner_id": user.id, "channel": channel, "account_handle": c.account_handle,
          "refresh_token": c.secret, "scopes": c.scopes},
-        on_conflict="channel,account_handle",
+        on_conflict="owner_id,channel,account_handle",
     ).execute()
     log.info("channel %s connected via paste for %s (owner %s)", channel, c.account_handle, user.id)
     if channel != "asana":  # Asana is a task sink, not an ingest source
