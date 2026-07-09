@@ -512,6 +512,18 @@ const CONNECT_FORMS = {
     build: v => ({account_handle: v.email,
       secret: JSON.stringify(v.imap_host ? {password:v.password, imap_host:v.imap_host} : {password:v.password})}),
   },
+  telegram: {
+    title: "Connect Telegram (your account)",
+    help: `Reads your <b>personal</b> Telegram via MTProto (not a bot). Get api_id/api_hash at
+           <a href="https://my.telegram.org" target="_blank" rel="noopener">my.telegram.org</a> → API development tools,
+           then run <code>uv run python scripts/telegram_login.py</code> locally — it logs in
+           (phone + the code Telegram texts you) and prints a blob. Paste it below.`,
+    fields: [
+      {k:"phone", label:"Your phone / handle (label only)", type:"text", ph:"+1 555 123 4567", req:true},
+      {k:"blob", label:"Session blob (from telegram_login.py)", type:"password", ph:'{"api_id":…,"api_hash":"…","session":"…"}', req:true},
+    ],
+    build: v => ({account_handle: v.phone, secret: v.blob}),
+  },
   x: {
     title: "Connect X · Twitter DMs",
     help: `Your own X app with DM access (X charges for the DM API). Provide an OAuth2 user token
