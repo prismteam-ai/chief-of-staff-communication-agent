@@ -38,5 +38,5 @@ The same agent runs in Cursor over the hosted MCP endpoint (`<url>/mcp/`, traili
 
 - **Live & proven:** Gmail (OAuth), other email (IMAP), Asana.
 - **Built, bring-your-own-account:** X DMs, Twilio SMS/WhatsApp (your own paid provider account).
-- **Built, gated by Telegram's own login validation:** Telegram (MTProto personal account) — the connector is complete; activating a session requires the account holder to approve the login in their Telegram app.
-- **Cut:** LinkedIn — no public personal-messaging API.
+- **Telegram — built, could not be demoed live:** the connector (MTProto, personal account) is complete, but Telegram blocked creating an `api_id`/`api_hash` from my own account (my.telegram.org verification kept failing), and login codes for a personal MTProto session are invalidated server-side (anti-phishing). It activates the moment a valid session exists — the gate is Telegram's, not the code.
+- **LinkedIn — not shipped yet:** no official public personal-messaging API; still evaluating a proper, compliant way to implement it (documented, not faked).
