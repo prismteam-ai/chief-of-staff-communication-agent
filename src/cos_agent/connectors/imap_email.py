@@ -53,7 +53,9 @@ class ImapConnector:
         self.imap_host = cfg.get("imap_host") or _guess_host(account_handle)
         self.imap_port = int(cfg.get("imap_port", 993))
         self.smtp_host = cfg.get("smtp_host") or self.imap_host.replace("imap", "smtp")
-        self.smtp_port = int(cfg.get("smtp_port", 465))
+        # iCloud / Outlook require STARTTLS on 587; Yahoo/Gmail/Fastmail use implicit SSL on 465
+        default_smtp_port = 587 if any(h in self.smtp_host for h in ("me.com", "office365", "outlook")) else 465
+        self.smtp_port = int(cfg.get("smtp_port", default_smtp_port))
 
     # -- fetch ----------------------------------------------------------------
     def fetch(self) -> Iterable[RawMessage]:
@@ -129,9 +131,15 @@ class ImapConnector:
             em["In-Reply-To"] = thread_external_id
             em["References"] = thread_external_id
         em.set_content(body)
-        with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port) as s:
-            s.login(self.account_handle, self.password)
-            s.send_message(em)
+        if self.smtp_port == 465:  # implicit SSL (Yahoo, Gmail, Fastmail)
+            with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port) as s:
+                s.login(self.account_handle, self.password)
+                s.send_message(em)
+        else:  # STARTTLS (iCloud 587, Outlook 587)
+            with smtplib.SMTP(self.smtp_host, self.smtp_port) as s:
+                s.starttls()
+                s.login(self.account_handle, self.password)
+                s.send_message(em)
         return em["Message-ID"] or f"imap-sent-{datetime.now(timezone.utc).timestamp()}"
 
 
