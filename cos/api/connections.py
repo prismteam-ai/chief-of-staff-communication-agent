@@ -54,6 +54,21 @@ def _mock_reachable() -> bool:
         return False
 
 
+def _points_at_real(provider: str) -> bool:
+    """True if this provider's base URL targets the real API rather than the mock. Lets a
+    single provider (e.g. Asana) run real while others stay mock — MODE is not per-provider."""
+    s = get_settings()
+    url = {
+        "gmail": s.gmail_base_url,
+        "x": s.x_base_url,
+        "whatsapp": s.whatsapp_base_url,
+        "asana": s.asana_base_url,
+    }.get(provider, "")
+    real_hosts = ("gmail.googleapis.com", "api.twitter.com", "api.x.com",
+                  "graph.facebook.com", "app.asana.com")
+    return any(h in url for h in real_hosts)
+
+
 def _real_connected(provider: str) -> bool:
     s = get_settings()
     if provider == "gmail":
@@ -68,14 +83,15 @@ def _real_connected(provider: str) -> bool:
 
 
 def status_for(provider: str) -> dict:
-    s = get_settings()
-    if s.is_mock:
-        ok = _mock_reachable()
-        return {"provider": provider, "mode": "mock", "connected": ok,
-                "detail": "mock" if ok else "mock server unreachable"}
-    ok = _real_connected(provider)
-    return {"provider": provider, "mode": "real", "connected": ok,
-            "detail": "credentials present" if ok else "missing credentials"}
+    # A provider is "real" if its base URL points at the real API (independent of the global
+    # MODE), so mixed setups — e.g. Asana real while the rest stay mock — report accurately.
+    if _points_at_real(provider):
+        ok = _real_connected(provider)
+        return {"provider": provider, "mode": "real", "connected": ok,
+                "detail": "credentials present" if ok else "missing credentials"}
+    ok = _mock_reachable()
+    return {"provider": provider, "mode": "mock", "connected": ok,
+            "detail": "mock" if ok else "mock server unreachable"}
 
 
 def all_status() -> dict:

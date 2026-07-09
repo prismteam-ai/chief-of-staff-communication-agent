@@ -37,7 +37,11 @@ export async function setSessionCookie(token: string) {
   (await cookies()).set(COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // Secure cookies require HTTPS. Default to on in production, but allow an explicit
+    // override (COOKIE_SECURE=false) for an HTTP-only deploy behind a firewall.
+    secure: process.env.COOKIE_SECURE
+      ? process.env.COOKIE_SECURE === "true"
+      : process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 12,
   });
