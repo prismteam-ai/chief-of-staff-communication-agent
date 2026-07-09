@@ -8,6 +8,7 @@ against the live API until credentials arrive.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 from datetime import datetime
@@ -24,10 +25,14 @@ X_API = "https://api.x.com/2"
 class XConnector:
     channel = "x"
 
-    def __init__(self) -> None:
-        self.token = os.environ["X_USER_ACCESS_TOKEN"]
-        self.self_user_id = os.environ["X_SELF_USER_ID"]      # numeric id of the exec's account
-        self.self_handle = os.environ.get("X_SELF_HANDLE", "@self")
+    def __init__(self, account_handle: str, secret: str) -> None:
+        # per-tenant creds (the user's OWN X app — X charges for DM API access):
+        # secret = {"access_token","self_user_id","self_handle"}
+        cfg = json.loads(secret) if secret.strip().startswith("{") else {"access_token": secret}
+        self.token = cfg["access_token"]
+        self.self_user_id = cfg.get("self_user_id", "")
+        self.self_handle = cfg.get("self_handle") or account_handle
+        self.account_handle = self.self_handle
 
     def _h(self) -> dict:
         return {"Authorization": f"Bearer {self.token}"}

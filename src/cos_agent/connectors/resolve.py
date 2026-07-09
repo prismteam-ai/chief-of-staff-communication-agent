@@ -32,11 +32,26 @@ def _build_telegram(tok: dict) -> Connector:
     return TelegramUserConnector(tok["account_handle"], tok["refresh_token"])
 
 
+def _build_x(tok: dict) -> Connector:
+    from .x_api import XConnector
+    return XConnector(tok["account_handle"], tok["refresh_token"])
+
+
+def _build_twilio(channel: str) -> Callable[[dict], Connector]:
+    def build(tok: dict) -> Connector:
+        from .twilio import TwilioConnector
+        return TwilioConnector(channel, tok["account_handle"], tok["refresh_token"])
+    return build
+
+
 # channel -> factory from a connector_tokens row
 _BUILDERS: dict[str, Callable[[dict], Connector]] = {
     "gmail": _build_gmail,
     "email": _build_imap,
     "telegram": _build_telegram,
+    "x": _build_x,
+    "sms": _build_twilio("sms"),
+    "whatsapp": _build_twilio("whatsapp"),
 }
 
 

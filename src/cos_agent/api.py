@@ -234,10 +234,13 @@ def recommendations(user: User = Depends(require_user)) -> list[dict]:
 
 @api.get("/drafts")
 def drafts(status: str = "pending", user: User = Depends(require_user)) -> list[dict]:
-    return (
-        sb().table("drafts").select("id, message_id, body, style_notes, status, created_at")
-        .eq("owner_id", user.id).eq("status", status).order("created_at").execute().data
+    q = (
+        sb().table("drafts").select("id, message_id, body, style_notes, status, provider_message_id, created_at")
+        .eq("owner_id", user.id)
     )
+    if status != "all":  # "all" → every status (the Incoming board's Done column needs sent/rejected too)
+        q = q.eq("status", status)
+    return q.order("created_at").execute().data
 
 
 class Decision(BaseModel):
@@ -319,11 +322,21 @@ def answer_context(message_id: str, a: ContextAnswer, user: User = Depends(requi
 # --- Connections (self-serve channel setup) ----------------------------------
 # Real integrations only: gmail (OAuth), 2nd email (IMAP paste), telegram (MTProto).
 # x/sms/whatsapp connectors exist but are credential-gated (not offered until funded).
+# Real integrations, one per README channel. All bring-your-own-credentials and
+# per-tenant. X/SMS/WhatsApp work on the user's OWN (paid) provider accounts — the
+# platforms charge, but nothing stops a user connecting them. LinkedIn has no public
+# personal-messaging API, so it is surfaced as unavailable rather than a dead button.
 _CHANNEL_META = {
     "gmail": {"label": "Gmail", "method": "oauth"},
     "email": {"label": "Other email (IMAP)", "method": "paste"},
     "telegram": {"label": "Telegram (your account)", "method": "paste"},
+    "x": {"label": "X · Twitter DMs", "method": "paste"},
+    "sms": {"label": "SMS · Twilio", "method": "paste"},
+    "whatsapp": {"label": "WhatsApp · Twilio", "method": "paste"},
+    "linkedin": {"label": "LinkedIn", "method": "unavailable"},
 }
+# paste-connectable channels + the Asana integration
+_CONNECTABLE = {"email", "telegram", "x", "sms", "whatsapp", "asana"}
 
 
 @api.get("/connections")
@@ -361,10 +374,6 @@ class PasteCredential(BaseModel):
     account_handle: str
     secret: str
     scopes: str | None = None
-
-
-# paste-connectable: real message channels + the Asana integration (all per-tenant)
-_CONNECTABLE = set(_CHANNEL_META) | {"asana"}
 
 
 @api.post("/channels/{channel}/connect")

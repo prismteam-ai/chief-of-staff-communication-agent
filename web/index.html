@@ -29,7 +29,7 @@
   * { box-sizing: border-box; margin: 0; }
   body { background: var(--page); color: var(--ink);
          font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 1120px; margin: 0 auto; padding: 20px 20px 64px; }
+  main { max-width: 1240px; margin: 0 auto; padding: 20px 20px 64px; }
   header { display: flex; align-items: center; justify-content: space-between; gap: 16px;
            flex-wrap: wrap; margin-bottom: 16px; }
   h1 { font-size: 17px; font-weight: 650; white-space: nowrap; }
@@ -40,65 +40,61 @@
                       border: 1px solid var(--border); }
   nav button:hover { color: var(--ink); }
   .hbtns { display: flex; align-items: center; gap: 10px; }
-  #sync { border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
-          border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
-  #sync:hover { color: var(--ink); }
+  .iconbtn { border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+             border-radius: 999px; width: 34px; height: 34px; display: inline-flex;
+             align-items: center; justify-content: center; cursor: pointer; }
+  .iconbtn:hover { color: var(--ink); }
+  .iconbtn:disabled { cursor: default; opacity: .8; }
+  .spin { animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   #logout { border: none; background: none; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; }
   h2 { font-size: 12px; font-weight: 600; color: var(--ink-2); text-transform: uppercase;
        letter-spacing: .04em; margin: 22px 0 10px; }
   .panel { display: none; }
   .panel.active { display: block; }
+  .chip { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .empty { color: var(--muted); padding: 16px 2px; }
+  .link { color: var(--accent); }
 
-  /* tiles + bars (Dashboard) */
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  /* Incoming — kanban */
+  .kanban { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; align-items: start; }
+  .kcol { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+          padding: 10px; max-height: 78vh; overflow-y: auto; }
+  .kcol h3 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+             color: var(--ink-2); margin-bottom: 10px; display: flex; justify-content: space-between; }
+  .kcount { color: var(--muted); font-weight: 500; }
+  .kcard { background: var(--page); border: 1px solid var(--border); border-radius: 8px;
+           padding: 10px 11px; margin-bottom: 8px; cursor: pointer; }
+  .kcard:hover { border-color: var(--accent); }
+  .kc-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .kc-who { font-weight: 600; font-size: 13px; }
+  .kc-t { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .kc-snip { color: var(--ink-2); font-size: 12px; margin-top: 3px; overflow: hidden;
+             text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .kc-badge { display: inline-block; margin-top: 7px; font-size: 10.5px; padding: 1px 7px; border-radius: 20px;
+              border: 1px solid var(--border); color: var(--ink-2); }
+  .kc-badge.sent { color: var(--good-text); border-color: var(--good); }
+  .kc-badge.task { color: var(--accent); border-color: var(--accent); }
+  .kc-badge.od { color: var(--critical); border-color: var(--critical); }
+  .kempty { color: var(--muted); font-size: 12px; padding: 6px 2px; }
+
+  /* stat tiles + bars (Insights) */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
   .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
   .tile .v { font-size: 25px; font-weight: 650; }
   .tile .l { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .tile.alert .v { color: var(--critical); }
   .tile.good .v { color: var(--good-text); }
   .bars { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
-  .barrow { display: grid; grid-template-columns: 84px 1fr 74px; align-items: center; gap: 10px; padding: 5px 0; }
+  .barrow { display: grid; grid-template-columns: 84px 1fr 84px; align-items: center; gap: 10px; padding: 5px 0; }
   .barrow .name { color: var(--ink-2); font-size: 13px; }
   .track { height: 14px; display: flex; align-items: center; }
   .bar { height: 14px; border-radius: 4px; min-width: 2px; }
-  .barrow .n { font-variant-numeric: tabular-nums; color: var(--ink); font-size: 13px; }
+  .barrow .n { font-variant-numeric: tabular-nums; color: var(--ink); font-size: 13px; text-align: right; }
   .barrow .n small { color: var(--muted); }
 
-  .chip { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
-  .meta { color: var(--muted); font-size: 12px; }
-  .empty { color: var(--muted); padding: 16px 2px; }
-
-  /* Needs You: rail + detail */
-  .work { display: grid; grid-template-columns: 320px 1fr; gap: 14px; align-items: start; }
-  .rail { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
-          max-height: 74vh; overflow-y: auto; }
-  .qrow { padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
-  .qrow:hover { background: var(--page); }
-  .qrow.sel { background: var(--page); box-shadow: inset 3px 0 0 var(--accent); }
-  .qrow .top { display: flex; justify-content: space-between; gap: 8px; }
-  .qrow .who { font-weight: 600; font-size: 13px; }
-  .qrow .snip { color: var(--ink-2); font-size: 12px; margin-top: 3px; overflow: hidden;
-                text-overflow: ellipsis; white-space: nowrap; }
-  .qrow .t { color: var(--muted); font-size: 11px; white-space: nowrap; }
-  .dot { color: var(--critical); }
-  .detail { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
-  .detail .msgbody { color: var(--ink); margin: 10px 0 12px; white-space: pre-wrap; }
-  .box { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin: 10px 0; }
-  .box .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 5px; }
-  .draft { white-space: pre-wrap; }
-  .actions { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
-  .actions button, .abox button { font: inherit; border-radius: 8px; padding: 7px 14px; cursor: pointer; border: 1px solid var(--border); }
-  .approve { background: var(--good); border-color: transparent; color: #fff; }
-  .reject { background: transparent; color: var(--ink-2); }
-  .primary { background: var(--accent); border-color: transparent; color: #fff; }
-  .sent-note { color: var(--good-text); font-size: 13px; margin-top: 10px; }
-  .link { color: var(--accent); }
-  textarea { width: 100%; font: inherit; border: 1px solid var(--grid); border-radius: 8px;
-             background: var(--page); color: var(--ink); padding: 8px 10px; min-height: 58px; resize: vertical; }
-  .edit-in { width: 100%; font: inherit; border: 1px solid var(--grid); border-radius: 8px;
-             background: var(--page); color: var(--ink); padding: 8px 10px; min-height: 80px; }
-
-  /* Connections + People */
+  /* rows (Connections + People) */
   .rows { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 10px;
          padding: 13px 16px; border-bottom: 1px solid var(--border); }
@@ -107,16 +103,35 @@
   .row .sub { color: var(--muted); font-size: 12px; }
   .pill { font-size: 11px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--border); color: var(--ink-2); }
   .pill.live { color: var(--good-text); border-color: var(--good); }
-  .pill.demo { color: var(--muted); }
+  .pill.na { color: var(--muted); }
   .row button { font: inherit; border-radius: 8px; padding: 6px 12px; cursor: pointer;
                 border: 1px solid var(--border); background: var(--page); color: var(--ink); }
   .row button.cta { background: var(--accent); color: #fff; border-color: transparent; }
   .plist .row { cursor: pointer; }
   .plist .row:hover { background: var(--page); }
 
+  /* detail + person modal */
+  .box { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin: 10px 0; }
+  .box .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 5px; }
+  .msgbody, .draft { white-space: pre-wrap; }
+  .actions { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .actions button { font: inherit; border-radius: 8px; padding: 7px 14px; cursor: pointer; border: 1px solid var(--border); }
+  .approve { background: var(--good); border-color: transparent; color: #fff; }
+  .reject { background: transparent; color: var(--ink-2); }
+  .primary { background: var(--accent); border-color: transparent; color: #fff; }
+  .sent-note { color: var(--good-text); font-size: 13px; margin-top: 10px; }
+  textarea, .edit-in { width: 100%; font: inherit; border: 1px solid var(--grid); border-radius: 8px;
+             background: var(--page); color: var(--ink); padding: 8px 10px; min-height: 70px; resize: vertical; }
+
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none;
+             align-items: flex-start; justify-content: center; z-index: 20; padding: 40px 16px; overflow-y: auto; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+           padding: 22px 24px; width: 640px; max-width: 100%; }
+  .modal .x { float: right; border: none; background: none; color: var(--muted); font-size: 18px; cursor: pointer; }
   #err { color: var(--critical); margin: 10px 0; display: none; }
+
   #login-overlay { position: fixed; inset: 0; background: var(--page); display: none;
-                   align-items: center; justify-content: center; z-index: 10; }
+                   align-items: center; justify-content: center; z-index: 30; }
   #login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 28px; width: 320px; }
   #login-card h1 { margin-bottom: 4px; }
   #login-card p { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
@@ -125,14 +140,9 @@
   #login-card button { width: 100%; padding: 9px; font: inherit; border: none; border-radius: 8px;
                        background: var(--accent); color: #fff; cursor: pointer; }
   #login-msg { color: var(--critical); font-size: 13px; min-height: 18px; margin-top: 8px; }
-  @media (max-width: 720px) { .work { grid-template-columns: 1fr; } .rail { max-height: 40vh; } }
 
-  /* connect modal (guided per-channel credential entry) */
-  #cx-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none;
-                align-items: center; justify-content: center; z-index: 20; padding: 16px; }
-  #cx-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-             padding: 24px; width: 440px; max-width: 100%; max-height: 90vh; overflow-y: auto; }
-  #cx-card h1 { font-size: 16px; margin-bottom: 8px; }
+  /* connect modal */
+  #cx-card { width: 440px; }
   .cx-help { color: var(--ink-2); font-size: 13px; line-height: 1.5; margin-bottom: 14px; }
   .cx-help a { color: var(--accent); }
   .cx-help code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
@@ -146,6 +156,9 @@
   .cx-actions button { font: inherit; border-radius: 8px; padding: 8px 16px; cursor: pointer; border: 1px solid var(--border); }
   .cx-connect { background: var(--accent); color: #fff; border-color: transparent; }
   .cx-cancel { background: transparent; color: var(--ink-2); }
+
+  @media (max-width: 900px) { .kanban { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .kanban { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -159,9 +172,14 @@
     <div id="login-msg"></div>
   </form>
 </div>
-<div id="cx-overlay" onclick="if(event.target===this)closeConnect()">
-  <form id="cx-card" onsubmit="submitConnect(event)">
-    <h1 id="cx-title"></h1>
+
+<div id="dt-overlay" class="overlay" onclick="if(event.target===this)closeDetail()">
+  <div id="dt-card" class="modal"></div>
+</div>
+
+<div id="cx-overlay" class="overlay" onclick="if(event.target===this)closeConnect()">
+  <form id="cx-card" class="modal" onsubmit="submitConnect(event)">
+    <h1 id="cx-title" style="font-size:16px;margin-bottom:8px"></h1>
     <div id="cx-help" class="cx-help"></div>
     <div id="cx-fields"></div>
     <div id="cx-msg"></div>
@@ -171,48 +189,48 @@
     </div>
   </form>
 </div>
+
 <main>
   <header>
     <h1>Chief of Staff</h1>
     <nav id="nav">
-      <button data-tab="needs" class="active">Needs You</button>
-      <button data-tab="dash">Dashboard</button>
+      <button data-tab="incoming" class="active">Incoming</button>
+      <button data-tab="insights">Insights</button>
       <button data-tab="conn">Connections</button>
-      <button data-tab="people">People</button>
     </nav>
     <span class="hbtns">
-      <button id="sync" title="Ingest all channels, index, and process new messages">Sync</button>
+      <button id="sync" class="iconbtn" title="Sync — fetch new messages across your channels" aria-label="Sync">
+        <svg id="sync-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+      </button>
       <button id="logout" onclick="logout()">sign out</button>
     </span>
   </header>
   <div id="err"></div>
 
-  <section class="panel active" id="panel-needs">
-    <div class="work">
-      <div class="rail" id="queue"></div>
-      <div class="detail" id="detail"><div class="empty">Select a message from the queue.</div></div>
-    </div>
+  <section class="panel active" id="panel-incoming">
+    <div class="kanban" id="kanban"></div>
   </section>
 
-  <section class="panel" id="panel-dash">
+  <section class="panel" id="panel-insights">
+    <h2>Response performance</h2>
     <div class="tiles" id="tiles"></div>
     <h2>Channel breakdown</h2>
     <div class="bars" id="bars" role="img" aria-label="Inbound messages per channel"></div>
+    <h2 id="people-h">People · cross-channel</h2>
+    <div id="people"></div>
   </section>
 
   <section class="panel" id="panel-conn">
-    <p class="meta" style="margin-bottom:12px">Connect your communication channels. One-time, per account — no setup files.</p>
+    <p class="meta" style="margin-bottom:12px">Connect your communication channels — one-time, per account, your credentials stay in your tenant. Every channel is a real integration.</p>
     <div id="connections"></div>
-  </section>
-
-  <section class="panel" id="panel-people">
-    <div id="people"></div>
   </section>
 </main>
 <script>
 const API = (window.API_BASE || "") + "/api";
-const CH = ["gmail","email","sms","whatsapp","x","linkedin"];
-const chColor = c => `var(--ch-${c}, var(--accent))`;   // unknown channels fall back to accent
+const CH = ["gmail","email","sms","whatsapp","x","telegram","linkedin"];
+const chColor = c => `var(--ch-${c}, var(--accent))`;
 const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const fmtSecs = s => s == null ? "—" : (s < 60 ? Math.round(s) + "s" : s < 3600 ? Math.round(s/60) + "m" : (s/3600).toFixed(1) + "h");
 const ago = t => { const d=(Date.now()-new Date(t))/1000; return d<60?Math.round(d)+"s":d<3600?Math.round(d/60)+"m":d<86400?Math.round(d/3600)+"h":Math.round(d/86400)+"d"; };
@@ -221,6 +239,7 @@ const OVERDUE = t => (Date.now() - new Date(t)) / 1000 > 300;
 function token() { return localStorage.getItem("cos_token"); }
 function showLogin(s) { document.getElementById("login-overlay").style.display = s ? "flex" : "none"; }
 function logout() { localStorage.removeItem("cos_token"); showLogin(true); }
+function clearErr() { const e = document.getElementById("err"); e.style.display = "none"; e.textContent = ""; }
 
 async function j(path, opts = {}) {
   opts.headers = Object.assign({}, opts.headers, token() ? {Authorization: "Bearer " + token()} : {});
@@ -241,40 +260,35 @@ async function doLogin(ev) {
   } catch (e) { msg.textContent = "Login failed: " + e.message; }
 }
 
-let TAB = "needs", SEL = null, DATA = {}, failCount = 0;
-function clearErr() { const e = document.getElementById("err"); e.style.display = "none"; e.textContent = ""; }
+let TAB = "incoming", DATA = {}, failCount = 0;
 
 document.getElementById("nav").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
-  TAB = b.dataset.tab;
-  clearErr();
+  TAB = b.dataset.tab; clearErr();
   [...document.querySelectorAll("#nav button")].forEach(x => x.classList.toggle("active", x === b));
-  ["needs","dash","conn","people"].forEach(t =>
+  ["incoming","insights","conn"].forEach(t =>
     document.getElementById("panel-"+t).classList.toggle("active", t === TAB));
   renderTab();
 });
-
 function renderTab() {
-  if (TAB === "needs") renderNeeds();
-  else if (TAB === "dash") renderDash();
+  if (TAB === "incoming") renderIncoming();
+  else if (TAB === "insights") renderInsights();
   else if (TAB === "conn") renderConn();
-  else if (TAB === "people") renderPeople();
 }
 
 async function loadAll() {
   if (!token()) { showLogin(true); return; }
   try {
-    const [dash, msgs, recs, drafts, asana] = await Promise.all([
-      j("/dashboard"), j("/messages?status=pending"), j("/recommendations"), j("/drafts?status=pending"), j("/asana")]);
+    const [dash, msgs, recs, drafts, asana, people] = await Promise.all([
+      j("/dashboard"), j("/messages"), j("/recommendations"), j("/drafts?status=all"), j("/asana"), j("/people")]);
     failCount = 0; clearErr();
-    DATA = { dash, msgs, recs, drafts, asana,
+    DATA = { dash, msgs, recs, drafts, asana, people,
       recByMsg: Object.fromEntries(recs.map(r => [r.message_id, r])),
-      draftByMsg: Object.fromEntries(drafts.map(d => [d.message_id, d])),
+      draftByMsg: Object.fromEntries(drafts.map(d => [d.message_id, d])),   // ordered asc → newest wins
       asanaByMsg: Object.fromEntries(asana.map(a => [a.message_id, a])) };
-    renderTab();
+    if (TAB !== "conn") renderTab();
   } catch (e) {
     if (e.message === "signed out") return;
-    // tolerate a single transient blip (free host can cold-start); only warn if it persists
     if (++failCount >= 2) {
       const el = document.getElementById("err");
       el.style.display = "block"; el.textContent = "Reconnecting to the runtime…";
@@ -282,45 +296,71 @@ async function loadAll() {
   }
 }
 
-/* ---- Needs You (triage rail + detail) ---- */
-function renderNeeds() {
-  // newest-first: fresh arrivals on top (the <5-min goal); overdue is shown via the red dot,
-  // not by burying recent mail under a long backlog of old overdue items.
-  const msgs = [...(DATA.msgs || [])].sort((a,b) => new Date(b.sent_at)-new Date(a.sent_at));
-  const q = document.getElementById("queue");
-  q.innerHTML = msgs.length ? msgs.map(m => {
-    const who = m.sender.display_name || m.sender.handle;
-    const od = OVERDUE(m.sent_at);
-    return `<div class="qrow ${SEL===m.id?'sel':''}" onclick="selectMsg('${m.id}')">
-      <div class="top"><span class="who"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(who)}</span>
-        <span class="t">${od?'<span class="dot">●</span> ':''}${ago(m.sent_at)}</span></div>
-      <div class="snip">${esc(m.body_text)}</div></div>`;
-  }).join("") : `<div class="empty">Inbox zero — nothing awaiting you.</div>`;
-  if (SEL && msgs.find(m => m.id === SEL)) renderDetail(SEL);
-  else if (msgs.length) {
-    // land on something actionable — a ready draft, else a needs-context item
-    const best = msgs.find(m => DATA.draftByMsg[m.id])
-      || msgs.find(m => DATA.recByMsg[m.id] && DATA.recByMsg[m.id].needs_context) || msgs[0];
-    selectMsg(best.id);
-  }
-  else document.getElementById("detail").innerHTML = `<div class="empty">Inbox zero 🎉</div>`;
+/* ---- Incoming (kanban) ---- */
+const COLS = [
+  {k:"new", label:"New"},
+  {k:"context", label:"Needs Context"},
+  {k:"approval", label:"Awaiting Approval"},
+  {k:"done", label:"Done"},
+];
+function bucketOf(m) {
+  const rec = DATA.recByMsg[m.id], draft = DATA.draftByMsg[m.id];
+  if ((draft && draft.status === "sent") || m.answered_status === "answered") return "done";
+  if (draft && draft.status === "pending") return "approval";
+  if (rec && rec.needs_context) return "context";
+  if (draft && draft.status === "rejected") return "done";
+  if (rec && ["archive","create_task","link_task","delegate"].includes(rec.action)) return "done";
+  return "new";
 }
-function selectMsg(id) { SEL = id; [...document.querySelectorAll(".qrow")].forEach(r =>
-  r.classList.toggle("sel", r.getAttribute("onclick").includes(id))); renderDetail(id); }
+function badgeFor(m, bucket) {
+  const draft = DATA.draftByMsg[m.id], rec = DATA.recByMsg[m.id], task = DATA.asanaByMsg[m.id];
+  if (bucket === "done") {
+    if ((draft && draft.status === "sent") || m.answered_status === "answered") return `<span class="kc-badge sent">✓ replied</span>`;
+    if (draft && draft.status === "rejected") return `<span class="kc-badge">rejected</span>`;
+    if (rec && rec.action === "archive") return `<span class="kc-badge">archived</span>`;
+    if (rec) return `<span class="kc-badge">${esc(rec.action)}</span>`;
+  }
+  if (bucket === "approval") return `<span class="kc-badge">draft ready</span>`;
+  let b = "";
+  if (task) b += `<span class="kc-badge task">📋 task</span> `;
+  if (OVERDUE(m.sent_at) && bucket !== "done") b += `<span class="kc-badge od">overdue</span>`;
+  return b;
+}
+function cardHtml(m, bucket) {
+  const who = m.sender.display_name || m.sender.handle;
+  return `<div class="kcard" onclick="openDetail('${m.id}')">
+    <div class="kc-top"><span class="kc-who"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(who)}</span>
+      <span class="kc-t">${ago(m.sent_at)}</span></div>
+    <div class="kc-snip">${esc(m.body_text)}</div>
+    ${badgeFor(m, bucket)}</div>`;
+}
+function renderIncoming() {
+  const msgs = [...(DATA.msgs || [])].sort((a,b) => new Date(b.sent_at)-new Date(a.sent_at));
+  const buckets = {new:[], context:[], approval:[], done:[]};
+  msgs.forEach(m => buckets[bucketOf(m)].push(m));
+  document.getElementById("kanban").innerHTML = COLS.map(c =>
+    `<div class="kcol"><h3>${c.label}<span class="kcount">${buckets[c.k].length}</span></h3>
+      ${buckets[c.k].length ? buckets[c.k].map(m => cardHtml(m, c.k)).join("") : '<div class="kempty">—</div>'}
+    </div>`).join("");
+}
 
-function renderDetail(id) {
+/* ---- Detail modal ---- */
+function openDetail(id) {
   const m = (DATA.msgs || []).find(x => x.id === id); if (!m) return;
-  const rec = DATA.recByMsg[id], draft = DATA.draftByMsg[id];
+  const rec = DATA.recByMsg[id], draft = DATA.draftByMsg[id], task = DATA.asanaByMsg[id];
   const who = m.sender.display_name || m.sender.handle;
   const od = OVERDUE(m.sent_at);
-  let html = `<div class="meta"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(m.channel)} · ${esc(who)} · ${new Date(m.sent_at).toLocaleString()} ${od?'· <span class="dot">⚠ overdue</span>':'· within 5-min window'}</div>
-    <div class="msgbody">${esc(m.body_text)}</div>`;
+  let html = `<button class="x" onclick="closeDetail()">✕</button>
+    <div class="meta"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(m.channel)} · ${esc(who)} · ${new Date(m.sent_at).toLocaleString()} ${od?'· <span style="color:var(--critical)">⚠ overdue</span>':'· within 5-min window'}</div>
+    <div class="msgbody" style="margin:10px 0 4px">${esc(m.body_text)}</div>`;
   if (rec) html += `<div class="box"><div class="lbl">Agent recommendation</div>
     <b>${esc(rec.action)}</b> — ${esc(rec.rationale)}</div>`;
-  const task = DATA.asanaByMsg && DATA.asanaByMsg[id];
   if (task) html += `<div class="box"><div class="lbl">📋 Asana task created</div>
     <a class="link" href="${esc(task.task_url)}" target="_blank" rel="noopener">${esc(task.task_url || task.task_gid)}</a></div>`;
-  if (draft) {
+  if (draft && draft.status === "sent") {
+    html += `<div class="box"><div class="lbl">✓ Sent · your voice</div><div class="draft">${esc(draft.body)}</div>
+      <div class="sent-note">Delivered${draft.provider_message_id?` (${esc(draft.provider_message_id)})`:""}.</div></div>`;
+  } else if (draft && draft.status !== "rejected") {
     html += `<div class="box" data-draft="${draft.id}"><div class="lbl">Draft · your voice</div>
       <div class="draft" id="dtext">${esc(draft.body)}</div>
       ${draft.style_notes?`<div class="meta" style="margin-top:6px">style: ${esc(draft.style_notes)}</div>`:''}
@@ -330,19 +370,21 @@ function renderDetail(id) {
         <button class="reject" onclick="decide('${draft.id}','rejected',this)">✗ Reject</button>
       </div></div>`;
   } else if (rec && rec.needs_context) {
-    html += `<div class="box abox"><div class="lbl">Agent needs your context</div>
+    html += `<div class="box"><div class="lbl">Agent needs your context</div>
       <div>${esc(rec.context_question || rec.rationale)}</div>
       <textarea id="ctx" placeholder="Give the agent what it needs…"></textarea>
       <div class="actions"><button class="primary" onclick="answerCtx('${id}',this)">→ Give context &amp; draft</button></div></div>`;
-  } else if (rec) {
-    html += rec.action === "reply"
-      ? `<div class="meta">Recommended: <b>reply</b> — draft was handled or rejected.</div>`
-      : `<div class="meta">Recommended action: <b>${esc(rec.action)}</b> — no draft needed.</div>`;
-  } else {
-    html += `<div class="meta">Not processed yet — run Sync.</div>`;
+  } else if (draft && draft.status === "rejected") {
+    html += `<div class="meta">Draft rejected.</div>`;
+  } else if (rec && rec.action !== "reply") {
+    html += `<div class="meta">Handled — action <b>${esc(rec.action)}</b>, no reply needed.</div>`;
+  } else if (!rec) {
+    html += `<div class="meta">Not processed yet — hit Sync.</div>`;
   }
-  document.getElementById("detail").innerHTML = html;
+  document.getElementById("dt-card").innerHTML = html;
+  document.getElementById("dt-overlay").style.display = "flex";
 }
+function closeDetail() { document.getElementById("dt-overlay").style.display = "none"; }
 
 async function decide(id, decision, btn) {
   btn.disabled = true; btn.textContent = decision === "approved" ? "Sending…" : "Rejecting…";
@@ -351,7 +393,7 @@ async function decide(id, decision, btn) {
       body: JSON.stringify({decision, decided_by:"executive"})});
     const box = document.querySelector(`[data-draft="${id}"] .actions`);
     if (box) box.outerHTML = decision === "approved"
-      ? `<div class="sent-note">✓ Approved — sent (${esc(r.send?.provider_message_id||"")})</div>`
+      ? `<div class="sent-note">✓ Approved — sent${r.send?.provider_message_id?` (${esc(r.send.provider_message_id)})`:""}</div>`
       : `<div class="meta">Rejected.</div>`;
     await loadAll();
   } catch (e) { alert("Failed: " + e.message); btn.disabled = false; }
@@ -361,12 +403,7 @@ function startEdit(id) {
   const cur = document.getElementById("dtext").textContent;
   box.querySelector(".actions").outerHTML =
     `<textarea class="edit-in" id="edit-${id}">${esc(cur)}</textarea>
-     <div class="actions"><button class="approve" onclick="approveEdited('${id}',this)">✓ Approve &amp; Send edited</button></div>`;
-}
-async function approveEdited(id, btn) {
-  // (edit is client-side presentation; approving sends the stored draft — kept simple
-  //  for the gate's integrity. The edited text is shown; send routes the approved draft.)
-  decide(id, "approved", btn);
+     <div class="actions"><button class="approve" onclick="decide('${id}','approved',this)">✓ Approve &amp; Send</button></div>`;
 }
 async function answerCtx(msgId, btn) {
   const ctx = document.getElementById("ctx").value.trim();
@@ -374,12 +411,12 @@ async function answerCtx(msgId, btn) {
   btn.disabled = true; btn.textContent = "Drafting…";
   try { await j(`/messages/${msgId}/answer`, {method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({context: ctx})});
-    await loadAll(); selectMsg(msgId);
+    await loadAll(); openDetail(msgId);
   } catch (e) { alert("Failed: " + e.message); btn.disabled = false; }
 }
 
-/* ---- Dashboard ---- */
-function renderDash() {
+/* ---- Insights (stats + people) ---- */
+function renderInsights() {
   const d = DATA.dash; if (!d) return;
   const rt = d.response_time_seconds;
   const tiles = [
@@ -392,16 +429,37 @@ function renderDash() {
   ];
   document.getElementById("tiles").innerHTML = tiles.map(x =>
     `<div class="tile${x.alert?' alert':''}${x.good?' good':''}"><div class="v">${esc(x.v)}</div><div class="l">${esc(x.l)}</div></div>`).join("");
-  // data-driven: known channels first (fixed order), then any new channel present in the data
   const present = Object.keys(d.channel_breakdown || {});
   const chans = [...CH, ...present.filter(c => !CH.includes(c))].filter(c => d.channel_breakdown[c]);
   const max = Math.max(1, ...chans.map(c => d.channel_breakdown[c]?.total || 0));
-  document.getElementById("bars").innerHTML = chans.map(c => {
+  document.getElementById("bars").innerHTML = chans.length ? chans.map(c => {
     const s = d.channel_breakdown[c] || {total:0, pending:0};
     return `<div class="barrow"><span class="name"><span class="chip" style="background:${chColor(c)}"></span>${c}</span>
       <span class="track"><span class="bar" style="width:${(s.total/max)*100}%;background:${chColor(c)}"></span></span>
       <span class="n">${s.total} <small>(${s.pending} open)</small></span></div>`;
-  }).join("");
+  }).join("") : `<div class="empty">No messages yet.</div>`;
+  const ppl = DATA.people || [];
+  document.getElementById("people-h").textContent = `People · ${ppl.length} contacts across channels`;
+  document.getElementById("people").innerHTML = ppl.length ? `<div class="rows plist">${ppl.map(p =>
+    `<div class="row" onclick='openPerson(${JSON.stringify(p.name)})'>
+      <div><div class="name">${esc(p.name)}</div>
+        <div class="sub">${p.channels.map(c=>`<span class="chip" style="background:${chColor(c)}"></span>${c}`).join("  ")} · ${p.count} messages</div></div>
+      <div class="meta">${ago(p.last_at)} ago</div></div>`).join("")}</div>` : `<div class="empty">No contacts yet.</div>`;
+}
+async function openPerson(name) {
+  try {
+    const p = await j(`/people/${encodeURIComponent(name)}`);
+    document.getElementById("dt-card").innerHTML = `<button class="x" onclick="closeDetail()">✕</button>
+      <div class="name" style="font-size:17px">${esc(p.name)}</div>
+      <div class="meta" style="margin:4px 0 2px">${p.channels.map(c=>`<span class="chip" style="background:${chColor(c)}"></span>${c}`).join("  ")}</div>
+      <div class="meta">${p.handles.map(esc).join(" · ")}</div>
+      ${p.topics.length?`<div class="meta" style="margin-top:6px">🏷 ${p.topics.map(esc).join(", ")}</div>`:''}
+      ${p.asana_tasks.length?`<div class="meta">📋 ${p.asana_tasks.length} linked Asana task(s)</div>`:''}
+      <h2>Conversation across channels</h2>
+      ${p.messages.map(m => `<div class="box"><div class="meta"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(m.channel)} · ${new Date(m.sent_at).toLocaleString()} · ${esc(m.answered_status)}</div>
+        <div style="margin-top:5px">${esc(m.body_text)}</div></div>`).join("")}`;
+    document.getElementById("dt-overlay").style.display = "flex";
+  } catch (e) { alert("Failed: " + e.message); }
 }
 
 /* ---- Connections ---- */
@@ -411,63 +469,89 @@ async function renderConn() {
   try {
     const c = await j("/connections");
     clearErr();
-    const live = c.channels.filter(x => x.connected), avail = c.channels.filter(x => !x.connected);
     const asana = c.integrations[0];
+    const sub = x => x.connected ? esc(x.accounts.join(", ")||"connected")
+      : x.method==="oauth" ? "Google consent (our app)"
+      : x.method==="unavailable" ? "no public messaging API"
+      : "bring your own credentials";
+    const btn = x => x.connected ? `<span class="pill live">live</span>`
+      : x.method==="unavailable" ? `<span class="pill na">unavailable</span>`
+      : x.method==="oauth" ? `<button class="cta" onclick="oauthConnect()">Connect</button>`
+      : CONNECT_FORMS[x.channel] ? `<button onclick="openConnect('${x.channel}')">Connect</button>`
+      : `<span class="pill na">via login script</span>`;
     const rowHtml = x => `<div class="row"><div>
         <div class="name"><span class="chip" style="background:${chColor(x.channel)}"></span>${esc(x.label)}</div>
-        <div class="sub">${x.connected ? esc(x.accounts.join(", ")||"connected") : (x.method==="oauth"?"Google consent (our app)":"paste app-password / token")}</div></div>
-      <div>${x.connected ? `<span class="pill live">live</span>` :
-        x.method==="oauth" ? `<button class="cta" onclick="oauthConnect()">Connect</button>` :
-        CONNECT_FORMS[x.channel] ? `<button onclick="openConnect('${x.channel}')">Connect</button>` :
-        `<span class="pill">via login script</span>`}</div></div>`;
-    const asanaRow = `<div class="row"><div><div class="name">✅ Asana</div>
-        <div class="sub">${asana.connected?'workspace connected · tasks created from communications':'not connected'}</div></div>
+        <div class="sub">${sub(x)}</div></div><div>${btn(x)}</div></div>`;
+    const asanaRow = `<div class="row"><div><div class="name">📋 Asana</div>
+        <div class="sub">${asana.connected?'workspace connected · tasks created from communications':'paste a personal access token'}</div></div>
       <div>${asana.connected?'<span class="pill live">live</span>':'<button onclick="openConnect(\'asana\')">Connect</button>'}</div></div>`;
-    const hasConnected = live.length || asana.connected;
-    el.innerHTML =
-      `<div class="syncbar"><button class="cta" onclick="syncNow(this)">↻ Sync now</button>
-        <span class="meta">pull the latest from your connected channels</span></div>` +
-      (hasConnected ? `<h2>Connected</h2><div class="rows">${live.map(rowHtml).join("")}${asana.connected?asanaRow:""}</div>` : "") +
+    const live = c.channels.filter(x => x.connected);
+    const avail = c.channels.filter(x => !x.connected);
+    const connectedBlock = (live.length || asana.connected)
+      ? `<h2>Connected</h2><div class="rows">${live.map(rowHtml).join("")}${asana.connected?asanaRow:""}</div>` : "";
+    el.innerHTML = connectedBlock +
       `<h2>Available</h2><div class="rows">${avail.map(rowHtml).join("")}${asana.connected?"":asanaRow}</div>
-       <p class="meta" style="margin-top:12px">Connect Gmail opens Google's consent (our registered app). Other email (IMAP) and Asana open a short guided form with instructions. Every channel is a real integration — your account, your data, isolated to your login.</p>`;
+       <p class="meta" style="margin-top:12px">X, SMS and WhatsApp run on your own (paid) provider accounts — the platforms charge, but you can connect them. LinkedIn has no public personal-messaging API.</p>`;
   } catch (e) { el.innerHTML = `<div class="empty">Failed: ${esc(e.message)}</div>`; }
 }
-async function syncNow(btn) {
-  const orig = btn ? btn.textContent : null;
-  if (btn) { btn.disabled = true; btn.textContent = "Syncing…"; }
-  try {
-    await j("/sync", {method:"POST"});  // background job; refresh as results land
-    for (let i=0;i<4;i++){ await new Promise(r=>setTimeout(r,4000)); await loadAll(); }
-    renderConn();
-  } catch (e) { if (e.message!=="signed out") alert("Sync failed: " + e.message); }
-  finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
-}
 async function oauthConnect() {
-  // fetch the tenant-bound consent URL WITH our bearer token, then redirect the browser.
   try { const r = await j("/oauth/google/start"); location.href = r.url; }
   catch (e) { alert("Could not start Google connect: " + e.message); }
 }
-// per-channel guided connect forms — the user pastes credentials here (never in chat),
-// with instructions + where-to-get-it links. build() maps fields → the connect payload.
 const CONNECT_FORMS = {
   email: {
     title: "Connect email (IMAP)",
     help: `Works with Fastmail, Outlook / Microsoft 365, Yahoo, iCloud, or Gmail via an app-password.
            Use an <b>app password</b>, not your login password
-           (<a href="https://support.google.com/mail/answer/185833" target="_blank" rel="noopener">how to create one</a>).`,
+           (<a href="https://support.google.com/mail/answer/185833" target="_blank" rel="noopener">how</a>).`,
     fields: [
       {k:"email", label:"Email address", type:"email", ph:"you@company.com", req:true},
       {k:"password", label:"App password", type:"password", ph:"xxxx xxxx xxxx xxxx", req:true},
-      {k:"imap_host", label:"IMAP host (optional — auto-detected from your address)", type:"text", ph:"imap.gmail.com"},
+      {k:"imap_host", label:"IMAP host (optional — auto-detected)", type:"text", ph:"imap.gmail.com"},
     ],
     build: v => ({account_handle: v.email,
       secret: JSON.stringify(v.imap_host ? {password:v.password, imap_host:v.imap_host} : {password:v.password})}),
   },
+  x: {
+    title: "Connect X · Twitter DMs",
+    help: `Your own X app with DM access (X charges for the DM API). Provide an OAuth2 user token
+           with <code>dm.read dm.write</code>, your numeric user id, and handle.`,
+    fields: [
+      {k:"access_token", label:"OAuth2 user access token", type:"password", req:true},
+      {k:"self_user_id", label:"Your numeric X user id", type:"text", ph:"1234567890", req:true},
+      {k:"self_handle", label:"Your handle", type:"text", ph:"@you", req:true},
+    ],
+    build: v => ({account_handle: v.self_handle,
+      secret: JSON.stringify({access_token:v.access_token, self_user_id:v.self_user_id, self_handle:v.self_handle})}),
+  },
+  sms: {
+    title: "Connect SMS · Twilio",
+    help: `Your own Twilio account (Twilio charges per number + message). From the
+           <a href="https://console.twilio.com" target="_blank" rel="noopener">Twilio console</a>.`,
+    fields: [
+      {k:"account_sid", label:"Account SID", type:"text", ph:"AC…", req:true},
+      {k:"auth_token", label:"Auth Token", type:"password", req:true},
+      {k:"from_number", label:"Your Twilio number", type:"text", ph:"+15551234567", req:true},
+    ],
+    build: v => ({account_handle: v.from_number,
+      secret: JSON.stringify({account_sid:v.account_sid, auth_token:v.auth_token, from_number:v.from_number})}),
+  },
+  whatsapp: {
+    title: "Connect WhatsApp · Twilio",
+    help: `Your Twilio WhatsApp sender (sandbox or approved number). Same Twilio credentials as SMS.`,
+    fields: [
+      {k:"account_sid", label:"Account SID", type:"text", ph:"AC…", req:true},
+      {k:"auth_token", label:"Auth Token", type:"password", req:true},
+      {k:"from_number", label:"Your WhatsApp-enabled number", type:"text", ph:"+14155238886", req:true},
+    ],
+    build: v => ({account_handle: v.from_number,
+      secret: JSON.stringify({account_sid:v.account_sid, auth_token:v.auth_token, from_number:v.from_number})}),
+  },
   asana: {
     title: "Connect Asana",
-    help: `Paste a <b>Personal Access Token</b> — create one at
+    help: `Paste a <b>Personal Access Token</b> —
            <a href="https://app.asana.com/0/my-apps" target="_blank" rel="noopener">app.asana.com → Apps → Personal access tokens</a>.
-           Tasks are created in your own workspace.`,
+           Tasks land in your own workspace, in a "Chief of Staff" project.`,
     fields: [{k:"pat", label:"Personal Access Token", type:"password", ph:"1/1216…", req:true}],
     build: v => ({account_handle:"asana", secret: v.pat}),
   },
@@ -498,49 +582,21 @@ async function submitConnect(ev) {
   } catch (e) { msg.textContent = "Failed: " + e.message; }
 }
 
-/* ---- People (cross-channel contacts) ---- */
-async function renderPeople() {
-  const el = document.getElementById("people");
-  el.innerHTML = `<h2>People · cross-channel</h2><div class="empty">Loading…</div>`;
+/* ---- Sync (spinning icon) ---- */
+async function doSync() {
+  const btn = document.getElementById("sync"), ico = document.getElementById("sync-ico");
+  if (btn.disabled) return;
+  btn.disabled = true; ico.classList.add("spin");
   try {
-    const ppl = await j("/people");
-    clearErr();
-    el.innerHTML = `<h2>People · ${ppl.length} contacts across channels</h2>
-      <div class="rows plist">${ppl.map(p => `<div class="row" onclick='showPerson(${JSON.stringify(p.name)})'>
-        <div><div class="name">${esc(p.name)}</div>
-          <div class="sub">${p.channels.map(c=>`<span class="chip" style="background:${chColor(c)}"></span>${c}`).join("  ")} · ${p.count} messages</div></div>
-        <div class="meta">${ago(p.last_at)} ago</div></div>`).join("")}</div>`;
-  } catch (e) { el.innerHTML = `<div class="empty">Failed: ${esc(e.message)}</div>`; }
-}
-async function showPerson(name) {
-  const el = document.getElementById("people");
-  try {
-    const p = await j(`/people/${encodeURIComponent(name)}`);
-    el.innerHTML = `<h2><span class="link" style="cursor:pointer" onclick="renderPeople()">← People</span></h2>
-      <div class="detail">
-        <div class="name" style="font-size:17px">${esc(p.name)}</div>
-        <div class="meta" style="margin:4px 0 2px">${p.channels.map(c=>`<span class="chip" style="background:${chColor(c)}"></span>${c}`).join("  ")}</div>
-        <div class="meta">${p.handles.map(esc).join(" · ")}</div>
-        ${p.topics.length?`<div class="meta" style="margin-top:6px">🏷 ${p.topics.map(esc).join(", ")}</div>`:''}
-        ${p.asana_tasks.length?`<div class="meta">✅ ${p.asana_tasks.length} linked Asana task(s)</div>`:''}
-        <h2>Conversation across channels</h2>
-        ${p.messages.map(m => `<div class="box"><div class="meta"><span class="chip" style="background:${chColor(m.channel)}"></span>${esc(m.channel)} · ${new Date(m.sent_at).toLocaleString()} · ${esc(m.answered_status)}</div>
-          <div style="margin-top:5px">${esc(m.body_text)}</div></div>`).join("")}
-      </div>`;
-  } catch (e) { el.innerHTML = `<div class="empty">Failed: ${esc(e.message)}</div>`; }
-}
-
-document.getElementById("sync").addEventListener("click", async ev => {
-  ev.target.disabled = true; ev.target.textContent = "Syncing…";
-  try {
-    await j("/sync", {method:"POST"});  // background job; refresh as newest-first results land
+    await j("/sync", {method:"POST"});  // background; refresh as newest-first results land
     for (let i=0;i<4;i++){ await new Promise(r=>setTimeout(r,4000)); await loadAll(); }
   } catch (e) { if (e.message!=="signed out") alert("Sync failed: " + e.message); }
-  ev.target.disabled = false; ev.target.textContent = "Sync";
-});
+  finally { btn.disabled = false; ico.classList.remove("spin"); }
+}
+document.getElementById("sync").addEventListener("click", doSync);
 
 loadAll();
-setInterval(() => { if (token() && TAB !== "people" && TAB !== "conn") loadAll(); }, 30000);
+setInterval(() => { if (token() && TAB === "incoming") loadAll(); }, 30000);
 </script>
 </body>
 </html>
