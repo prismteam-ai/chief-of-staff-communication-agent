@@ -22,7 +22,7 @@ from . import boot  # noqa: F401  (import-compat; connectors are per-owner)
 from .db import sb
 
 _hosts = ["localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*"]
-if os.environ.get("PUBLIC_HOST"):  # e.g. cos-comms-agent.onrender.com
+if os.environ.get("PUBLIC_HOST"):  # e.g. cos-comms-agent.whitewave-2a3d27b9.eastus2.azurecontainerapps.io
     _hosts.append(os.environ["PUBLIC_HOST"])
 
 mcp = FastMCP(

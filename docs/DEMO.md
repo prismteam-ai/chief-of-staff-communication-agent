@@ -2,7 +2,7 @@
 
 Everything here runs against the live site. Nothing to install.
 
-- **URL:** https://cos-comms-agent.onrender.com
+- **URL:** https://cos-comms-agent.whitewave-2a3d27b9.eastus2.azurecontainerapps.io
 - **Sign in:** `demo@meridianlabs.io` / `Demo-HAM1Slj9dMnR`
 - First load may take ~30–40s (free host wakes from sleep) — open it a minute
   before you record.
@@ -70,7 +70,7 @@ Add to Cursor (Settings → MCP) — replace the token with the one in the PR:
 
 ```json
 { "mcpServers": { "chief-of-staff-comms": {
-    "url": "https://cos-comms-agent.onrender.com/mcp/",
+    "url": "https://cos-comms-agent.whitewave-2a3d27b9.eastus2.azurecontainerapps.io/mcp/",
     "headers": { "Authorization": "Bearer <MCP_AUTH_TOKEN>" } } } }
 ```
 

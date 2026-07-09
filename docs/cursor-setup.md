@@ -30,7 +30,7 @@ shipped with the demo credentials:
 {
   "mcpServers": {
     "chief-of-staff-comms": {
-      "url": "https://cos-comms-agent.onrender.com/mcp/",
+      "url": "https://cos-comms-agent.whitewave-2a3d27b9.eastus2.azurecontainerapps.io/mcp/",
       "headers": { "Authorization": "Bearer <MCP_AUTH_TOKEN from the demo creds>" }
     }
   }

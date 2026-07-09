@@ -155,7 +155,7 @@ def oauth_start_url(state: str) -> str:
     return "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode({
         "client_id": os.environ["GOOGLE_CLIENT_ID"],
         "redirect_uri": os.environ.get("GOOGLE_REDIRECT_URI",
-                                       "https://cos-comms-agent.onrender.com/api/oauth/google/callback"),
+                                       "https://cos-comms-agent.whitewave-2a3d27b9.eastus2.azurecontainerapps.io/api/oauth/google/callback"),
         "response_type": "code",
         "scope": SCOPES,
         "access_type": "offline",
@@ -171,7 +171,7 @@ def oauth_exchange(code: str) -> dict:
         "code": code,
         "grant_type": "authorization_code",
         "redirect_uri": os.environ.get("GOOGLE_REDIRECT_URI",
-                                       "https://cos-comms-agent.onrender.com/api/oauth/google/callback"),
+                                       "https://cos-comms-agent.whitewave-2a3d27b9.eastus2.azurecontainerapps.io/api/oauth/google/callback"),
     }, timeout=30)
     r.raise_for_status()
     tokens = r.json()
