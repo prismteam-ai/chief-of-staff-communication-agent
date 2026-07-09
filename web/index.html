@@ -283,8 +283,9 @@ async function loadAll() {
 
 /* ---- Needs You (triage rail + detail) ---- */
 function renderNeeds() {
-  const msgs = [...(DATA.msgs || [])].sort((a,b) =>
-    (OVERDUE(b.sent_at)-OVERDUE(a.sent_at)) || (new Date(a.sent_at)-new Date(b.sent_at)));
+  // newest-first: fresh arrivals on top (the <5-min goal); overdue is shown via the red dot,
+  // not by burying recent mail under a long backlog of old overdue items.
+  const msgs = [...(DATA.msgs || [])].sort((a,b) => new Date(b.sent_at)-new Date(a.sent_at));
   const q = document.getElementById("queue");
   q.innerHTML = msgs.length ? msgs.map(m => {
     const who = m.sender.display_name || m.sender.handle;
@@ -430,8 +431,11 @@ async function renderConn() {
 async function syncNow(btn) {
   const orig = btn ? btn.textContent : null;
   if (btn) { btn.disabled = true; btn.textContent = "Syncing…"; }
-  try { await j("/sync", {method:"POST"}); await loadAll(); renderConn(); }
-  catch (e) { alert("Sync failed: " + e.message); }
+  try {
+    await j("/sync", {method:"POST"});  // background job; refresh as results land
+    for (let i=0;i<4;i++){ await new Promise(r=>setTimeout(r,4000)); await loadAll(); }
+    renderConn();
+  } catch (e) { if (e.message!=="signed out") alert("Sync failed: " + e.message); }
   finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
 }
 async function oauthConnect() {
@@ -524,9 +528,11 @@ async function showPerson(name) {
 
 document.getElementById("sync").addEventListener("click", async ev => {
   ev.target.disabled = true; ev.target.textContent = "Syncing…";
-  try { await j("/sync", {method:"POST"}); } catch (e) { if (e.message!=="signed out") alert("Sync failed: " + e.message); }
+  try {
+    await j("/sync", {method:"POST"});  // background job; refresh as newest-first results land
+    for (let i=0;i<4;i++){ await new Promise(r=>setTimeout(r,4000)); await loadAll(); }
+  } catch (e) { if (e.message!=="signed out") alert("Sync failed: " + e.message); }
   ev.target.disabled = false; ev.target.textContent = "Sync";
-  loadAll();
 });
 
 loadAll();

@@ -154,9 +154,13 @@ def google_callback(code: str, background: BackgroundTasks, state: str = ""):
 
 
 @api.post("/sync")
-def sync(user: User = Depends(require_user)) -> dict:
-    """Ingest the caller's channels, index new content, process their new inbound."""
-    return _run_sync(user.id)
+def sync(background: BackgroundTasks, user: User = Depends(require_user)) -> dict:
+    """Kick off ingest → index → brain for the caller in the BACKGROUND — a full Gmail
+    fetch can exceed the HTTP request timeout. Returns immediately; results land as they
+    process (brain is newest-first, so fresh mail appears first), and autosync also runs
+    on a schedule."""
+    background.add_task(_run_sync, user.id)
+    return {"status": "started"}
 
 
 def _dashboard(owner: str) -> dict:
