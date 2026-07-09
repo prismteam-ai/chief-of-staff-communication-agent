@@ -387,10 +387,19 @@ async function renderConn() {
       <div>${asana.connected?'<span class="pill live">live</span>':'<button onclick="pasteConnect(\'asana\',\'Asana\')">Connect</button>'}</div></div>`;
     const hasConnected = live.length || asana.connected;
     el.innerHTML =
+      `<div class="syncbar"><button class="cta" onclick="syncNow(this)">↻ Sync now</button>
+        <span class="meta">pull the latest from your connected channels</span></div>` +
       (hasConnected ? `<h2>Connected</h2><div class="rows">${live.map(rowHtml).join("")}${asana.connected?asanaRow:""}</div>` : "") +
       `<h2>Available</h2><div class="rows">${avail.map(rowHtml).join("")}${asana.connected?"":asanaRow}</div>
        <p class="meta" style="margin-top:12px">Connect Gmail opens Google's consent (our registered app). Other email (IMAP) and Telegram ask for a credential in one field. Every channel is a real integration — your account, your data, isolated to your login.</p>`;
   } catch (e) { el.innerHTML = `<div class="empty">Failed: ${esc(e.message)}</div>`; }
+}
+async function syncNow(btn) {
+  const orig = btn ? btn.textContent : null;
+  if (btn) { btn.disabled = true; btn.textContent = "Syncing…"; }
+  try { await j("/sync", {method:"POST"}); await loadAll(); renderConn(); }
+  catch (e) { alert("Sync failed: " + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
 }
 async function oauthConnect() {
   // fetch the tenant-bound consent URL WITH our bearer token, then redirect the browser.

@@ -34,10 +34,12 @@ class _StubConnector:
 
 @pytest.fixture()
 def inbound_msg():
-    """A real pending inbound message + its owner (any tenant with data)."""
+    """A real pending inbound message + its owner (any tenant with data). Owner must be
+    non-null — an owner-less row would be residue, and ingest_for_owner(None) is invalid."""
     return (
         sb().table("messages").select("id, owner_id")
-        .eq("direction", "inbound").eq("answered_status", "pending").limit(1).execute()
+        .eq("direction", "inbound").eq("answered_status", "pending")
+        .not_.is_("owner_id", "null").limit(1).execute()
     ).data[0]
 
 
@@ -109,14 +111,16 @@ def test_approved_draft_sends_and_persists_provider_id(unapproved_draft, monkeyp
 def test_ingest_is_idempotent(monkeypatch, inbound_msg):
     """Re-ingesting the same connector output must not duplicate (owner-scoped upsert)."""
     owner = inbound_msg["owner_id"]
+    assert owner, "fixture must yield an owned message"
     monkeypatch.setattr(ingest_mod, "connectors_for_owner", lambda o: [_StubConnector()])
-    ingest_mod.ingest_for_owner(owner)
-    r2 = ingest_mod.ingest_for_owner(owner)
+    try:
+        ingest_mod.ingest_for_owner(owner)
+        r2 = ingest_mod.ingest_for_owner(owner)
+    finally:
+        # cleanup runs even if an assertion below fails — never leave stub residue
+        sb().table("messages").delete().eq("owner_id", owner).eq("external_id", "stub-ext-1").execute()
+        thr = sb().table("threads").select("id").eq("owner_id", owner).eq("external_thread_id", "stub-thr").execute().data
+        for t in thr:
+            sb().table("threads").delete().eq("id", t["id"]).execute()
+        sb().table("accounts").delete().eq("owner_id", owner).eq("handle", "stub@test").execute()
     assert r2["channels"]["gmail"]["new"] == 0, "re-ingest must not create new rows"
-
-    # cleanup: remove the stub message/thread/account for this owner
-    sb().table("messages").delete().eq("owner_id", owner).eq("external_id", "stub-ext-1").execute()
-    thr = sb().table("threads").select("id").eq("owner_id", owner).eq("external_thread_id", "stub-thr").execute().data
-    for t in thr:
-        sb().table("threads").delete().eq("id", t["id"]).execute()
-    sb().table("accounts").delete().eq("owner_id", owner).eq("handle", "stub@test").execute()

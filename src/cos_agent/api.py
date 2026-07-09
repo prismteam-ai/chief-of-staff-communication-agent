@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -132,7 +132,7 @@ def google_start(user: User = Depends(require_user)) -> dict:
 
 
 @public.get("/oauth/google/callback")
-def google_callback(code: str, state: str = ""):
+def google_callback(code: str, background: BackgroundTasks, state: str = ""):
     from fastapi.responses import RedirectResponse
 
     from .connectors.gmail_api import oauth_exchange
@@ -149,6 +149,7 @@ def google_callback(code: str, state: str = ""):
         on_conflict="channel,account_handle",
     ).execute()
     log.info("gmail connected for %s (owner %s)", tokens["email"], owner)
+    background.add_task(_run_sync, owner)  # first fetch starts immediately after connect
     return RedirectResponse("/?connected=gmail")
 
 
@@ -335,10 +336,11 @@ def connections(user: User = Depends(require_user)) -> dict:
             "mode": "live" if accts else "not_connected",
             "last_sync": last_sync.get(ch),
         })
-    asana_live = bool(os.environ.get("ASANA_ACCESS_TOKEN"))
+    from . import asana
     return {
         "channels": channels,
-        "integrations": [{"name": "asana", "label": "Asana", "connected": asana_live, "method": "paste"}],
+        "integrations": [{"name": "asana", "label": "Asana", "connected": asana.is_connected(user.id),
+                          "method": "paste"}],
     }
 
 
@@ -348,11 +350,17 @@ class PasteCredential(BaseModel):
     scopes: str | None = None
 
 
+# paste-connectable: real message channels + the Asana integration (all per-tenant)
+_CONNECTABLE = set(_CHANNEL_META) | {"asana"}
+
+
 @api.post("/channels/{channel}/connect")
-def connect_channel(channel: str, c: PasteCredential, user: User = Depends(require_user)) -> dict:
-    """Paste-key connect (IMAP/Telegram). Stores the credential for THIS tenant; the
-    per-owner resolver picks it up at sync time."""
-    if channel not in _CHANNEL_META:
+def connect_channel(channel: str, c: PasteCredential, background: BackgroundTasks,
+                    user: User = Depends(require_user)) -> dict:
+    """Paste-key connect (IMAP/Telegram/Asana). Stores the credential for THIS tenant; the
+    per-owner resolver (channels) or asana.client (Asana) picks it up. A message channel
+    kicks off a first sync immediately."""
+    if channel not in _CONNECTABLE:
         raise HTTPException(404, f"unknown channel {channel}")
     sb().table("connector_tokens").upsert(
         {"owner_id": user.id, "channel": channel, "account_handle": c.account_handle,
@@ -360,6 +368,8 @@ def connect_channel(channel: str, c: PasteCredential, user: User = Depends(requi
         on_conflict="channel,account_handle",
     ).execute()
     log.info("channel %s connected via paste for %s (owner %s)", channel, c.account_handle, user.id)
+    if channel != "asana":  # Asana is a task sink, not an ingest source
+        background.add_task(_run_sync, user.id)
     return {"channel": channel, "account_handle": c.account_handle, "connected": True}
 
 

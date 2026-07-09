@@ -142,6 +142,16 @@ def create_asana_task(message_id: str, title: str, detail: str) -> str:
 
 
 @mcp.tool()
+def sync() -> str:
+    """Fetch new messages from all of this tenant's connected channels, index them into
+    the knowledge layer, and run the brain (recommendation + style-matched draft + Asana
+    task where follow-up is implied). Call this before triaging to pull the latest."""
+    from .api import _run_sync
+
+    return json.dumps(_run_sync(_owner()), ensure_ascii=False, default=str)
+
+
+@mcp.tool()
 def dashboard_stats() -> str:
     """Communication volume, response status, overdue count, pending approvals, per-channel breakdown."""
     from .api import _dashboard
