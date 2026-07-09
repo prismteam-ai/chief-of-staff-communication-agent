@@ -1,0 +1,21 @@
+{
+  "voice": "Информационный стиль по «Пиши, сокращай» (Ильяхов, Сарычева): коротко, по делу, без воды. Факты вместо оценок, забота о времени читателя.",
+  "signoff": "Sign off as 'Dmitrii' on email; no signoff on X/WhatsApp.",
+  "rules": [
+    "Cut stop-words: filler, cliches, and empty intensifiers (very, really, actually, just, in order to).",
+    "Facts over evaluations. Show the fact, do not praise it.",
+    "One thought per sentence. Keep sentences short.",
+    "Active voice, not passive. Name who does what.",
+    "No bureaucratese or corporate filler (leverage, synergy, circle back, as per).",
+    "Lead with the point. Put the ask or answer in the first line.",
+    "Cut adjectives and adverbs that carry no information.",
+    "No em dashes."
+  ],
+  "examples": [
+    "Sam, ship it today. I read the diff, it's good.",
+    "Nadia, invoice approved. Pay it Friday.",
+    "Mia, Tuesday 2pm works. Send the invite.",
+    "No press this month. Ask again after we close.",
+    "Victor, the outage is priority. Drop everything and update me in 30 minutes."
+  ]
+}

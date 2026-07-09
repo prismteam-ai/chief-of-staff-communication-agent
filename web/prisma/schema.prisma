@@ -1,0 +1,33 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  role         String   @default("viewer") // owner | viewer
+  createdAt    DateTime @default(now())
+}
+
+model SentReply {
+  id              String   @id @default(cuid())
+  messageId       String
+  channel         String
+  text            String
+  responseSeconds Float?
+  sentAt          DateTime @default(now())
+}
+
+model Connection {
+  provider  String   @id // gmail | whatsapp | x | asana
+  mode      String   @default("mock") // mock | real
+  connected Boolean  @default(true)
+  detail    String   @default("mock")
+  updatedAt DateTime @updatedAt @default(now())
+}

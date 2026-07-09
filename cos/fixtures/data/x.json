@@ -1,0 +1,436 @@
+{
+  "mentions": [
+    {
+      "id": "9007000000000000",
+      "text": "@dmitrii_cos really enjoyed our conversation about the sales role \u2014 excited about what you're building!",
+      "author_id": "2000000000000000004",
+      "created_at": "2026-06-20T03:00:00.000Z",
+      "conversation_id": "1800700000000000"
+    },
+    {
+      "id": "9011000000000000",
+      "text": "@dmitrii_cos your API is down and support isn't responding. Not a great look.",
+      "author_id": "2000000000000000010",
+      "created_at": "2026-06-28T06:00:00.000Z",
+      "conversation_id": "1801100000000000"
+    },
+    {
+      "id": "9012000000000000",
+      "text": "@dmitrii_cos would you come on Fintech Weekly to talk about your Series A? 30 min, remote.",
+      "author_id": "2000000000000000006",
+      "created_at": "2026-06-29T04:00:00.000Z",
+      "conversation_id": "1801200000000000"
+    },
+    {
+      "id": "9065000000000000",
+      "text": "@dmitrii_cos Following up on demo request. Any update on your side?",
+      "author_id": "2000000000000000092",
+      "created_at": "2026-06-20T01:00:00.000Z",
+      "conversation_id": "1806500000000000"
+    },
+    {
+      "id": "9073000000000000",
+      "text": "@dmitrii_cos Hi Dmitrii, speaking invitation. Could you take a look and let me know by EOD?",
+      "author_id": "2000000000000000918",
+      "created_at": "2026-06-25T01:00:00.000Z",
+      "conversation_id": "1807300000000000"
+    },
+    {
+      "id": "9078000000000000",
+      "text": "@dmitrii_cos Hi Dmitrii, customer question. Could you take a look and let me know by Monday?",
+      "author_id": "2000000000000000918",
+      "created_at": "2026-06-25T08:00:00.000Z",
+      "conversation_id": "1807800000000000"
+    },
+    {
+      "id": "9087000000000000",
+      "text": "@dmitrii_cos Hi Dmitrii, press inquiry. Could you take a look and let me know by Friday?",
+      "author_id": "2000000000000000913",
+      "created_at": "2026-06-16T11:00:00.000Z",
+      "conversation_id": "1808700000000000"
+    },
+    {
+      "id": "9091000000000000",
+      "text": "@dmitrii_cos Quick one \u2014 demo request. Do you have 15 minutes this week?",
+      "author_id": "2000000000000000926",
+      "created_at": "2026-06-21T10:00:00.000Z",
+      "conversation_id": "1809100000000000"
+    },
+    {
+      "id": "9091100000000000",
+      "text": "Just bumping this \u2014 thanks!",
+      "author_id": "2000000000000000926",
+      "created_at": "2026-06-21T14:00:00.000Z",
+      "conversation_id": "1809100000000000"
+    },
+    {
+      "id": "9093000000000000",
+      "text": "@dmitrii_cos We'd love your input on press inquiry. Attaching details.",
+      "author_id": "2000000000000000910",
+      "created_at": "2026-06-16T11:00:00.000Z",
+      "conversation_id": "1809300000000000"
+    },
+    {
+      "id": "9096000000000000",
+      "text": "@dmitrii_cos Quick one \u2014 demo request. Do you have 15 minutes this week?",
+      "author_id": "2000000000000000915",
+      "created_at": "2026-06-13T02:00:00.000Z",
+      "conversation_id": "1809600000000000"
+    },
+    {
+      "id": "9099000000000000",
+      "text": "@dmitrii_cos We'd love your input on partnership idea. Attaching details.",
+      "author_id": "2000000000000000921",
+      "created_at": "2026-06-13T08:00:00.000Z",
+      "conversation_id": "1809900000000000"
+    },
+    {
+      "id": "9109000000000000",
+      "text": "@dmitrii_cos Following up on press inquiry. Any update on your side?",
+      "author_id": "2000000000000000925",
+      "created_at": "2026-06-13T03:00:00.000Z",
+      "conversation_id": "1810900000000000"
+    },
+    {
+      "id": "9110000000000000",
+      "text": "@dmitrii_cos Quick one \u2014 renewal question. Do you have 15 minutes this week?",
+      "author_id": "2000000000000000914",
+      "created_at": "2026-06-30T03:00:00.000Z",
+      "conversation_id": "1811000000000000"
+    },
+    {
+      "id": "9115000000000000",
+      "text": "@dmitrii_cos Following up on partnership idea. Any update on your side?",
+      "author_id": "2000000000000000911",
+      "created_at": "2026-06-24T10:00:00.000Z",
+      "conversation_id": "1811500000000000"
+    },
+    {
+      "id": "9115100000000000",
+      "text": "Just bumping this \u2014 thanks!",
+      "author_id": "2000000000000000911",
+      "created_at": "2026-06-24T14:00:00.000Z",
+      "conversation_id": "1811500000000000"
+    },
+    {
+      "id": "9116000000000000",
+      "text": "@dmitrii_cos Quick one \u2014 press inquiry. Do you have 15 minutes this week?",
+      "author_id": "2000000000000000924",
+      "created_at": "2026-06-14T11:00:00.000Z",
+      "conversation_id": "1811600000000000"
+    },
+    {
+      "id": "9120000000000000",
+      "text": "@dmitrii_cos Following up on vendor invoice. Any update on your side?",
+      "author_id": "2000000000000000924",
+      "created_at": "2026-06-22T12:00:00.000Z",
+      "conversation_id": "1812000000000000"
+    },
+    {
+      "id": "9121000000000000",
+      "text": "@dmitrii_cos We'd love your input on partnership idea. Attaching details.",
+      "author_id": "2000000000000000910",
+      "created_at": "2026-06-24T08:00:00.000Z",
+      "conversation_id": "1812100000000000"
+    },
+    {
+      "id": "9125000000000000",
+      "text": "@dmitrii_cos Quick one \u2014 demo request. Do you have 15 minutes this week?",
+      "author_id": "2000000000000000912",
+      "created_at": "2026-06-11T03:00:00.000Z",
+      "conversation_id": "1812500000000000"
+    },
+    {
+      "id": "9128000000000000",
+      "text": "@dmitrii_cos We'd love your input on speaking invitation. Attaching details.",
+      "author_id": "2000000000000000098",
+      "created_at": "2026-06-24T02:00:00.000Z",
+      "conversation_id": "1812800000000000"
+    }
+  ],
+  "dm_events": [
+    {
+      "id": "9002000000000000",
+      "event_type": "MessageCreate",
+      "text": "quick nudge on the term sheet \u2014 partners meeting is Monday, would love your redline before then \ud83d\ude4f",
+      "sender_id": "2000000000000000001",
+      "dm_conversation_id": "1800200000000000",
+      "created_at": "2026-06-23T10:00:00.000Z"
+    },
+    {
+      "id": "9053000000000000",
+      "event_type": "MessageCreate",
+      "text": "Hi Dmitrii, demo request. Could you take a look and let me know by Monday?",
+      "sender_id": "2000000000000000098",
+      "dm_conversation_id": "1805300000000000",
+      "created_at": "2026-06-24T01:00:00.000Z"
+    },
+    {
+      "id": "9069000000000000",
+      "event_type": "MessageCreate",
+      "text": "Quick one \u2014 contract for review. Do you have 15 minutes this week?",
+      "sender_id": "2000000000000000919",
+      "dm_conversation_id": "1806900000000000",
+      "created_at": "2026-06-25T07:00:00.000Z"
+    },
+    {
+      "id": "9070000000000000",
+      "event_type": "MessageCreate",
+      "text": "Hi Dmitrii, press inquiry. Could you take a look and let me know by Friday?",
+      "sender_id": "2000000000000000095",
+      "dm_conversation_id": "1807000000000000",
+      "created_at": "2026-06-28T01:00:00.000Z"
+    },
+    {
+      "id": "9070100000000000",
+      "event_type": "MessageCreate",
+      "text": "Just bumping this \u2014 thanks!",
+      "sender_id": "2000000000000000095",
+      "dm_conversation_id": "1807000000000000",
+      "created_at": "2026-06-28T05:00:00.000Z"
+    },
+    {
+      "id": "9075000000000000",
+      "event_type": "MessageCreate",
+      "text": "Quick one \u2014 renewal question. Do you have 15 minutes this week?",
+      "sender_id": "2000000000000000924",
+      "dm_conversation_id": "1807500000000000",
+      "created_at": "2026-06-13T00:00:00.000Z"
+    },
+    {
+      "id": "9076000000000000",
+      "event_type": "MessageCreate",
+      "text": "Hi Dmitrii, intro request. Could you take a look and let me know by the 15th?",
+      "sender_id": "2000000000000000099",
+      "dm_conversation_id": "1807600000000000",
+      "created_at": "2026-06-15T03:00:00.000Z"
+    },
+    {
+      "id": "9079000000000000",
+      "event_type": "MessageCreate",
+      "text": "Hi Dmitrii, vendor invoice. Could you take a look and let me know by EOD?",
+      "sender_id": "2000000000000000912",
+      "dm_conversation_id": "1807900000000000",
+      "created_at": "2026-06-24T07:00:00.000Z"
+    },
+    {
+      "id": "9079100000000000",
+      "event_type": "MessageCreate",
+      "text": "Just bumping this \u2014 thanks!",
+      "sender_id": "2000000000000000912",
+      "dm_conversation_id": "1807900000000000",
+      "created_at": "2026-06-24T11:00:00.000Z"
+    },
+    {
+      "id": "9089000000000000",
+      "event_type": "MessageCreate",
+      "text": "Hi Dmitrii, renewal question. Could you take a look and let me know by the 15th?",
+      "sender_id": "2000000000000000912",
+      "dm_conversation_id": "1808900000000000",
+      "created_at": "2026-06-22T05:00:00.000Z"
+    },
+    {
+      "id": "9097000000000000",
+      "event_type": "MessageCreate",
+      "text": "Following up on scheduling a call. Any update on your side?",
+      "sender_id": "2000000000000000921",
+      "dm_conversation_id": "1809700000000000",
+      "created_at": "2026-06-30T10:00:00.000Z"
+    },
+    {
+      "id": "9123000000000000",
+      "event_type": "MessageCreate",
+      "text": "Following up on partnership idea. Any update on your side?",
+      "sender_id": "2000000000000000919",
+      "dm_conversation_id": "1812300000000000",
+      "created_at": "2026-06-17T11:00:00.000Z"
+    },
+    {
+      "id": "9127000000000000",
+      "event_type": "MessageCreate",
+      "text": "Hi Dmitrii, scheduling a call. Could you take a look and let me know by EOD?",
+      "sender_id": "2000000000000000924",
+      "dm_conversation_id": "1812700000000000",
+      "created_at": "2026-06-28T04:00:00.000Z"
+    }
+  ],
+  "sent": [
+    {
+      "id": "9053100000000000",
+      "text": "Thanks \u2014 taking a look now, will revert shortly.",
+      "author_id": "1000000000000000001",
+      "created_at": "2026-06-24T05:00:00.000Z",
+      "conversation_id": "1805300000000000"
+    },
+    {
+      "id": "9065100000000000",
+      "text": "Appreciate it. Let me loop in the team and get back to you.",
+      "author_id": "1000000000000000001",
+      "created_at": "2026-06-20T05:00:00.000Z",
+      "conversation_id": "1806500000000000"
+    },
+    {
+      "id": "9069100000000000",
+      "text": "Appreciate it. Let me loop in the team and get back to you.",
+      "author_id": "1000000000000000001",
+      "created_at": "2026-06-25T11:00:00.000Z",
+      "conversation_id": "1806900000000000"
+    },
+    {
+      "id": "9075100000000000",
+      "text": "Got it, this works for me. Let's proceed.",
+      "author_id": "1000000000000000001",
+      "created_at": "2026-06-13T04:00:00.000Z",
+      "conversation_id": "1807500000000000"
+    },
+    {
+      "id": "9096100000000000",
+      "text": "Got it, this works for me. Let's proceed.",
+      "author_id": "1000000000000000001",
+      "created_at": "2026-06-13T06:00:00.000Z",
+      "conversation_id": "1809600000000000"
+    },
+    {
+      "id": "9099100000000000",
+      "text": "Got it, this works for me. Let's proceed.",
+      "author_id": "1000000000000000001",
+      "created_at": "2026-06-13T12:00:00.000Z",
+      "conversation_id": "1809900000000000"
+    },
+    {
+      "id": "9110100000000000",
+      "text": "Appreciate it. Let me loop in the team and get back to you.",
+      "author_id": "1000000000000000001",
+      "created_at": "2026-06-30T07:00:00.000Z",
+      "conversation_id": "1811000000000000"
+    },
+    {
+      "id": "9121100000000000",
+      "text": "Got it, this works for me. Let's proceed.",
+      "author_id": "1000000000000000001",
+      "created_at": "2026-06-24T12:00:00.000Z",
+      "conversation_id": "1812100000000000"
+    },
+    {
+      "id": "9125100000000000",
+      "text": "Got it, this works for me. Let's proceed.",
+      "author_id": "1000000000000000001",
+      "created_at": "2026-06-11T07:00:00.000Z",
+      "conversation_id": "1812500000000000"
+    },
+    {
+      "id": "9128100000000000",
+      "text": "Appreciate it. Let me loop in the team and get back to you.",
+      "author_id": "1000000000000000001",
+      "created_at": "2026-06-24T06:00:00.000Z",
+      "conversation_id": "1812800000000000"
+    }
+  ],
+  "users": [
+    {
+      "id": "2000000000000000001",
+      "name": "Sarah Lin",
+      "username": "sarahlin_vc"
+    },
+    {
+      "id": "1000000000000000001",
+      "name": "Dmitrii Konyrev",
+      "username": "dmitrii_cos"
+    },
+    {
+      "id": "2000000000000000004",
+      "name": "Tom Reyes",
+      "username": "treyes"
+    },
+    {
+      "id": "2000000000000000010",
+      "name": "Dana Fox",
+      "username": "danafox"
+    },
+    {
+      "id": "2000000000000000006",
+      "name": "David Okafor",
+      "username": "davidokafor"
+    },
+    {
+      "id": "2000000000000000098",
+      "name": "Rodney Trujillo",
+      "username": "rodneytrujillo"
+    },
+    {
+      "id": "2000000000000000092",
+      "name": "Jonathan Johnson",
+      "username": "jonathanjohnson"
+    },
+    {
+      "id": "2000000000000000919",
+      "name": "Jeff Owens",
+      "username": "jeffowens"
+    },
+    {
+      "id": "2000000000000000095",
+      "name": "Shannon Ray",
+      "username": "shannonray"
+    },
+    {
+      "id": "2000000000000000918",
+      "name": "Timothy Duncan",
+      "username": "timothyduncan"
+    },
+    {
+      "id": "2000000000000000924",
+      "name": "Erik Williams",
+      "username": "erikwilliams"
+    },
+    {
+      "id": "2000000000000000099",
+      "name": "Judy Baker",
+      "username": "judybaker"
+    },
+    {
+      "id": "2000000000000000912",
+      "name": "Christopher Smith",
+      "username": "christophersmit"
+    },
+    {
+      "id": "2000000000000000913",
+      "name": "Phillip Ryan",
+      "username": "phillipryan"
+    },
+    {
+      "id": "2000000000000000926",
+      "name": "Jennifer Silva",
+      "username": "jennifersilva"
+    },
+    {
+      "id": "2000000000000000910",
+      "name": "Brenda Snyder PhD",
+      "username": "brendasnyderphd"
+    },
+    {
+      "id": "2000000000000000915",
+      "name": "Deborah Brennan",
+      "username": "deborahbrennan"
+    },
+    {
+      "id": "2000000000000000921",
+      "name": "Scott Pierce",
+      "username": "scottpierce"
+    },
+    {
+      "id": "2000000000000000925",
+      "name": "Andrea Jones",
+      "username": "andreajones"
+    },
+    {
+      "id": "2000000000000000914",
+      "name": "Anthony Humphrey",
+      "username": "anthonyhumphrey"
+    },
+    {
+      "id": "2000000000000000911",
+      "name": "Julie King",
+      "username": "julieking"
+    }
+  ]
+}

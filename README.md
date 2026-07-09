@@ -1,5 +1,27 @@
 # Chief of Staff Communication Agent
 
+## 🚀 Live demo
+
+| | |
+|---|---|
+| **Live app** | **http://89.167.5.247:8090/** (deployed, click through with a browser) |
+| **Demo video** | **https://youtu.be/6n1SF78LJmo** |
+| **Owner login** | `owner` / `owner1234` — approve, send, edit style & connections |
+| **Grader login** | `demo` / `demo1234` — read-only; no OAuth required |
+
+Asana runs against the **real** API; Gmail / X / WhatsApp run on mocks so the grader never
+completes an OAuth flow. Full write-up: **[SOLUTION.md](./SOLUTION.md)**.
+
+---
+
+> **Implementation:** see **[RUNNING.md](./RUNNING.md)** for setup, how to run the demo, and
+> the architecture. Current status: multi-channel ingestion (Gmail + X + WhatsApp) on the real
+> SDKs against local API mocks, normalized message model, and Asana create/update — all runnable
+> offline via `MODE=mock`. RAG, style-matched drafting, the approval dashboard, and deployment
+> follow in the next phases.
+
+---
+
 ## Context
 
 The current Chief of Staff agent is not yet useful enough for executive operations. Setup is difficult, communication coverage is limited mainly to Gmail, and the system does not yet manage messages across all communication channels, brands, and workstreams. Executives need a unified agent that can understand communication context, recommend actions, draft responses in each user’s style, connect decisions back to Asana, and help ensure every communication is answered in less than five minutes.

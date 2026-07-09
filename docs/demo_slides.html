@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chief of Staff — Demo Intro</title>
+<style>
+  :root{
+    --bg:#0b0f17; --panel:#121826; --panel2:#0f1420; --border:#1e2636;
+    --muted:#8b95a7; --text:#e6eaf2; --accent:#7c8cff; --accent2:#a78bfa;
+    --gmail:#ea4335; --x:#38bdf8; --wa:#25d366; --asana:#f06a6a;
+    --good:#34d399; --warn:#fbbf24;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(1200px 700px at 70% -10%, #161d2e 0%, var(--bg) 55%);
+    color:var(--text); font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  .deck{height:100vh; width:100vw; position:relative}
+  .slide{
+    position:absolute; inset:0; display:none; flex-direction:column;
+    padding:6vh 7vw 13vh; opacity:0; transition:opacity .35s ease;
+  }
+  .slide.active{display:flex; opacity:1}
+  .kicker{
+    font-size:.8rem; letter-spacing:.22em; text-transform:uppercase; color:var(--accent2);
+    font-weight:700; margin-bottom:.9rem;
+  }
+  h1{font-size:clamp(2rem,4.4vw,3.4rem); line-height:1.05; font-weight:800; letter-spacing:-.02em}
+  h1 .dim{color:var(--muted); font-weight:700}
+  .sub{color:var(--muted); font-size:clamp(1rem,1.5vw,1.25rem); margin-top:1rem; max-width:58ch}
+
+  /* pipeline */
+  .pipe{display:flex; align-items:stretch; gap:.7rem; margin-top:3.5vh; flex-wrap:wrap}
+  .stage{
+    flex:1 1 0; min-width:150px; background:var(--panel); border:1px solid var(--border);
+    border-radius:.9rem; padding:1.1rem 1rem; position:relative;
+  }
+  .stage h3{font-size:1.02rem; font-weight:700; margin-bottom:.35rem}
+  .stage p{font-size:.82rem; color:var(--muted); line-height:1.35}
+  .stage .num{font-size:.72rem; color:var(--accent); font-weight:800; letter-spacing:.1em}
+  .arrow{display:flex; align-items:center; color:var(--border); font-size:1.5rem}
+  .gate{border-color:var(--good)}
+  .gate h3{color:var(--good)}
+  .foot{margin-top:3.5vh; display:flex; gap:.6rem; flex-wrap:wrap}
+  .tag{
+    font-size:.78rem; font-weight:600; color:var(--muted); background:var(--panel2);
+    border:1px solid var(--border); border-radius:999px; padding:.3rem .8rem;
+  }
+  .tag b{color:var(--text)}
+  .real{color:var(--asana); border-color:var(--asana)}
+  .mock{color:var(--muted)}
+
+  /* chips */
+  .group{margin-top:2.6vh}
+  .glabel{font-size:.78rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:700; margin-bottom:.8rem}
+  .chips{display:flex; gap:.55rem; flex-wrap:wrap}
+  .chip{
+    font-size:.92rem; font-weight:600; background:var(--panel); border:1px solid var(--border);
+    border-radius:.6rem; padding:.5rem .85rem;
+  }
+  .chip.k{border-color:var(--accent); color:#c7ccff}
+  .chip.a{border-color:var(--asana); color:#ffb3b3}
+  .chip.p{border-color:var(--warn); color:#ffe0a3}
+
+  /* stats */
+  .stats{display:flex; gap:1rem; margin-top:3vh; flex-wrap:wrap}
+  .stat{background:var(--panel); border:1px solid var(--border); border-radius:.9rem; padding:1.3rem 1.4rem; flex:1 1 150px}
+  .stat .n{font-size:clamp(1.8rem,3.4vw,2.6rem); font-weight:800; letter-spacing:-.02em}
+  .stat .l{font-size:.82rem; color:var(--muted); margin-top:.25rem}
+  .n.gmail{color:var(--gmail)} .n.x{color:var(--x)} .n.wa{color:var(--wa)} .n.asana{color:var(--asana)} .n.acc{color:var(--accent)}
+  .people{display:flex; gap:.6rem; flex-wrap:wrap; margin-top:2.4vh}
+  .person{background:var(--panel2); border:1px solid var(--border); border-radius:.7rem; padding:.6rem .9rem; font-size:.86rem}
+  .person b{display:block} .person span{color:var(--muted); font-size:.76rem}
+  .goal{margin-top:3.5vh; font-size:clamp(1rem,1.6vw,1.35rem)}
+  .goal b{color:var(--good)}
+
+  /* nav */
+  .nav{position:absolute; bottom:2.4vh; right:3vw; display:flex; align-items:center; gap:1rem; color:var(--muted); font-size:.82rem; z-index:20}
+  .dots{display:flex; gap:.5rem}
+  .dot{width:10px; height:10px; border-radius:999px; background:var(--border); cursor:pointer; transition:background .2s}
+  .dot.on{background:var(--accent)}
+  .brand{position:absolute; bottom:2.4vh; left:3vw; font-size:.82rem; color:var(--muted); font-weight:600; z-index:20}
+  .brand b{color:var(--text)}
+  /* big side arrows */
+  .side{
+    position:absolute; top:50%; transform:translateY(-50%); z-index:30;
+    width:56px; height:56px; border-radius:999px; cursor:pointer;
+    background:var(--panel); border:1px solid var(--border); color:var(--text);
+    display:flex; align-items:center; justify-content:center; font-size:1.6rem; line-height:1;
+    transition:background .15s, border-color .15s;
+  }
+  .side:hover{background:var(--panel2); border-color:var(--accent); color:var(--accent)}
+  .side.prev{left:2vw} .side.next{right:2vw}
+  .nextbtn{
+    position:absolute; bottom:2.4vh; left:50%; transform:translateX(-50%); z-index:20;
+    background:linear-gradient(180deg,var(--accent),#6674f0); color:#fff; border:none;
+    font-weight:700; font-size:.9rem; padding:.6rem 1.3rem; border-radius:.6rem; cursor:pointer;
+  }
+  .nextbtn:hover{filter:brightness(1.08)}
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- SLIDE 1 — APPROACH -->
+  <section class="slide active">
+    <div class="kicker">Approach</div>
+    <h1>One pipeline from <span class="dim">any channel</span> to an approved action.</h1>
+    <div class="sub">Real provider SDKs feed a shared knowledge layer. An agent grounds every step in that context, then a human approves before anything sends.</div>
+    <div class="pipe">
+      <div class="stage"><div class="num">01</div><h3>Connectors</h3><p>Gmail · X · WhatsApp on real SDKs. One <code>Connector</code> interface.</p></div>
+      <div class="arrow">→</div>
+      <div class="stage"><div class="num">02</div><h3>Knowledge layer</h3><p>Graph (people, threads, identity) + vector RAG over messages, tasks, style, org facts.</p></div>
+      <div class="arrow">→</div>
+      <div class="stage"><div class="num">03</div><h3>Agent brain</h3><p>Triage → decide action → draft in-voice or delegate → execute.</p></div>
+      <div class="arrow">→</div>
+      <div class="stage gate"><div class="num">04</div><h3>Approval gate</h3><p>Owner reviews, edits, approves. Enforced server-side.</p></div>
+      <div class="arrow">→</div>
+      <div class="stage"><div class="num">05</div><h3>Asana</h3><p>Create / update / comment on the linked task.</p></div>
+    </div>
+    <div class="foot">
+      <span class="tag real"><b>Asana</b> — real API</span>
+      <span class="tag mock">Gmail · X · WhatsApp — mock (no grader OAuth)</span>
+      <span class="tag">Brain: <b>LangGraph</b> + RAG + A2A delegation</span>
+      <span class="tag">Draft style: <b>learned + pinned</b></span>
+    </div>
+  </section>
+
+  <!-- SLIDE 2 — ACTION DOMAIN -->
+  <section class="slide">
+    <div class="kicker">Action domain</div>
+    <h1>Every message maps to <span class="dim">one decision</span>.</h1>
+    <div class="sub">The agent classifies each incoming message into an action, an optional Asana operation, and a priority — grounded in retrieved facts, not guesses.</div>
+
+    <div class="group">
+      <div class="glabel">13 actions</div>
+      <div class="chips">
+        <span class="chip k">REPLY</span><span class="chip k">ASK_SENDER</span><span class="chip k">SCHEDULE_MEETING</span>
+        <span class="chip k">ESCALATE</span><span class="chip k">DELEGATE</span><span class="chip k">NEEDS_INPUT</span>
+        <span class="chip k">FORWARD</span><span class="chip k">INTRODUCE</span><span class="chip k">FOLLOW_UP</span>
+        <span class="chip k">DECLINE</span><span class="chip k">ACKNOWLEDGE</span><span class="chip k">NO_ACTION</span><span class="chip k">FLAG_SPAM</span>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="glabel">Asana operations</div>
+      <div class="chips">
+        <span class="chip a">CREATE_TASK</span><span class="chip a">UPDATE_TASK</span><span class="chip a">COMPLETE_TASK</span>
+        <span class="chip a">COMMENT_ON_TASK</span><span class="chip a">COMMENT_ON_MILESTONE</span>
+        <span class="chip a">COMPLETE_MILESTONE</span><span class="chip a">DELETE_TASK</span>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="glabel">Priority</div>
+      <div class="chips">
+        <span class="chip p">urgent</span><span class="chip p">high</span><span class="chip p">medium</span><span class="chip p">low</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 3 — SCENARIO -->
+  <section class="slide">
+    <div class="kicker">Scenario</div>
+    <h1>Series A closing week — <span class="dim">a real executive's worst inbox.</span></h1>
+    <div class="sub">One founder, one frantic week: term sheet, board deck, a Head of Sales offer, a customer escalation, press to decline — all at once, across three channels.</div>
+
+    <div class="stats">
+      <div class="stat"><div class="n acc">147</div><div class="l">messages, 3 channels</div></div>
+      <div class="stat"><div class="n gmail">42</div><div class="l">contacts &amp; orgs</div></div>
+      <div class="stat"><div class="n asana">33</div><div class="l">Asana tasks</div></div>
+      <div class="stat"><div class="n wa">7</div><div class="l">milestones</div></div>
+    </div>
+
+    <div class="people">
+      <div class="person"><b>Sarah Lin</b><span>Investor · term sheet</span></div>
+      <div class="person"><b>Victor Ruiz</b><span>Head of Eng · escalations</span></div>
+      <div class="person"><b>Nadia Cohen</b><span>CFO · finance</span></div>
+      <div class="person"><b>Mia Anders</b><span>Recruiter · hiring</span></div>
+      <div class="person"><b>+ 38 more</b><span>SF · London · Tokyo · Lagos</span></div>
+    </div>
+
+    <div class="goal">The bar: <b>every message answered in under five minutes</b> — recommended, drafted in-voice, linked to work, approved.</div>
+  </section>
+
+  <div class="brand"><b>Chief of Staff</b> Communication Agent</div>
+
+  <button class="side prev" aria-label="Previous">‹</button>
+  <button class="side next" aria-label="Next">›</button>
+  <div class="nav">
+    <div class="dots"></div>
+    <span class="count">1 / 3</span>
+  </div>
+</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const dotsWrap=document.querySelector('.dots');
+  const count=document.querySelector('.count');
+  let i=0;
+  slides.forEach((_,n)=>{const d=document.createElement('div');d.className='dot'+(n===0?' on':'');d.onclick=()=>go(n);dotsWrap.appendChild(d)});
+  const dots=[...document.querySelectorAll('.dot')];
+  function go(n){
+    i=(n+slides.length)%slides.length;
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    dots.forEach((d,k)=>d.classList.toggle('on',k===i));
+    count.textContent=(i+1)+' / '+slides.length;
+  }
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();go(i+1);}
+    if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1);}
+  });
+  document.querySelector('.side.next').onclick=()=>go(i+1);
+  document.querySelector('.side.prev').onclick=()=>go(i-1);
+</script>
+</body>
+</html>

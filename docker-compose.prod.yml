@@ -1,0 +1,121 @@
+# Production/demo deploy. Only the `web` app is published to the host (port 8090); every
+# other service stays on the internal compose network to avoid host-port conflicts on a
+# shared box. Asana runs against the REAL API; Gmail/X/WhatsApp stay on the mock.
+# Secrets are interpolated from the .env in this directory (never committed).
+services:
+  mocks:
+    build: .
+    command: uvicorn cos.mocks.app:app --host 0.0.0.0 --port 8900
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8900/')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  engineering:
+    build: .
+    command: python -m cos.agents.a2a.launch engineering
+    environment: {OPENAI_API_KEY: "${OPENAI_API_KEY:-}", OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.1}"}
+    restart: unless-stopped
+  cfo:
+    build: .
+    command: python -m cos.agents.a2a.launch cfo
+    environment: {OPENAI_API_KEY: "${OPENAI_API_KEY:-}", OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.1}"}
+    restart: unless-stopped
+  recruiter:
+    build: .
+    command: python -m cos.agents.a2a.launch recruiter
+    environment: {OPENAI_API_KEY: "${OPENAI_API_KEY:-}", OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.1}"}
+    restart: unless-stopped
+  scheduler:
+    build: .
+    command: python -m cos.agents.a2a.launch scheduler
+    environment: {OPENAI_API_KEY: "${OPENAI_API_KEY:-}", OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.1}"}
+    restart: unless-stopped
+
+  ui:
+    build: .
+    command: python -m cos.ui.app
+    environment:
+      MODE: mock
+      MOCK_HOST: mocks
+      GMAIL_BASE_URL: http://mocks:8900
+      X_BASE_URL: http://mocks:8900
+      WHATSAPP_BASE_URL: http://mocks:8900
+      # Asana -> real
+      ASANA_BASE_URL: https://app.asana.com/api/1.0
+      ASANA_TOKEN: "${ASANA_TOKEN:-}"
+      ASANA_WORKSPACE_GID: "${ASANA_WORKSPACE_GID:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.1}"
+      A2A_ENGINEERING_URL: http://engineering:8901
+      A2A_CFO_URL: http://cfo:8902
+      A2A_RECRUITER_URL: http://recruiter:8903
+      A2A_SCHEDULER_URL: http://scheduler:8904
+    depends_on:
+      mocks:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build: .
+    command: uvicorn cos.api.app:app --host 0.0.0.0 --port 8000
+    environment:
+      MODE: mock
+      MOCK_HOST: mocks
+      MOCK_PORT: "8900"
+      GMAIL_BASE_URL: http://mocks:8900
+      X_BASE_URL: http://mocks:8900
+      WHATSAPP_BASE_URL: http://mocks:8900
+      # Asana -> real (client reads base URL + token directly, independent of MODE)
+      ASANA_BASE_URL: https://app.asana.com/api/1.0
+      ASANA_TOKEN: "${ASANA_TOKEN:-}"
+      ASANA_WORKSPACE_GID: "${ASANA_WORKSPACE_GID:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.1}"
+      AUTH_JWT_SECRET: "${AUTH_JWT_SECRET:?set AUTH_JWT_SECRET in .env}"
+      API_CORS_ORIGINS: "http://89.167.5.247:8090,http://localhost:8090"
+      A2A_ENGINEERING_URL: http://engineering:8901
+      A2A_CFO_URL: http://cfo:8902
+      A2A_RECRUITER_URL: http://recruiter:8903
+      A2A_SCHEDULER_URL: http://scheduler:8904
+    depends_on:
+      mocks:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cos
+      POSTGRES_PASSWORD: cos
+      POSTGRES_DB: cos
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - cos_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    environment:
+      DATABASE_URL: postgresql://cos:cos@postgres:5432/cos?schema=public
+      AUTH_JWT_SECRET: "${AUTH_JWT_SECRET:?set AUTH_JWT_SECRET in .env}"
+      COS_API_URL: http://api:8000
+      NODE_ENV: production
+      COOKIE_SECURE: "false"   # served over HTTP behind the box firewall
+    ports:
+      - "8090:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  cos_pgdata:

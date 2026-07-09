@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+.pytest_cache/
+*.egg-info/
+/tmp/
+runs/
+cos/fixtures/data/whatsapp_inbox.json
+# OAuth / credential files — never commit
+client_secret*.json
+*token*.json
+token.json
+*.pem
