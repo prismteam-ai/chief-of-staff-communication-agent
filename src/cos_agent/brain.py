@@ -44,12 +44,15 @@ def _chat_client() -> AzureOpenAI:
 
 
 def _style_corpus(owner: str, limit: int = 8) -> list[str]:
-    """This tenant's actual outbound messages = style few-shot, injected dynamically."""
+    """This tenant's actual outbound messages = style few-shot, injected dynamically.
+    Returns the raw message text ONLY — no channel/metadata prefix, or the model mimics
+    the tag and it leaks into the drafted reply (observed: a real send went out prefixed
+    "[gmail] …")."""
     res = (
-        sb().table("messages").select("channel, body_text").eq("owner_id", owner)
+        sb().table("messages").select("body_text").eq("owner_id", owner)
         .eq("direction", "outbound").order("sent_at", desc=True).limit(limit).execute()
     )
-    return [f"[{r['channel']}] {r['body_text']}" for r in res.data]
+    return [r["body_text"] for r in res.data if r.get("body_text")]
 
 
 def _thread_history(owner: str, thread_id: str, limit: int = 10) -> list[str]:
