@@ -4,6 +4,7 @@ import { signOut } from "@/auth";
 const TABS = [
   { href: "/inbox", label: "Inbox" },
   { href: "/asana", label: "Asana" },
+  { href: "/agents", label: "Agents" },
   { href: "/connections", label: "Connections" },
 ];
 

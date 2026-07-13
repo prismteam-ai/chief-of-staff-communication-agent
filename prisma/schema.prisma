@@ -16,6 +16,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   connections   ChannelConnection[]
+  agents        Agent[]
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
 }
@@ -138,4 +139,26 @@ model Attachment {
   sizeBytes  Int?
 
   @@index([messageId])
+}
+
+/// A configurable AI communications agent.
+model Agent {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  description        String?
+  communicationStyle String   @default("professional") // professional | formal | casual | friendly | direct | empathetic
+  toneOfVoice        String   @default("neutral") // neutral | warm | concise | playful | assertive | authoritative
+  customInstructions String?
+  autoReply          Boolean  @default(false) // may draft/send replies automatically
+  mode               String   @default("hitl") // autopilot | hitl (human-in-the-loop approval required)
+  channels           String[] // provider ids this agent may use
+  contactPolicy      String   @default("all") // all | allowlist | blocklist
+  contactList        String[] // emails / handles / phone numbers
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([userId])
 }
