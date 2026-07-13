@@ -111,6 +111,7 @@ model Message {
   isOutbound   Boolean              @default(false)
   participants MessageParticipant[]
   attachments  Attachment[]
+  agentActions AgentAction[]
   createdAt    DateTime             @default(now())
 
   @@unique([userId, provider, externalId])
@@ -157,8 +158,33 @@ model Agent {
   contactPolicy      String   @default("all") // all | allowlist | blocklist
   contactList        String[] // emails / handles / phone numbers
   isActive           Boolean  @default(true)
+  actions            AgentAction[]
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   @@index([userId])
+}
+
+/// An action produced by an agent (e.g. a drafted reply), subject to its autonomy mode.
+model AgentAction {
+  id          String    @id @default(cuid())
+  userId      String
+  agentId     String
+  agent       Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  messageId   String? // trigger message
+  message     Message?  @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  type        String    @default("reply") // reply | send
+  channel     String // provider id used to act
+  recipient   String // address / handle / phone the agent will contact
+  subject     String?
+  body        String
+  status      String    @default("pending_approval") // pending_approval | approved | sent | rejected | failed | blocked
+  statusNote  String? // block reason / send error
+  sentAt      DateTime?
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([agentId, messageId])
+  @@index([userId, status])
 }
