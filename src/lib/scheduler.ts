@@ -3,6 +3,7 @@ import { ingestors } from "@/lib/ingest";
 import { syncConnection } from "@/lib/sync";
 import { runAgents } from "@/lib/agent-runtime";
 import { updateResponseStatuses } from "@/lib/agent-runtime/tracking";
+import { indexUserKnowledge } from "@/lib/rag/indexer";
 
 const DEFAULT_INTERVAL_SECONDS = 60;
 
@@ -46,6 +47,9 @@ export function startScheduler() {
   setTimeout(tick, 5_000);
 }
 
+const INDEX_INTERVAL_MS = 5 * 60_000;
+const lastIndexed = new Map<string, number>();
+
 async function runOnce() {
   // only users with at least one active agent
   const agents = await prisma.agent.findMany({
@@ -77,6 +81,14 @@ async function runOnce() {
 
     try {
       await updateResponseStatuses(userId);
+      // refresh the RAG knowledge index every few minutes
+      if (Date.now() - (lastIndexed.get(userId) ?? 0) > INDEX_INTERVAL_MS) {
+        lastIndexed.set(userId, Date.now());
+        const idx = await indexUserKnowledge(userId);
+        if (idx.written > 0) {
+          console.log(`[scheduler] knowledge index: ${idx.written} chunk(s) updated for ${userId}`);
+        }
+      }
       const summary = await runAgents(userId);
       if (summary.drafted > 0 || summary.sentOnAutopilot > 0) {
         console.log(

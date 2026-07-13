@@ -17,6 +17,8 @@ model User {
   sessions      Session[]
   connections   ChannelConnection[]
   agents        Agent[]
+  knowledgeItems  KnowledgeItem[]
+  knowledgeChunks KnowledgeChunk[]
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
 }
@@ -192,4 +194,32 @@ model AgentAction {
 
   @@unique([agentId, messageId])
   @@index([userId, status])
+}
+
+model KnowledgeItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String   @default("org") // org | preference
+  title     String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, kind])
+}
+
+model KnowledgeChunk {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source    String // message | asana_project | asana_task | preference | org | agent
+  sourceId  String
+  title     String?
+  content   String
+  embedding Json? // number[] when an embedding model is configured
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, source, sourceId])
+  @@index([userId, source])
 }

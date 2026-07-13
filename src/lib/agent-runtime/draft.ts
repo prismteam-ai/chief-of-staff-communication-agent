@@ -10,6 +10,8 @@ export interface DraftInput {
   skillContext?: string | null;
   /** Prior conversation in this thread, oldest first. */
   history?: string | null;
+  /** RAG-retrieved knowledge (history, Asana, preferences, org knowledge). */
+  knowledgeContext?: string | null;
 }
 
 /** Build the system prompt from the agent's configured characteristics. */
@@ -68,6 +70,9 @@ export async function generateDraft(agent: Agent, input: DraftInput): Promise<st
                 `\n\n${input.body}` +
                 (input.skillContext
                   ? `\n\nLive data pulled from Asana (ground your reply in these facts, do not invent numbers):\n${input.skillContext}`
+                  : "") +
+                (input.knowledgeContext
+                  ? `\n\nRelevant knowledge retrieved from your systems (use only what is pertinent, never invent beyond it):\n${input.knowledgeContext}`
                   : "") +
                 `\n\nWrite the reply.`,
             },

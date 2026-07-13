@@ -36,6 +36,7 @@ interface ActionDto {
       taskNotes: string;
       projectName: string | null;
     };
+    ragSuggestions?: { source: string; title: string | null; content: string }[];
   } | null;
   createdAt: string;
   sentAt: string | null;
@@ -266,6 +267,19 @@ export default function ApprovalsView() {
 
                 {pending && a.type === "needs_context" && (
                   <div className="mt-3 rounded-lg border border-amber-900/60 bg-amber-950/20 p-3">
+                    {a.meta?.ragSuggestions && a.meta.ragSuggestions.length > 0 && (
+                      <div className="mb-3">
+                        <p className="text-xs font-medium text-neutral-300">
+                          📚 Possibly relevant knowledge:
+                        </p>
+                        {a.meta.ragSuggestions.map((s, i) => (
+                          <p key={i} className="mt-1 line-clamp-2 text-xs text-neutral-500">
+                            <span className="text-neutral-400">{s.title ?? s.source}:</span>{" "}
+                            {s.content}
+                          </p>
+                        ))}
+                      </div>
+                    )}
                     <p className="text-xs text-amber-300">
                       Give the agent the information it needs and it will write the reply:
                     </p>

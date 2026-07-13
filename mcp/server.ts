@@ -16,6 +16,8 @@ import { prisma } from "../src/lib/prisma";
 import { runAgents, dispatchAction } from "../src/lib/agent-runtime";
 import { updateResponseStatuses } from "../src/lib/agent-runtime/tracking";
 import { statusReport } from "../src/lib/agent-runtime/skills";
+import { retrieve } from "../src/lib/rag/retrieve";
+import { indexUserKnowledge } from "../src/lib/rag/indexer";
 
 async function getUserId(): Promise<string> {
   const email = process.env.MCP_USER_EMAIL;
@@ -211,7 +213,38 @@ server.tool(
 );
 
 async function main() {
-  const transport = new StdioServerTransport();
+  server.tool(
+  "search_knowledge",
+  "RAG search across communication history, Asana context, user preferences, and organizational knowledge.",
+  {
+    query: z.string().describe("Natural-language query"),
+    k: z.number().min(1).max(20).default(6),
+  },
+  async ({ query, k }) => {
+    const userId = await getUserId();
+    const results = await retrieve(userId, query, { k });
+    return text(
+      results.map((r) => ({
+        source: r.source,
+        title: r.title,
+        score: Number(r.score.toFixed(3)),
+        content: r.content.slice(0, 500),
+      }))
+    );
+  }
+);
+
+server.tool(
+  "reindex_knowledge",
+  "Rebuild the RAG knowledge index from messages, Asana, preferences, and org knowledge.",
+  {},
+  async () => {
+    const userId = await getUserId();
+    return text(await indexUserKnowledge(userId));
+  }
+);
+
+const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("[chief-of-comms] MCP server ready (stdio)");
 }

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { checkPolicy } from "./policy";
 import { generateDraft } from "./draft";
 import { runSkills, executeCreateTask, type AsanaTaskProposal } from "./skills";
+import { retrieve, formatContext } from "@/lib/rag/retrieve";
 import { senders } from "@/lib/send";
 
 const LOOKBACK_HOURS = 72;
@@ -114,6 +115,19 @@ export async function runAgents(userId: string): Promise<RunSummary> {
           meta = { proposal: { ...skill.proposal } };
         }
 
+        // RAG: retrieve knowledge from history, Asana, preferences, org notes
+        let knowledgeContext: string | null = null;
+        let ragChunks: Awaited<ReturnType<typeof retrieve>> = [];
+        try {
+          ragChunks = await retrieve(agent.userId, `${message.subject ?? ""} ${messageText}`.trim(), {
+            k: 5,
+            excludeSourceIds: [message.id],
+          });
+          knowledgeContext = formatContext(ragChunks);
+        } catch {
+          // retrieval failure should never block a reply
+        }
+
         // Confidence gate: a direct question we have no grounded answer for
         // (and no LLM configured) → ask the user for context instead of
         // sending a generic acknowledgement.
@@ -123,6 +137,11 @@ export async function runAgents(userId: string): Promise<RunSummary> {
             process.env.AZURE_OPENAI_DEPLOYMENT
         );
         if (!skillMatched && !hasLlm && /\?/.test(messageText)) {
+          const suggestions = ragChunks.slice(0, 3).map((c) => ({
+            source: c.source,
+            title: c.title,
+            content: c.content.slice(0, 300),
+          }));
           const action = await createAction(agent, message.id, {
             channel: message.provider,
             recipient: sender.address,
@@ -132,7 +151,9 @@ export async function runAgents(userId: string): Promise<RunSummary> {
             statusNote: "The agent can't confidently answer this question — add context or write the reply.",
             type: "needs_context",
             recommendation:
-              "Needs your input: the sender asked a question the agent has no data to answer.",
+              "Needs your input: the sender asked a question the agent has no data to answer." +
+              (suggestions.length ? " Possibly relevant knowledge attached." : ""),
+            meta: suggestions.length ? { ragSuggestions: suggestions } : undefined,
           });
           if (action) summary.drafted++;
           continue;
@@ -146,6 +167,7 @@ export async function runAgents(userId: string): Promise<RunSummary> {
           body: messageText,
           skillContext,
           history: history?.transcript ?? null,
+          knowledgeContext,
         });
       } catch (err) {
         await createAction(agent, message.id, {
