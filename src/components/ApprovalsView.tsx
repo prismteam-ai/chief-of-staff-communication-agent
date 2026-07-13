@@ -67,43 +67,60 @@ export default function ApprovalsView() {
   const [edits, setEdits] = useState<Record<string, string>>({});
 
   const load = useCallback(async (status: string) => {
-    const res = await fetch(`/api/actions${status ? `?status=${status}` : ""}`);
-    if (res.ok) setActions((await res.json()).actions);
-    setLoading(false);
+    try {
+      const res = await fetch(`/api/actions${status ? `?status=${status}` : ""}`);
+      if (res.ok) setActions((await res.json()).actions);
+    } catch {
+      // transient network error (e.g. dev server restart) — keep current list
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
     setLoading(true);
     load(filter);
+    const t = setInterval(() => load(filter), 30_000); // pick up scheduler-created actions
+    return () => clearInterval(t);
   }, [filter, load]);
 
   const runAgents = async () => {
     setRunning(true);
     setBanner(null);
-    const res = await fetch("/api/agents/run", { method: "POST" });
-    const data = await res.json().catch(() => ({}));
-    setBanner(
-      res.ok
-        ? `Scanned ${data.scanned} messages · ${data.drafted} drafts · ${data.sentOnAutopilot} sent on autopilot · ${data.blocked} blocked · ${data.failed} failed`
-        : data.error ?? "Agent run failed"
-    );
-    await load(filter);
-    setRunning(false);
+    try {
+      const res = await fetch("/api/agents/run", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      setBanner(
+        res.ok
+          ? `Scanned ${data.scanned} messages · ${data.drafted} drafts · ${data.sentOnAutopilot} sent on autopilot · ${data.blocked} blocked · ${data.failed} failed`
+          : data.error ?? "Agent run failed"
+      );
+      await load(filter);
+    } catch {
+      setBanner("Network error — please try again");
+    } finally {
+      setRunning(false);
+    }
   };
 
   const resolve = async (id: string, decision: "approve" | "reject") => {
     setBusy(id);
-    const res = await fetch(`/api/actions/${id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision, ...(edits[id] ? { body: edits[id] } : {}) }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setBanner(data.action?.statusNote ?? data.error ?? `${decision} failed`);
+    try {
+      const res = await fetch(`/api/actions/${id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, ...(edits[id] ? { body: edits[id] } : {}) }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setBanner(data.action?.statusNote ?? data.error ?? `${decision} failed`);
+      }
+      await load(filter);
+    } catch {
+      setBanner("Network error — please try again");
+    } finally {
+      setBusy(null);
     }
-    await load(filter);
-    setBusy(null);
   };
 
   return (
