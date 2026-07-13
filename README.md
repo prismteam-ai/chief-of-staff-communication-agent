@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Chief of Communications
 
-## Getting Started
+Web app + (upcoming) AI agent layer that manages your communications across
+Gmail, Outlook, WhatsApp, X, LinkedIn, and SMS.
 
-First, run the development server:
+**Milestone 1** — Channel connections: sign in with Google/Microsoft and
+connect your channels, granting the system access via OAuth or API credentials.
+Tokens are AES-256-GCM encrypted at rest.
+
+## Stack
+- Next.js (App Router, TypeScript, Tailwind)
+- Auth.js v5 (Google + Microsoft Entra ID sign-in)
+- Prisma + PostgreSQL (Azure Database for PostgreSQL in prod)
+- Azure App Service + Key Vault + Managed Identity
+
+## Getting started
 
 ```bash
+npm install
+cp .env.example .env        # fill in values (see docs/provider-setup.md)
+npx prisma migrate dev
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000, sign in, and connect channels at `/connections`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Docs
+- [Provider app registration checklist](docs/provider-setup.md) — how to get every client ID/secret
+- [Azure deployment guide](docs/azure-setup.md)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Channel connection model
+| Channel  | Mechanism |
+|----------|-----------|
+| Gmail    | Google OAuth 2.0 (gmail.readonly, gmail.send) |
+| Outlook  | Microsoft Graph OAuth 2.0 (Mail.Read, Mail.Send) |
+| LinkedIn | LinkedIn OAuth 2.0 (OpenID Connect + w_member_social) |
+| X        | OAuth 2.0 + PKCE |
+| WhatsApp | Meta Business Cloud API credentials (per-user form) |
+| SMS      | Twilio credentials (per-user form) |
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The `ChannelConnection` model + `getFreshAccessToken()` in
+`src/lib/connections.ts` are the interface the AI agent layer will use to act
+on channels.
