@@ -70,9 +70,72 @@ model ChannelConnection {
   accountLabel String? // e.g. email address, handle or phone number for display
   lastCheckAt  DateTime?
   lastError    String?
+  syncCursor   String? // provider-specific incremental sync cursor
+  lastSyncAt   DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   @@unique([userId, provider])
   @@index([userId])
+}
+
+/// A conversation thread within a channel.
+model Thread {
+  id            String    @id @default(cuid())
+  userId        String
+  provider      String
+  externalId    String
+  subject       String?
+  lastMessageAt DateTime?
+  messages      Message[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([userId, provider, externalId])
+  @@index([userId, lastMessageAt])
+}
+
+/// An ingested message from any channel.
+model Message {
+  id           String               @id @default(cuid())
+  userId       String
+  provider     String
+  externalId   String
+  threadId     String?
+  thread       Thread?              @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  subject      String?
+  snippet      String?
+  body         String?
+  sentAt       DateTime
+  isOutbound   Boolean              @default(false)
+  participants MessageParticipant[]
+  attachments  Attachment[]
+  createdAt    DateTime             @default(now())
+
+  @@unique([userId, provider, externalId])
+  @@index([userId, sentAt])
+  @@index([threadId])
+}
+
+model MessageParticipant {
+  id        String  @id @default(cuid())
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  role      String // from | to | cc | bcc
+  name      String?
+  address   String // email, phone number or handle
+
+  @@index([messageId])
+}
+
+model Attachment {
+  id         String  @id @default(cuid())
+  messageId  String
+  message    Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  externalId String?
+  filename   String
+  mimeType   String?
+  sizeBytes  Int?
+
+  @@index([messageId])
 }

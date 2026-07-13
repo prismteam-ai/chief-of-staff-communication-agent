@@ -1,27 +1,26 @@
-import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
-import ConnectionsDashboard from "@/components/ConnectionsDashboard";
+import InboxView from "@/components/InboxView";
 
-export default async function ConnectionsPage() {
+export default async function InboxPage() {
   const session = await auth();
   if (!session?.user) redirect("/signin");
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-white">
+    <main className="flex h-screen flex-col bg-neutral-950 text-white">
       <header className="border-b border-neutral-800">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-6">
             <div>
               <h1 className="text-lg font-semibold">Chief of Communications</h1>
-              <p className="text-xs text-neutral-400">Channel connections</p>
+              <p className="text-xs text-neutral-400">Unified inbox</p>
             </div>
             <nav className="flex gap-4 text-sm">
-              <Link href="/inbox" className="text-neutral-400 hover:text-white">
+              <Link href="/inbox" className="text-white underline underline-offset-4">
                 Inbox
               </Link>
-              <Link href="/connections" className="text-white underline underline-offset-4">
+              <Link href="/connections" className="text-neutral-400 hover:text-white">
                 Connections
               </Link>
             </nav>
@@ -45,15 +44,8 @@ export default async function ConnectionsPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-5xl px-6 py-8">
-        <h2 className="text-xl font-semibold">Connect your channels</h2>
-        <p className="mt-1 text-sm text-neutral-400">
-          Grant access to the channels you want your AI chief of communications to
-          manage. Tokens are encrypted at rest and can be revoked anytime.
-        </p>
-        <Suspense fallback={<p className="mt-8 text-sm text-neutral-500">Loading channels…</p>}>
-          <ConnectionsDashboard />
-        </Suspense>
+      <div className="mx-auto w-full max-w-7xl flex-1 overflow-hidden px-6 py-6">
+        <InboxView />
       </div>
     </main>
   );
