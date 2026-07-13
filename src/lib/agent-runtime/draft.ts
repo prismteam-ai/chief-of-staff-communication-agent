@@ -6,6 +6,8 @@ export interface DraftInput {
   senderAddress: string;
   subject?: string | null;
   body: string;
+  /** Live data pulled by an agent skill (e.g., Asana project status). */
+  skillContext?: string | null;
 }
 
 /** Build the system prompt from the agent's configured characteristics. */
@@ -58,7 +60,11 @@ export async function generateDraft(agent: Agent, input: DraftInput): Promise<st
               content:
                 `Incoming ${input.channel} message from ${input.senderName ?? input.senderAddress} (${input.senderAddress})` +
                 (input.subject ? `\nSubject: ${input.subject}` : "") +
-                `\n\n${input.body}\n\nWrite the reply.`,
+                `\n\n${input.body}` +
+                (input.skillContext
+                  ? `\n\nLive data pulled from Asana (ground your reply in these facts, do not invent numbers):\n${input.skillContext}`
+                  : "") +
+                `\n\nWrite the reply.`,
             },
           ],
           max_tokens: 500,
@@ -84,6 +90,14 @@ function templateDraft(agent: Agent, input: DraftInput): string {
   const ack = input.subject
     ? `Thank you for your message regarding "${input.subject}".`
     : "Thank you for reaching out.";
+
+  if (input.skillContext) {
+    const facts = input.skillContext;
+    if (input.channel === "sms" || input.channel === "whatsapp" || input.channel === "x") {
+      return `${ack} Here's the latest:\n${facts}\n— ${agent.name}`;
+    }
+    return `${greeting}\n\n${ack} Here is the latest:\n\n${facts}\n\nLet me know if you'd like more detail.\n\nBest regards,\n${agent.name}`;
+  }
 
   if (input.channel === "sms" || input.channel === "whatsapp") {
     return `${ack} We've received your message and will get back to you shortly. — ${agent.name}`;

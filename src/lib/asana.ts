@@ -10,7 +10,34 @@ export class AsanaError extends Error {
   }
 }
 
-/** Authenticated GET against the Asana API using the user's stored PAT. */
+/** Authenticated POST against the Asana API using the user's stored PAT. */
+export async function asanaPost<T>(
+  userId: string,
+  path: string,
+  body: Record<string, unknown>
+): Promise<T> {
+  const credentials = await getCredentials(userId, "asana");
+  if (!credentials?.personalAccessToken) {
+    throw new AsanaError("Asana is not connected", 400);
+  }
+
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${credentials.personalAccessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ data: body }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new AsanaError(
+      data.errors?.[0]?.message ?? `Asana API returned ${res.status}`,
+      res.status === 401 ? 400 : 502
+    );
+  }
+  return data.data as T;
+}
 export async function asanaGet<T>(
   userId: string,
   path: string,

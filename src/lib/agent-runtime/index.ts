@@ -2,6 +2,7 @@ import { Prisma, type Agent, type AgentAction } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { checkPolicy } from "./policy";
 import { generateDraft } from "./draft";
+import { runSkills, executeCreateTask, type AsanaTaskProposal } from "./skills";
 import { senders } from "@/lib/send";
 
 const LOOKBACK_HOURS = 72;
@@ -72,13 +73,34 @@ export async function runAgents(userId: string): Promise<RunSummary> {
       }
 
       let body: string;
+      let actionType = "reply";
+      let meta: Prisma.InputJsonValue | undefined;
       try {
+        const messageText = message.body ?? message.snippet ?? "";
+        let skillContext: string | null = null;
+
+        // Skills: ground the reply in live Asana data / propose Asana tasks
+        let skill: Awaited<ReturnType<typeof runSkills>> = { kind: "none" };
+        try {
+          skill = await runSkills(agent, `${message.subject ?? ""}\n${messageText}`);
+        } catch {
+          // Asana unavailable — fall back to a plain reply
+        }
+        if (skill.kind === "status_context") {
+          skillContext = skill.context;
+        } else if (skill.kind === "create_task") {
+          skillContext = skill.context;
+          actionType = "create_task";
+          meta = { proposal: { ...skill.proposal } };
+        }
+
         body = await generateDraft(agent, {
           channel: message.provider,
           senderName: sender.name,
           senderAddress: sender.address,
           subject: message.subject,
-          body: message.body ?? message.snippet ?? "",
+          body: messageText,
+          skillContext,
         });
       } catch (err) {
         await createAction(agent, message.id, {
@@ -99,6 +121,8 @@ export async function runAgents(userId: string): Promise<RunSummary> {
         subject: replySubject(message.subject),
         body,
         status: agent.mode === "autopilot" ? "approved" : "pending_approval",
+        type: actionType,
+        meta,
       });
       if (!action) continue;
       summary.drafted++;
@@ -129,16 +153,19 @@ async function createAction(
     body: string;
     status: string;
     statusNote?: string | null;
+    type?: string;
+    meta?: Prisma.InputJsonValue;
   }
 ): Promise<AgentAction | null> {
+  const { type, ...rest } = data;
   try {
     return await prisma.agentAction.create({
       data: {
         userId: agent.userId,
         agentId: agent.id,
         messageId,
-        type: "reply",
-        ...data,
+        type: type ?? "reply",
+        ...rest,
         resolvedAt: ["blocked", "failed"].includes(data.status) ? new Date() : null,
       },
     });
@@ -185,6 +212,17 @@ export async function dispatchAction(actionId: string): Promise<boolean> {
   }
 
   try {
+    // Skill side effect first: create the Asana task, then confirm to sender
+    let statusNote: string | null = null;
+    if (action.type === "create_task") {
+      const meta = action.meta as { proposal?: AsanaTaskProposal } | null;
+      if (!meta?.proposal) throw new Error("Missing Asana task proposal on action");
+      const gid = await executeCreateTask(action.userId, meta.proposal);
+      statusNote = `Asana task created (${
+        meta.proposal.projectName ? `project "${meta.proposal.projectName}"` : "workspace"
+      }, gid ${gid})`;
+    }
+
     await sender({
       userId: action.userId,
       recipient: action.recipient,
@@ -194,7 +232,7 @@ export async function dispatchAction(actionId: string): Promise<boolean> {
     });
     await prisma.agentAction.update({
       where: { id: action.id },
-      data: { status: "sent", statusNote: null, sentAt: new Date(), resolvedAt: new Date() },
+      data: { status: "sent", statusNote, sentAt: new Date(), resolvedAt: new Date() },
     });
     return true;
   } catch (err) {

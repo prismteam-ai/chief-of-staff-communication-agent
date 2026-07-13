@@ -157,6 +157,7 @@ model Agent {
   channels           String[] // provider ids this agent may use
   contactPolicy      String   @default("all") // all | allowlist | blocklist
   contactList        String[] // emails / handles / phone numbers
+  skills             String[] // asana_status_report | asana_create_task
   isActive           Boolean  @default(true)
   actions            AgentAction[]
   createdAt          DateTime @default(now())
@@ -173,11 +174,12 @@ model AgentAction {
   agent       Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
   messageId   String? // trigger message
   message     Message?  @relation(fields: [messageId], references: [id], onDelete: SetNull)
-  type        String    @default("reply") // reply | send
+  type        String    @default("reply") // reply | create_task
   channel     String // provider id used to act
   recipient   String // address / handle / phone the agent will contact
   subject     String?
   body        String
+  meta        Json? // skill payload, e.g. Asana task to create / project used
   status      String    @default("pending_approval") // pending_approval | approved | sent | rejected | failed | blocked
   statusNote  String? // block reason / send error
   sentAt      DateTime?

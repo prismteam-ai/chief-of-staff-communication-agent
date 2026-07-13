@@ -26,6 +26,7 @@ interface Agent {
   channels: string[];
   contactPolicy: string;
   contactList: string[];
+  skills: string[];
   isActive: boolean;
 }
 
@@ -40,8 +41,22 @@ interface FormState {
   channels: string[];
   contactPolicy: string;
   contactListText: string;
+  skills: string[];
   isActive: boolean;
 }
+
+const SKILL_OPTIONS = [
+  {
+    id: "asana_status_report",
+    label: "📊 Asana status reports",
+    hint: "When someone asks for a project update, pull live progress, milestones and due dates from Asana and reply with real data.",
+  },
+  {
+    id: "asana_create_task",
+    label: "➕ Asana task creation",
+    hint: "When someone asks to add something, draft an Asana task in the matching project — created on approval (or instantly on autopilot).",
+  },
+];
 
 const emptyForm: FormState = {
   name: "",
@@ -54,6 +69,7 @@ const emptyForm: FormState = {
   channels: [],
   contactPolicy: "all",
   contactListText: "",
+  skills: [],
   isActive: true,
 };
 
@@ -69,6 +85,7 @@ function agentToForm(a: Agent): FormState {
     channels: a.channels,
     contactPolicy: a.contactPolicy,
     contactListText: a.contactList.join("\n"),
+    skills: a.skills ?? [],
     isActive: a.isActive,
   };
 }
@@ -85,6 +102,7 @@ function formToPayload(f: FormState) {
     channels: f.channels,
     contactPolicy: f.contactPolicy,
     contactList: f.contactListText.split("\n").map((s) => s.trim()).filter(Boolean),
+    skills: f.skills,
     isActive: f.isActive,
   };
 }
@@ -248,6 +266,8 @@ export default function AgentsView() {
 
               <div className="mt-2 flex flex-wrap gap-2 text-xs text-neutral-500">
                 {a.autoReply && <span>⚡ auto-reply</span>}
+                {a.skills?.includes("asana_status_report") && <span>📊 Asana status</span>}
+                {a.skills?.includes("asana_create_task") && <span>➕ Asana tasks</span>}
                 <span>
                   {a.contactPolicy === "all"
                     ? "👥 anyone"
@@ -455,6 +475,39 @@ export default function AgentsView() {
                           (not connected)
                         </span>
                       )}
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            {/* Skills */}
+            <fieldset className="mt-5 rounded-lg border border-neutral-800 p-4">
+              <legend className="px-1 text-xs font-semibold uppercase text-neutral-500">
+                Skills (Asana integration)
+              </legend>
+              <div className="flex flex-col gap-3">
+                {SKILL_OPTIONS.map((s) => {
+                  const checked = form.skills.includes(s.id);
+                  return (
+                    <label key={s.id} className="flex cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) =>
+                          set(
+                            "skills",
+                            e.target.checked
+                              ? [...form.skills, s.id]
+                              : form.skills.filter((x) => x !== s.id)
+                          )
+                        }
+                        className="mt-0.5"
+                      />
+                      <span className="text-sm text-neutral-200">
+                        {s.label}
+                        <span className="mt-0.5 block text-xs text-neutral-500">{s.hint}</span>
+                      </span>
                     </label>
                   );
                 })}

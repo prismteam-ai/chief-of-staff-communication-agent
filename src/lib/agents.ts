@@ -11,6 +11,7 @@ export const COMMUNICATION_STYLES = [
 export const TONES = ["neutral", "warm", "concise", "playful", "assertive", "authoritative"];
 export const MODES = ["autopilot", "hitl"];
 export const CONTACT_POLICIES = ["all", "allowlist", "blocklist"];
+export const SKILLS = ["asana_status_report", "asana_create_task"];
 
 export interface AgentInput {
   name?: unknown;
@@ -23,6 +24,7 @@ export interface AgentInput {
   channels?: unknown;
   contactPolicy?: unknown;
   contactList?: unknown;
+  skills?: unknown;
   isActive?: unknown;
 }
 
@@ -75,6 +77,12 @@ export function validateAgent(body: AgentInput, partial = false) {
       .filter((c): c is string => typeof c === "string")
       .map((c) => c.trim())
       .filter(Boolean);
+  }
+  if (!partial || body.skills !== undefined) {
+    const list = Array.isArray(body.skills) ? body.skills : [];
+    const bad = list.filter((s) => !SKILLS.includes(s as string));
+    if (bad.length) errors.push(`Unknown skills: ${bad.join(", ")}`);
+    else out.skills = list;
   }
   if (body.isActive !== undefined) out.isActive = Boolean(body.isActive);
 

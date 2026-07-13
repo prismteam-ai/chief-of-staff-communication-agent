@@ -22,12 +22,20 @@ const STATUS_STYLES: Record<string, string> = {
 
 interface ActionDto {
   id: string;
+  type: string;
   channel: string;
   recipient: string;
   subject: string | null;
   body: string;
   status: string;
   statusNote: string | null;
+  meta: {
+    proposal?: {
+      taskName: string;
+      taskNotes: string;
+      projectName: string | null;
+    };
+  } | null;
   createdAt: string;
   sentAt: string | null;
   agent: { name: string; mode: string };
@@ -156,7 +164,10 @@ export default function ApprovalsView() {
                   <div className="text-xs text-neutral-400">
                     <p>
                       <span className="font-medium text-neutral-200">🤖 {a.agent.name}</span>{" "}
-                      wants to reply via {CHANNEL_ICON[a.channel] ?? ""} {a.channel} to{" "}
+                      {a.type === "create_task"
+                        ? "wants to create an Asana task and confirm"
+                        : "wants to reply"}{" "}
+                      via {CHANNEL_ICON[a.channel] ?? ""} {a.channel} to{" "}
                       <span className="text-neutral-200">{a.recipient}</span>
                     </p>
                     <p className="mt-0.5">
@@ -181,8 +192,25 @@ export default function ApprovalsView() {
                   </div>
                 )}
 
+                {a.type === "create_task" && a.meta?.proposal && (
+                  <div className="mt-3 rounded-lg border border-violet-900/60 bg-violet-950/30 p-3 text-xs">
+                    <p className="font-medium text-violet-300">
+                      ➕ Asana task: {a.meta.proposal.taskName}
+                    </p>
+                    <p className="mt-1 text-neutral-400">
+                      {a.meta.proposal.projectName
+                        ? `Project: ${a.meta.proposal.projectName}`
+                        : "No project matched — will be created in the workspace"}
+                    </p>
+                  </div>
+                )}
+
                 {a.statusNote && (
-                  <p className="mt-2 text-xs text-red-400">{a.statusNote}</p>
+                  <p
+                    className={`mt-2 text-xs ${a.status === "sent" ? "text-emerald-400" : "text-red-400"}`}
+                  >
+                    {a.statusNote}
+                  </p>
                 )}
 
                 {a.body &&
@@ -211,7 +239,11 @@ export default function ApprovalsView() {
                       disabled={busy === a.id}
                       className="rounded-md bg-emerald-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
                     >
-                      {busy === a.id ? "Sending…" : "Approve & send"}
+                      {busy === a.id
+                        ? "Sending…"
+                        : a.type === "create_task"
+                          ? "Approve — create task & send"
+                          : "Approve & send"}
                     </button>
                     <button
                       onClick={() => resolve(a.id, "reject")}
