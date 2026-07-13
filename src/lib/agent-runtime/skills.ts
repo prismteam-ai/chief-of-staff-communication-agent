@@ -41,6 +41,7 @@ const STATUS_RE =
   /\b(status|update|progress|how('s| is| are)? .{0,40}(going|coming|looking|tracking)|where (are we|do we stand)|any news)\b/i;
 const CREATE_RE =
   /\b(add|create|include|put in|new task|to-?do|can you (add|create)|please (add|create)|don'?t forget to)\b/i;
+const DETAIL_RE = /\b(more (details?|info(rmation)?)|break ?down|specifics|elaborate|full (list|report)|details? please)\b/i;
 
 export function detectIntent(text: string): "status" | "create" | null {
   if (CREATE_RE.test(text)) return "create";
@@ -48,20 +49,38 @@ export function detectIntent(text: string): "status" | "create" | null {
   return null;
 }
 
+export interface SkillOptions {
+  /** Prior inbound messages in the same thread (for follow-ups like "yes, more details"). */
+  threadContext?: string;
+}
+
 /**
  * Entry point used by the runtime. Returns Asana-grounded context and/or a
  * task proposal, or { kind: "none" } when no skill applies.
  */
-export async function runSkills(agent: Agent, messageText: string): Promise<SkillResult> {
+export async function runSkills(
+  agent: Agent,
+  messageText: string,
+  opts: SkillOptions = {}
+): Promise<SkillResult> {
   if (!agent.skills?.length || !messageText.trim()) return { kind: "none" };
 
-  const intent = detectIntent(messageText);
+  // Intent can come from the current message or carry over from the thread
+  // (e.g. "yes, more details" following "what's the project status?").
+  const intent =
+    detectIntent(messageText) ??
+    (opts.threadContext ? detectIntent(opts.threadContext) : null);
   if (!intent) return { kind: "none" };
 
+  const detailed = DETAIL_RE.test(messageText);
+  const matchText = `${messageText}\n${opts.threadContext ?? ""}`;
+
   if (intent === "status" && agent.skills.includes("asana_status_report")) {
-    return buildStatusContext(agent.userId, messageText);
+    return buildStatusContext(agent.userId, matchText, detailed);
   }
   if (intent === "create" && agent.skills.includes("asana_create_task")) {
+    // task extraction must come from the current message only
+    if (!detectIntent(messageText)) return { kind: "none" };
     return buildTaskProposal(agent.userId, messageText);
   }
   return { kind: "none" };
@@ -103,26 +122,61 @@ export function matchProject(text: string, projects: AsanaProject[]): AsanaProje
   return bestScore >= 0.5 ? best : null;
 }
 
-async function buildStatusContext(userId: string, text: string): Promise<SkillResult> {
+async function buildStatusContext(
+  userId: string,
+  text: string,
+  detailed: boolean
+): Promise<SkillResult> {
   const ws = await getWorkspaceAndProjects(userId);
   if (!ws) return { kind: "none" };
 
   const project = matchProject(text, ws.projects);
   if (!project) {
+    // "all projects" / no specific project → portfolio summary
+    return buildAllProjectsContext(userId, ws.projects, detailed);
+  }
+
+  const context = await projectStatusLines(userId, project, detailed);
+  return { kind: "status_context", projectName: project.name, context: context.join("\n") };
+}
+
+/** Status summary across every project in the workspace. */
+async function buildAllProjectsContext(
+  userId: string,
+  projects: AsanaProject[],
+  detailed: boolean
+): Promise<SkillResult> {
+  if (!projects.length) {
     return {
       kind: "status_context",
       projectName: null,
-      context:
-        "No Asana project matching the request was found. Available projects: " +
-        ws.projects.slice(0, 15).map((p) => p.name).join(", "),
+      context: "There are no active projects in the Asana workspace.",
     };
   }
 
+  const capped = projects.slice(0, 8);
+  const sections: string[] = [
+    `Status across ${projects.length} active project(s)${projects.length > capped.length ? ` (showing ${capped.length})` : ""}:`,
+  ];
+  for (const project of capped) {
+    const lines = await projectStatusLines(userId, project, detailed);
+    sections.push(detailed ? lines.join("\n") : `• ${lines[0].replace(/^Asana project: /, "")} — ${lines[1]}`);
+  }
+  return { kind: "status_context", projectName: null, context: sections.join("\n\n") };
+}
+
+/** Live status lines for one project (more tasks listed when detailed). */
+async function projectStatusLines(
+  userId: string,
+  project: AsanaProject,
+  detailed: boolean
+): Promise<string[]> {
   const tasks = await asanaGet<AsanaTask[]>(
     userId,
     `/projects/${project.gid}/tasks?limit=100&opt_fields=name,completed,completed_at,due_on,resource_subtype,assignee.name`
   );
 
+  const listCap = detailed ? 15 : 5;
   const today = new Date().toISOString().slice(0, 10);
   const open = tasks.filter((t) => !t.completed);
   const done = tasks.filter((t) => t.completed);
@@ -130,12 +184,12 @@ async function buildStatusContext(userId: string, text: string): Promise<SkillRe
   const upcoming = open
     .filter((t) => t.due_on && t.due_on >= today)
     .sort((a, b) => (a.due_on! < b.due_on! ? -1 : 1))
-    .slice(0, 5);
+    .slice(0, listCap);
   const milestones = tasks.filter((t) => t.resource_subtype === "milestone");
   const recentlyDone = done
     .filter((t) => t.completed_at)
     .sort((a, b) => (a.completed_at! > b.completed_at! ? -1 : 1))
-    .slice(0, 5);
+    .slice(0, listCap);
   const pct = tasks.length ? Math.round((done.length / tasks.length) * 100) : 0;
 
   const lines = [
@@ -162,10 +216,18 @@ async function buildStatusContext(userId: string, text: string): Promise<SkillRe
     );
   }
   if (overdue.length) {
-    lines.push("Overdue: " + overdue.slice(0, 5).map((t) => `${t.name} (was due ${t.due_on})`).join("; "));
+    lines.push(
+      "Overdue: " + overdue.slice(0, listCap).map((t) => `${t.name} (was due ${t.due_on})`).join("; ")
+    );
+  }
+  if (detailed) {
+    const openNoDue = open.filter((t) => !t.due_on).slice(0, listCap);
+    if (openNoDue.length) {
+      lines.push("Open (no due date): " + openNoDue.map((t) => t.name).join("; "));
+    }
   }
 
-  return { kind: "status_context", projectName: project.name, context: lines.join("\n") };
+  return lines;
 }
 
 /** Extract a task title from natural language like "please add X to the project". */

@@ -8,6 +8,8 @@ export interface DraftInput {
   body: string;
   /** Live data pulled by an agent skill (e.g., Asana project status). */
   skillContext?: string | null;
+  /** Prior conversation in this thread, oldest first. */
+  history?: string | null;
 }
 
 /** Build the system prompt from the agent's configured characteristics. */
@@ -60,6 +62,9 @@ export async function generateDraft(agent: Agent, input: DraftInput): Promise<st
               content:
                 `Incoming ${input.channel} message from ${input.senderName ?? input.senderAddress} (${input.senderAddress})` +
                 (input.subject ? `\nSubject: ${input.subject}` : "") +
+                (input.history
+                  ? `\n\nConversation so far in this thread:\n${input.history}\n\nTheir latest message:`
+                  : "") +
                 `\n\n${input.body}` +
                 (input.skillContext
                   ? `\n\nLive data pulled from Asana (ground your reply in these facts, do not invent numbers):\n${input.skillContext}`
@@ -87,9 +92,11 @@ function templateDraft(agent: Agent, input: DraftInput): string {
   const name = input.senderName?.split(" ")[0] ?? "there";
   const casual = ["casual", "friendly"].includes(agent.communicationStyle);
   const greeting = casual ? `Hi ${name},` : `Hello ${name},`;
-  const ack = input.subject
-    ? `Thank you for your message regarding "${input.subject}".`
-    : "Thank you for reaching out.";
+  const ack = input.history
+    ? "Thanks for the follow-up."
+    : input.subject
+      ? `Thank you for your message regarding "${input.subject}".`
+      : "Thank you for reaching out.";
 
   if (input.skillContext) {
     const facts = input.skillContext;

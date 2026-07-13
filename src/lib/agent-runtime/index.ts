@@ -76,13 +76,16 @@ export async function runAgents(userId: string): Promise<RunSummary> {
       let actionType = "reply";
       let meta: Prisma.InputJsonValue | undefined;
       try {
-        const messageText = message.body ?? message.snippet ?? "";
+        const messageText = stripQuoted(message.body ?? message.snippet ?? "");
+        const history = await loadThreadHistory(message.threadId, message.id);
         let skillContext: string | null = null;
 
         // Skills: ground the reply in live Asana data / propose Asana tasks
         let skill: Awaited<ReturnType<typeof runSkills>> = { kind: "none" };
         try {
-          skill = await runSkills(agent, `${message.subject ?? ""}\n${messageText}`);
+          skill = await runSkills(agent, `${message.subject ?? ""}\n${messageText}`, {
+            threadContext: history?.inboundText,
+          });
         } catch {
           // Asana unavailable — fall back to a plain reply
         }
@@ -101,6 +104,7 @@ export async function runAgents(userId: string): Promise<RunSummary> {
           subject: message.subject,
           body: messageText,
           skillContext,
+          history: history?.transcript ?? null,
         });
       } catch (err) {
         await createAction(agent, message.id, {
@@ -141,6 +145,58 @@ export async function runAgents(userId: string): Promise<RunSummary> {
 function replySubject(subject?: string | null): string | null {
   if (!subject) return null;
   return /^re:/i.test(subject) ? subject : `Re: ${subject}`;
+}
+
+/** Remove quoted reply chains ("On ... wrote:", "> " lines, Outlook separators). */
+export function stripQuoted(text: string): string {
+  let out = text;
+  const markers = [
+    /\r?\nOn .{5,120}wrote:\s*[\s\S]*$/,
+    /\r?\n-{3,}\s*Original Message\s*-{3,}[\s\S]*$/i,
+    /\r?\nFrom:\s.+\r?\nSent:\s[\s\S]*$/,
+    /\r?\n_{10,}[\s\S]*$/,
+  ];
+  for (const re of markers) out = out.replace(re, "");
+  out = out
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith(">"))
+    .join("\n");
+  return out.trim();
+}
+
+interface ThreadHistory {
+  /** Readable transcript of the conversation so far (oldest first). */
+  transcript: string;
+  /** Only what the other party said — used for intent carry-over. */
+  inboundText: string;
+}
+
+/** Load prior messages in the thread (excluding the one being replied to). */
+async function loadThreadHistory(
+  threadId: string | null,
+  excludeMessageId: string
+): Promise<ThreadHistory | null> {
+  if (!threadId) return null;
+  const prior = await prisma.message.findMany({
+    where: { threadId, id: { not: excludeMessageId } },
+    orderBy: { sentAt: "desc" },
+    take: 6,
+    select: { isOutbound: true, body: true, snippet: true },
+  });
+  if (!prior.length) return null;
+
+  const oldestFirst = prior.reverse();
+  const transcript = oldestFirst
+    .map((m) => {
+      const text = stripQuoted(m.body ?? m.snippet ?? "").slice(0, 600);
+      return `${m.isOutbound ? "You (agent)" : "Them"}: ${text}`;
+    })
+    .join("\n---\n");
+  const inboundText = oldestFirst
+    .filter((m) => !m.isOutbound)
+    .map((m) => stripQuoted(m.body ?? m.snippet ?? ""))
+    .join("\n");
+  return { transcript, inboundText };
 }
 
 async function createAction(
