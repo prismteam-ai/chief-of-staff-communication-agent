@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
 import { getProvider } from "@/lib/providers";
-import { getCredentials, getFreshAccessToken } from "@/lib/connections";
-import { ingestors, INGEST_UNSUPPORTED, persistMessages } from "@/lib/ingest";
+import { ingestors, INGEST_UNSUPPORTED } from "@/lib/ingest";
+import { syncConnection } from "@/lib/sync";
 
 /** POST /api/connections/[provider]/sync — ingest new messages for a channel. */
 export async function POST(
@@ -21,63 +20,19 @@ export async function POST(
   if (!provider) {
     return NextResponse.json({ error: "Unknown provider" }, { status: 404 });
   }
-
-  const ingestor = ingestors[provider.id];
-  if (!ingestor) {
+  if (!ingestors[provider.id]) {
     return NextResponse.json(
       { error: INGEST_UNSUPPORTED[provider.id] ?? "Ingestion not supported for this channel" },
       { status: 400 }
     );
   }
 
-  const conn = await prisma.channelConnection.findUnique({
-    where: { userId_provider: { userId, provider: provider.id } },
-  });
-  if (!conn) {
-    return NextResponse.json({ error: "Channel not connected" }, { status: 400 });
-  }
-
   try {
-    const ctx = {
-      userId,
-      cursor: conn.syncCursor,
-      accountLabel: conn.accountLabel,
-      accessToken:
-        provider.kind === "oauth"
-          ? (await getFreshAccessToken(userId, provider.id)) ?? undefined
-          : undefined,
-      credentials:
-        provider.kind === "credentials"
-          ? (await getCredentials(userId, provider.id)) ?? undefined
-          : undefined,
-    };
-    if (provider.kind === "oauth" && !ctx.accessToken) {
-      return NextResponse.json(
-        { error: "No valid access token — reconnect this channel" },
-        { status: 400 }
-      );
-    }
-
-    const result = await ingestor(ctx);
-    const { inserted, skipped } = await persistMessages(userId, provider.id, result.messages);
-
-    await prisma.channelConnection.update({
-      where: { id: conn.id },
-      data: {
-        syncCursor: result.nextCursor ?? conn.syncCursor,
-        lastSyncAt: new Date(),
-        status: "connected",
-        lastError: null,
-      },
-    });
-
-    return NextResponse.json({ inserted, skipped, fetched: result.messages.length });
+    const result = await syncConnection(userId, provider.id);
+    return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Sync failed";
-    await prisma.channelConnection.update({
-      where: { id: conn.id },
-      data: { status: "error", lastError: message },
-    });
-    return NextResponse.json({ error: message }, { status: 502 });
+    const status = message === "Channel not connected" ? 400 : 502;
+    return NextResponse.json({ error: message }, { status });
   }
 }
