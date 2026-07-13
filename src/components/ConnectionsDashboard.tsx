@@ -34,6 +34,7 @@ const ICONS: Record<string, string> = {
   x: "𝕏",
   whatsapp: "💬",
   sms: "📱",
+  asana: "✅",
 };
 
 function StatusBadge({ channel }: { channel: ChannelDto }) {

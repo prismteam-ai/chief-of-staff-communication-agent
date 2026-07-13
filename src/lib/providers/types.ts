@@ -1,4 +1,11 @@
-export type ProviderId = "gmail" | "outlook" | "linkedin" | "x" | "whatsapp" | "sms";
+export type ProviderId =
+  | "gmail"
+  | "outlook"
+  | "linkedin"
+  | "x"
+  | "whatsapp"
+  | "sms"
+  | "asana";
 
 export interface TestResult {
   ok: boolean;

@@ -5,6 +5,7 @@ import { linkedin } from "./linkedin";
 import { x } from "./x";
 import { whatsapp } from "./whatsapp";
 import { sms } from "./sms";
+import { asana } from "./asana";
 
 export const providers: Record<ProviderId, ChannelProviderConfig> = {
   gmail,
@@ -13,6 +14,7 @@ export const providers: Record<ProviderId, ChannelProviderConfig> = {
   x,
   whatsapp,
   sms,
+  asana,
 };
 
 export function getProvider(id: string): ChannelProviderConfig | undefined {

@@ -22,6 +22,8 @@ export const INGEST_UNSUPPORTED: Record<string, string> = {
     "WhatsApp has no history API — new inbound messages are ingested in real time via the webhook once configured in Meta.",
   linkedin:
     "LinkedIn does not expose a public API for reading member messages.",
+  asana:
+    "Asana is a work-management channel — browse it live on the Asana page instead of the inbox.",
 };
 
 export * from "./types";

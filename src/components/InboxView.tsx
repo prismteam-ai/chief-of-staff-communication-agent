@@ -128,7 +128,7 @@ export default function InboxView() {
     const { channels } = await connRes.json();
     const connected = channels.filter(
       (c: { connection: unknown; id: string }) =>
-        c.connection && !["whatsapp", "linkedin"].includes(c.id)
+        c.connection && !["whatsapp", "linkedin", "asana"].includes(c.id)
     );
     if (connected.length === 0) {
       setBanner("No syncable channels connected yet — connect one on the Connections page.");
