@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { ingestors } from "@/lib/ingest";
 import { syncConnection } from "@/lib/sync";
 import { runAgents } from "@/lib/agent-runtime";
+import { updateResponseStatuses } from "@/lib/agent-runtime/tracking";
 
 const DEFAULT_INTERVAL_SECONDS = 60;
 
@@ -46,9 +47,9 @@ export function startScheduler() {
 }
 
 async function runOnce() {
-  // only users with at least one agent that can act autonomously
+  // only users with at least one active agent
   const agents = await prisma.agent.findMany({
-    where: { isActive: true, autoReply: true },
+    where: { isActive: true },
     select: { userId: true },
     distinct: ["userId"],
   });
@@ -75,6 +76,7 @@ async function runOnce() {
     }
 
     try {
+      await updateResponseStatuses(userId);
       const summary = await runAgents(userId);
       if (summary.drafted > 0 || summary.sentOnAutopilot > 0) {
         console.log(

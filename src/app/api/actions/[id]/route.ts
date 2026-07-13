@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { dispatchAction } from "@/lib/agent-runtime";
+import { generateDraft } from "@/lib/agent-runtime/draft";
 
 /**
  * POST /api/actions/[id] — resolve a pending action.
- * Body: { decision: "approve" | "reject", body?: string (edited draft) }
- * Approving sends the message through the real channel.
+ * Body: { decision: "approve" | "reject" | "context",
+ *         body?: string (edited draft), context?: string (extra info) }
+ * - approve: sends the message through the real channel
+ * - context: regenerates the draft using the extra context you provide
+ *   (turns a needs_context action into a normal reply awaiting approval)
  */
 export async function POST(
   req: NextRequest,
@@ -40,7 +44,51 @@ export async function POST(
     return NextResponse.json({ action: updated });
   }
 
+  if (decision === "context") {
+    const context = typeof payload.context === "string" ? payload.context.trim() : "";
+    if (!context) {
+      return NextResponse.json({ error: "context is required" }, { status: 400 });
+    }
+    const [agent, message] = await Promise.all([
+      prisma.agent.findUnique({ where: { id: action.agentId } }),
+      action.messageId
+        ? prisma.message.findUnique({
+            where: { id: action.messageId },
+            include: { participants: { where: { role: "from" } } },
+          })
+        : null,
+    ]);
+    if (!agent || !message) {
+      return NextResponse.json({ error: "Agent or message no longer exists" }, { status: 400 });
+    }
+    const from = message.participants[0];
+    const body = await generateDraft(agent, {
+      channel: message.provider,
+      senderName: from?.name,
+      senderAddress: from?.address ?? action.recipient,
+      subject: message.subject,
+      body: message.body ?? message.snippet ?? "",
+      skillContext: `Information provided by your principal to answer with:\n${context}`,
+    });
+    const updated = await prisma.agentAction.update({
+      where: { id },
+      data: {
+        body,
+        type: "reply",
+        statusNote: null,
+        recommendation: "Reply with the draft written from your provided context.",
+      },
+    });
+    return NextResponse.json({ action: updated });
+  }
+
   if (decision === "approve") {
+    if (action.type === "needs_context" && !(typeof payload.body === "string" && payload.body.trim())) {
+      return NextResponse.json(
+        { error: "This action needs a reply body — provide context or write the reply first" },
+        { status: 400 }
+      );
+    }
     if (typeof payload.body === "string" && payload.body.trim()) {
       await prisma.agentAction.update({
         where: { id },
@@ -52,7 +100,10 @@ export async function POST(
     return NextResponse.json({ action: updated }, { status: ok ? 200 : 502 });
   }
 
-  return NextResponse.json({ error: "decision must be approve or reject" }, { status: 400 });
+  return NextResponse.json(
+    { error: "decision must be approve, reject or context" },
+    { status: 400 }
+  );
 }
 
 /** DELETE /api/actions/[id] — remove an action from history. */

@@ -29,6 +29,7 @@ interface ActionDto {
   body: string;
   status: string;
   statusNote: string | null;
+  recommendation: string | null;
   meta: {
     proposal?: {
       taskName: string;
@@ -65,6 +66,7 @@ export default function ApprovalsView() {
   const [busy, setBusy] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const [contexts, setContexts] = useState<Record<string, string>>({});
 
   const load = useCallback(async (status: string) => {
     try {
@@ -114,6 +116,30 @@ export default function ApprovalsView() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setBanner(data.action?.statusNote ?? data.error ?? `${decision} failed`);
+      }
+      await load(filter);
+    } catch {
+      setBanner("Network error — please try again");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const provideContext = async (id: string) => {
+    const context = contexts[id]?.trim();
+    if (!context) return;
+    setBusy(id);
+    try {
+      const res = await fetch(`/api/actions/${id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision: "context", context }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setBanner(data.error ?? "Failed to generate reply");
+      } else {
+        setContexts((prev) => ({ ...prev, [id]: "" }));
       }
       await load(filter);
     } catch {
@@ -183,7 +209,11 @@ export default function ApprovalsView() {
                       <span className="font-medium text-neutral-200">🤖 {a.agent.name}</span>{" "}
                       {a.type === "create_task"
                         ? "wants to create an Asana task and confirm"
-                        : "wants to reply"}{" "}
+                        : a.type === "needs_context"
+                          ? "needs your input to reply"
+                          : a.type === "no_action"
+                            ? "recommends no action"
+                            : "wants to reply"}{" "}
                       via {CHANNEL_ICON[a.channel] ?? ""} {a.channel} to{" "}
                       <span className="text-neutral-200">{a.recipient}</span>
                     </p>
@@ -222,12 +252,47 @@ export default function ApprovalsView() {
                   </div>
                 )}
 
+                {a.recommendation && (
+                  <p className="mt-2 text-xs text-neutral-400">💡 {a.recommendation}</p>
+                )}
+
                 {a.statusNote && (
                   <p
-                    className={`mt-2 text-xs ${a.status === "sent" ? "text-emerald-400" : "text-red-400"}`}
+                    className={`mt-2 text-xs ${a.status === "sent" ? "text-emerald-400" : a.type === "needs_context" ? "text-amber-400" : "text-red-400"}`}
                   >
                     {a.statusNote}
                   </p>
+                )}
+
+                {pending && a.type === "needs_context" && (
+                  <div className="mt-3 rounded-lg border border-amber-900/60 bg-amber-950/20 p-3">
+                    <p className="text-xs text-amber-300">
+                      Give the agent the information it needs and it will write the reply:
+                    </p>
+                    <textarea
+                      value={contexts[a.id] ?? ""}
+                      onChange={(e) =>
+                        setContexts((prev) => ({ ...prev, [a.id]: e.target.value }))
+                      }
+                      rows={3}
+                      placeholder="e.g. The proposal was approved on Friday; delivery starts next week."
+                      className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 p-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={() => provideContext(a.id)}
+                      disabled={busy === a.id || !contexts[a.id]?.trim()}
+                      className="mt-2 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-amber-500 disabled:opacity-50"
+                    >
+                      {busy === a.id ? "Generating…" : "Generate reply from context"}
+                    </button>
+                    <button
+                      onClick={() => resolve(a.id, "reject")}
+                      disabled={busy === a.id}
+                      className="ml-2 mt-2 rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 transition hover:bg-neutral-800 disabled:opacity-50"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
                 )}
 
                 {a.body &&
@@ -249,7 +314,7 @@ export default function ApprovalsView() {
                     </div>
                   ))}
 
-                {pending && (
+                {pending && a.type !== "needs_context" && (
                   <div className="mt-3 flex gap-2">
                     <button
                       onClick={() => resolve(a.id, "approve")}

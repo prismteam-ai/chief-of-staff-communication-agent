@@ -107,6 +107,8 @@ model Message {
   subject      String?
   snippet      String?
   body         String?
+  responseStatus String   @default("pending") // pending | answered | not_needed
+  answeredAt   DateTime?
   sentAt       DateTime
   isOutbound   Boolean              @default(false)
   participants MessageParticipant[]
@@ -174,7 +176,8 @@ model AgentAction {
   agent       Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
   messageId   String? // trigger message
   message     Message?  @relation(fields: [messageId], references: [id], onDelete: SetNull)
-  type        String    @default("reply") // reply | create_task
+  type        String    @default("reply") // reply | create_task | needs_context | no_action
+  recommendation String? // recommended action shown in the dashboard
   channel     String // provider id used to act
   recipient   String // address / handle / phone the agent will contact
   subject     String?

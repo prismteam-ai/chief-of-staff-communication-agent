@@ -17,10 +17,13 @@ export interface RunSummary {
 
 /**
  * The core agent runtime: scan recent inbound messages, and for every active
- * agent with auto-reply enabled whose channels cover the message, apply the
- * agent's policy and produce an action:
- *  - hitl  → pending_approval (approvals queue)
- *  - autopilot → send immediately
+ * agent whose channels cover the message, apply the agent's policy and
+ * produce a recommended action:
+ *  - blocked contact / newsletter → no_action (message marked not_needed)
+ *  - unclear question the agent can't confidently answer → needs_context
+ *  - otherwise → drafted reply (and/or Asana task proposal), which is
+ *    auto-sent only when the agent has autoReply on and mode=autopilot;
+ *    everything else waits for approval.
  */
 export async function runAgents(userId: string): Promise<RunSummary> {
   const summary: RunSummary = {
@@ -32,7 +35,7 @@ export async function runAgents(userId: string): Promise<RunSummary> {
   };
 
   const agents = await prisma.agent.findMany({
-    where: { userId, isActive: true, autoReply: true },
+    where: { userId, isActive: true },
   });
   if (agents.length === 0) return summary;
 
@@ -67,6 +70,12 @@ export async function runAgents(userId: string): Promise<RunSummary> {
           body: "",
           status: "blocked",
           statusNote: decision.reason,
+          type: "no_action",
+          recommendation: "No reply needed — sender is outside this agent's contact policy.",
+        });
+        await prisma.message.updateMany({
+          where: { id: message.id, responseStatus: "pending" },
+          data: { responseStatus: "not_needed" },
         });
         summary.blocked++;
         continue;
@@ -74,7 +83,9 @@ export async function runAgents(userId: string): Promise<RunSummary> {
 
       let body: string;
       let actionType = "reply";
+      let recommendation = "Reply with the suggested draft.";
       let meta: Prisma.InputJsonValue | undefined;
+      let skillMatched = false;
       try {
         const messageText = stripQuoted(message.body ?? message.snippet ?? "");
         const history = await loadThreadHistory(message.threadId, message.id);
@@ -91,10 +102,40 @@ export async function runAgents(userId: string): Promise<RunSummary> {
         }
         if (skill.kind === "status_context") {
           skillContext = skill.context;
+          skillMatched = true;
+          recommendation = skill.projectName
+            ? `Reply with a live status report for Asana project "${skill.projectName}".`
+            : "Reply with a live status summary across Asana projects.";
         } else if (skill.kind === "create_task") {
           skillContext = skill.context;
+          skillMatched = true;
           actionType = "create_task";
+          recommendation = `Create Asana task "${skill.proposal.taskName}"${skill.proposal.projectName ? ` in "${skill.proposal.projectName}"` : ""} and confirm to the sender.`;
           meta = { proposal: { ...skill.proposal } };
+        }
+
+        // Confidence gate: a direct question we have no grounded answer for
+        // (and no LLM configured) → ask the user for context instead of
+        // sending a generic acknowledgement.
+        const hasLlm = Boolean(
+          process.env.AZURE_OPENAI_ENDPOINT &&
+            process.env.AZURE_OPENAI_API_KEY &&
+            process.env.AZURE_OPENAI_DEPLOYMENT
+        );
+        if (!skillMatched && !hasLlm && /\?/.test(messageText)) {
+          const action = await createAction(agent, message.id, {
+            channel: message.provider,
+            recipient: sender.address,
+            subject: replySubject(message.subject),
+            body: "",
+            status: "pending_approval",
+            statusNote: "The agent can't confidently answer this question — add context or write the reply.",
+            type: "needs_context",
+            recommendation:
+              "Needs your input: the sender asked a question the agent has no data to answer.",
+          });
+          if (action) summary.drafted++;
+          continue;
         }
 
         body = await generateDraft(agent, {
@@ -119,19 +160,21 @@ export async function runAgents(userId: string): Promise<RunSummary> {
         continue;
       }
 
+      const autoSend = agent.autoReply && agent.mode === "autopilot";
       const action = await createAction(agent, message.id, {
         channel: message.provider,
         recipient: sender.address,
         subject: replySubject(message.subject),
         body,
-        status: agent.mode === "autopilot" ? "approved" : "pending_approval",
+        status: autoSend ? "approved" : "pending_approval",
         type: actionType,
+        recommendation,
         meta,
       });
       if (!action) continue;
       summary.drafted++;
 
-      if (agent.mode === "autopilot") {
+      if (autoSend) {
         const ok = await dispatchAction(action.id);
         if (ok) summary.sentOnAutopilot++;
         else summary.failed++;
@@ -210,6 +253,7 @@ async function createAction(
     status: string;
     statusNote?: string | null;
     type?: string;
+    recommendation?: string | null;
     meta?: Prisma.InputJsonValue;
   }
 ): Promise<AgentAction | null> {
@@ -290,6 +334,12 @@ export async function dispatchAction(actionId: string): Promise<boolean> {
       where: { id: action.id },
       data: { status: "sent", statusNote, sentAt: new Date(), resolvedAt: new Date() },
     });
+    if (action.messageId) {
+      await prisma.message.updateMany({
+        where: { id: action.messageId, responseStatus: "pending" },
+        data: { responseStatus: "answered", answeredAt: new Date() },
+      });
+    }
     return true;
   } catch (err) {
     await prisma.agentAction.update({

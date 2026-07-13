@@ -122,6 +122,16 @@ export function matchProject(text: string, projects: AsanaProject[]): AsanaProje
   return bestScore >= 0.5 ? best : null;
 }
 
+/** Public helper (used by the MCP server) — live Asana status for a query. */
+export async function statusReport(
+  userId: string,
+  query: string,
+  detailed = true
+): Promise<string> {
+  const result = await buildStatusContext(userId, query, detailed);
+  return result.kind === "status_context" ? result.context : "Asana is not connected.";
+}
+
 async function buildStatusContext(
   userId: string,
   text: string,

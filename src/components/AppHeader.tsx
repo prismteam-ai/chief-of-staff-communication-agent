@@ -2,6 +2,7 @@ import Link from "next/link";
 import { signOut } from "@/auth";
 
 const TABS = [
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/inbox", label: "Inbox" },
   { href: "/asana", label: "Asana" },
   { href: "/agents", label: "Agents" },

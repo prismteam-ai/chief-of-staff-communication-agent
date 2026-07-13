@@ -66,6 +66,17 @@ interface ThreadDetail {
   messages: MessageDto[];
 }
 
+interface RelatedDto {
+  id: string;
+  threadId: string | null;
+  provider: string;
+  subject: string | null;
+  snippet: string | null;
+  sentAt: string;
+  from: { name: string | null; address: string } | null;
+  reasons: string[];
+}
+
 function formatTime(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -90,6 +101,7 @@ export default function InboxView() {
   const [filter, setFilter] = useState("");
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [selected, setSelected] = useState<ThreadDetail | null>(null);
+  const [related, setRelated] = useState<RelatedDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
@@ -113,6 +125,15 @@ export default function InboxView() {
     if (res.ok) {
       const data = await res.json();
       setSelected(data.thread);
+      setRelated([]);
+      // cross-channel links for the latest message in the thread
+      const last = data.thread?.messages?.[data.thread.messages.length - 1];
+      if (last) {
+        fetch(`/api/inbox/messages/${last.id}/related`)
+          .then((r) => (r.ok ? r.json() : { related: [] }))
+          .then((d) => setRelated(d.related ?? []))
+          .catch(() => {});
+      }
     }
   };
 
@@ -306,6 +327,34 @@ export default function InboxView() {
                   );
                 })}
               </div>
+
+              {related.length > 0 && (
+                <div className="mt-6">
+                  <h4 className="text-xs font-semibold uppercase text-neutral-500">
+                    🔗 Related across channels
+                  </h4>
+                  <div className="mt-2 flex flex-col gap-2">
+                    {related.map((r) => (
+                      <button
+                        key={r.id}
+                        onClick={() => r.threadId && openThread(r.threadId)}
+                        disabled={!r.threadId}
+                        className="rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-left transition hover:border-neutral-600 disabled:cursor-default"
+                      >
+                        <p className="truncate text-xs text-neutral-200">
+                          {CHANNEL_ICON[r.provider] ?? "🔌"}{" "}
+                          {r.from?.name ?? r.from?.address ?? "Unknown"}
+                          {r.subject ? ` — ${r.subject}` : ""}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-neutral-500">{r.snippet}</p>
+                        <p className="mt-0.5 text-[10px] text-neutral-600">
+                          {r.reasons.join(" · ")} · {formatTime(r.sentAt)}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
