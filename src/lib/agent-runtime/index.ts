@@ -221,7 +221,8 @@ function replySubject(subject?: string | null): string | null {
 export function stripQuoted(text: string): string {
   let out = text;
   const markers = [
-    /\r?\nOn .{5,120}wrote:\s*[\s\S]*$/,
+    // "On <date> ... wrote:" — may appear mid-line when clients flatten the body
+    /(?:\r?\n|\s)On (?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d)[\s\S]{5,200}?wrote:\s*[\s\S]*$/,
     /\r?\n-{3,}\s*Original Message\s*-{3,}[\s\S]*$/i,
     /\r?\nFrom:\s.+\r?\nSent:\s[\s\S]*$/,
     /\r?\n_{10,}[\s\S]*$/,

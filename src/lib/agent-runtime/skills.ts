@@ -243,6 +243,19 @@ async function projectStatusLines(
 /** Extract a task title from natural language like "please add X to the project". */
 export function extractTaskName(text: string): string | null {
   const cleaned = text.replace(/\s+/g, " ").trim();
+
+  // Best judgement, in priority order:
+  // 1. An explicitly quoted title: call it "X" / named "X" / titled "X"
+  const explicit = cleaned.match(
+    /(?:call(?:ed)?(?:\s+it)?|nam(?:e|ed)(?:\s+it)?|titled?)\s*[:\-]?\s*["“']([^"”']{3,120})["”']/i
+  );
+  if (explicit?.[1]) return finishTaskName(explicit[1]);
+
+  // 2. Any quoted string right after the add/create verb
+  const quoted = cleaned.match(/(?:add|create|include)[^"“']{0,60}["“']([^"”']{3,120})["”']/i);
+  if (quoted?.[1]) return finishTaskName(quoted[1]);
+
+  // 3. Free-text extraction after the verb
   const patterns = [
     /(?:please\s+)?(?:can|could)\s+you\s+(?:add|create|include)\s+(?:a\s+task\s+(?:for|to)\s+)?(.+?)(?:[.?!\n]|$)/i,
     /(?:please\s+)?(?:add|create|include)\s+(?:a\s+(?:new\s+)?task\s+(?:for|to|called|named)?\s*)?(.+?)(?:[.?!\n]|$)/i,
@@ -253,12 +266,28 @@ export function extractTaskName(text: string): string | null {
     const m = cleaned.match(re);
     if (m?.[1]) {
       let name = m[1].trim();
+      // drop instruction chatter: "in that project and call it ..." → keep the payload
+      name = name.replace(/^(?:it\s+)?(?:in|to|on)\s+(?:that|the|this|my)\s+\S+\s+and\s+/i, "");
+      // stop at follow-up clauses ("... and add some details", "... and call it")
+      name = name.replace(/\s+and\s+(?:add|include|call|name|title|put|mention|note)\b.*$/i, "");
       // drop trailing project references — they're used for matching, not the title
       name = name.replace(/\s+(?:to|in|on|for)\s+(?:the\s+)?(?:.*\b(?:project|board)\b.*)$/i, "").trim();
-      if (name.length >= 3) return name.charAt(0).toUpperCase() + name.slice(1);
+      const finished = finishTaskName(name);
+      if (finished) return finished;
     }
   }
   return null;
+}
+
+/** Final cleanup + sanity checks shared by all extraction paths. */
+function finishTaskName(raw: string): string | null {
+  let name = raw.replace(/\s+/g, " ").trim();
+  // never let a quoted reply chain leak into the title
+  name = name.replace(/\s*\bOn (?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d)[\s\S]*$/i, "").trim();
+  name = name.replace(/[,;:\-\s]+$/, "");
+  if (name.length < 3) return null;
+  if (name.length > 120) name = `${name.slice(0, 117).trimEnd()}...`;
+  return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 async function buildTaskProposal(userId: string, text: string): Promise<SkillResult> {
