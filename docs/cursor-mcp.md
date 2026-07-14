@@ -29,6 +29,29 @@ layer as tools, so you can drive it straight from Cursor's chat.
 
 3. Reload Cursor (Settings → MCP → verify `chief-of-comms` shows a green dot).
 
+## Remote (Azure-hosted) endpoint
+
+The MCP server is also hosted in Azure as a Streamable HTTP endpoint
+(`mcp/http.ts`, container app `chiefcomms-mcp`), running against the
+production database. Use this from any machine — no repo checkout needed:
+
+```json
+{
+  "mcpServers": {
+    "chief-of-comms": {
+      "url": "https://<mcp-fqdn>/mcp",
+      "headers": {
+        "Authorization": "Bearer <MCP_AUTH_TOKEN>"
+      }
+    }
+  }
+}
+```
+
+The FQDN comes from the `mcpFqdn` deployment output; the token is the
+`mcpAuthToken` parameter (kept locally in `.env.azure.local`, stored as a
+Container App secret). Health check: `GET https://<mcp-fqdn>/healthz`.
+
 ## Tools
 
 | Tool | What it does |
@@ -40,6 +63,8 @@ layer as tools, so you can drive it straight from Cursor's chat.
 | `reject_action` | Dismiss a pending action |
 | `run_agents_now` | Run the agent runtime immediately |
 | `asana_status` | Live Asana project status report |
+| `search_knowledge` | RAG search over communications, Asana, preferences, org knowledge |
+| `reindex_knowledge` | Rebuild the RAG knowledge index |
 
 ## Example prompts in Cursor
 

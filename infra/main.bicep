@@ -30,6 +30,13 @@ param whatsappVerifyToken string = ''
 @description('Public base URL; set after first deploy when FQDN is known')
 param appBaseUrl string = ''
 
+@description('MCP server container image')
+param mcpImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
+@secure()
+param mcpAuthToken string
+@description('Email of the user the MCP server acts as')
+param mcpUserEmail string = ''
+
 var dbAdmin = 'chiefadmin'
 var dbName = 'chief_of_comms'
 var suffix = uniqueString(resourceGroup().id)
@@ -162,7 +169,69 @@ resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
+// Remote MCP server (Streamable HTTP) — same codebase, mcp Docker stage.
+resource mcpApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
+  name: '${baseName}-mcp'
+  location: location
+  identity: { type: 'SystemAssigned' }
+  properties: {
+    managedEnvironmentId: env.id
+    configuration: {
+      ingress: {
+        external: true
+        targetPort: 3001
+        transport: 'auto'
+      }
+      registries: [
+        {
+          server: acr.properties.loginServer
+          identity: 'system'
+        }
+      ]
+      secrets: [
+        { name: 'database-url', value: dbUrl }
+        { name: 'token-encryption-key', value: tokenEncryptionKey }
+        { name: 'outlook-client-secret', value: outlookClientSecret }
+        { name: 'mcp-auth-token', value: mcpAuthToken }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'mcp'
+          image: mcpImage
+          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+          env: [
+            { name: 'DATABASE_URL', secretRef: 'database-url' }
+            { name: 'TOKEN_ENCRYPTION_KEY', secretRef: 'token-encryption-key' }
+            { name: 'OUTLOOK_CLIENT_SECRET', secretRef: 'outlook-client-secret' }
+            { name: 'MCP_AUTH_TOKEN', secretRef: 'mcp-auth-token' }
+            { name: 'OUTLOOK_CLIENT_ID', value: outlookClientId }
+            { name: 'MCP_USER_EMAIL', value: mcpUserEmail }
+            { name: 'APP_BASE_URL', value: appBaseUrl }
+          ]
+        }
+      ]
+      scale: { minReplicas: 1, maxReplicas: 1 }
+    }
+  }
+}
+
+resource acrPullMcp 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(acr.id, mcpApp.id, 'acrpull')
+  scope: acr
+  properties: {
+    principalId: mcpApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+    )
+  }
+}
+
 output appFqdn string = app.properties.configuration.ingress.fqdn
+output mcpFqdn string = mcpApp.properties.configuration.ingress.fqdn
 output acrLoginServer string = acr.properties.loginServer
 output acrName string = acr.name
 output pgHost string = pg.properties.fullyQualifiedDomainName
