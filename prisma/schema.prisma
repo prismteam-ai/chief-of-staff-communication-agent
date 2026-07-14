@@ -1,0 +1,226 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String              @id @default(cuid())
+  name          String?
+  email         String              @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  connections   ChannelConnection[]
+  agents        Agent[]
+  knowledgeItems  KnowledgeItem[]
+  knowledgeChunks KnowledgeChunk[]
+  mcpToken      String?             @unique
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+/// A user's connected communication channel (Gmail, Outlook, LinkedIn, X, WhatsApp, SMS).
+/// Tokens and credentials are encrypted at rest with AES-256-GCM.
+model ChannelConnection {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider     String // gmail | outlook | linkedin | x | whatsapp | sms
+  status       String    @default("connected") // connected | expired | error
+  accessToken  String? // encrypted
+  refreshToken String? // encrypted
+  credentials  String? // encrypted JSON, for credential-based providers (whatsapp, sms)
+  scopes       String?
+  expiresAt    DateTime?
+  accountLabel String? // e.g. email address, handle or phone number for display
+  lastCheckAt  DateTime?
+  lastError    String?
+  syncCursor   String? // provider-specific incremental sync cursor
+  lastSyncAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([userId, provider])
+  @@index([userId])
+}
+
+/// A conversation thread within a channel.
+model Thread {
+  id            String    @id @default(cuid())
+  userId        String
+  provider      String
+  externalId    String
+  subject       String?
+  lastMessageAt DateTime?
+  messages      Message[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([userId, provider, externalId])
+  @@index([userId, lastMessageAt])
+}
+
+/// An ingested message from any channel.
+model Message {
+  id           String               @id @default(cuid())
+  userId       String
+  provider     String
+  externalId   String
+  threadId     String?
+  thread       Thread?              @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  subject      String?
+  snippet      String?
+  body         String?
+  responseStatus String   @default("pending") // pending | answered | not_needed
+  answeredAt   DateTime?
+  sentAt       DateTime
+  isOutbound   Boolean              @default(false)
+  participants MessageParticipant[]
+  attachments  Attachment[]
+  agentActions AgentAction[]
+  createdAt    DateTime             @default(now())
+
+  @@unique([userId, provider, externalId])
+  @@index([userId, sentAt])
+  @@index([threadId])
+}
+
+model MessageParticipant {
+  id        String  @id @default(cuid())
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  role      String // from | to | cc | bcc
+  name      String?
+  address   String // email, phone number or handle
+
+  @@index([messageId])
+}
+
+model Attachment {
+  id         String  @id @default(cuid())
+  messageId  String
+  message    Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  externalId String?
+  filename   String
+  mimeType   String?
+  sizeBytes  Int?
+
+  @@index([messageId])
+}
+
+/// A configurable AI communications agent.
+model Agent {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  description        String?
+  communicationStyle String   @default("professional") // professional | formal | casual | friendly | direct | empathetic
+  toneOfVoice        String   @default("neutral") // neutral | warm | concise | playful | assertive | authoritative
+  customInstructions String?
+  autoReply          Boolean  @default(false) // may draft/send replies automatically
+  mode               String   @default("hitl") // autopilot | hitl (human-in-the-loop approval required)
+  channels           String[] // provider ids this agent may use
+  contactPolicy      String   @default("all") // all | allowlist | blocklist
+  contactList        String[] // emails / handles / phone numbers
+  skills             String[] // asana_status_report | asana_create_task
+  isActive           Boolean  @default(true)
+  actions            AgentAction[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([userId])
+}
+
+/// An action produced by an agent (e.g. a drafted reply), subject to its autonomy mode.
+model AgentAction {
+  id          String    @id @default(cuid())
+  userId      String
+  agentId     String
+  agent       Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  messageId   String? // trigger message
+  message     Message?  @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  type        String    @default("reply") // reply | create_task | needs_context | no_action
+  recommendation String? // recommended action shown in the dashboard
+  channel     String // provider id used to act
+  recipient   String // address / handle / phone the agent will contact
+  subject     String?
+  body        String
+  meta        Json? // skill payload, e.g. Asana task to create / project used
+  status      String    @default("pending_approval") // pending_approval | approved | sent | rejected | failed | blocked
+  statusNote  String? // block reason / send error
+  sentAt      DateTime?
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([agentId, messageId])
+  @@index([userId, status])
+}
+
+model KnowledgeItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String   @default("org") // org | preference
+  title     String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, kind])
+}
+
+model KnowledgeChunk {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source    String // message | asana_project | asana_task | preference | org | agent
+  sourceId  String
+  title     String?
+  content   String
+  embedding Json? // number[] when an embedding model is configured
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, source, sourceId])
+  @@index([userId, source])
+}
