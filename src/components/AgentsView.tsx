@@ -97,7 +97,7 @@ function formToPayload(f: FormState) {
     communicationStyle: f.communicationStyle,
     toneOfVoice: f.toneOfVoice,
     customInstructions: f.customInstructions,
-    autoReply: f.autoReply,
+    autoReply: f.mode === "autopilot",
     mode: f.mode,
     channels: f.channels,
     contactPolicy: f.contactPolicy,
@@ -263,7 +263,6 @@ export default function AgentsView() {
               </div>
 
               <div className="mt-2 flex flex-wrap gap-2 text-xs text-neutral-500">
-                {a.autoReply && <span>auto-reply</span>}
                 {a.skills?.includes("asana_status_report") && <span>Asana status</span>}
                 {a.skills?.includes("asana_create_task") && <span>Asana tasks</span>}
                 <span>
@@ -415,21 +414,6 @@ export default function AgentsView() {
                     <span className="font-medium">Autopilot</span>
                     <span className="block text-xs text-neutral-400">
                       The agent acts on its own within its rules — no approval needed.
-                    </span>
-                  </span>
-                </label>
-                <label className="flex items-start gap-3 border-t border-neutral-800 pt-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={form.autoReply}
-                    onChange={(e) => set("autoReply", e.target.checked)}
-                    className="mt-0.5"
-                  />
-                  <span>
-                    <span className="font-medium">Automatic reply</span>
-                    <span className="block text-xs text-neutral-400">
-                      Draft replies to incoming messages automatically
-                      {form.mode === "hitl" ? " (queued for your approval)" : " and send them"}.
                     </span>
                   </span>
                 </label>

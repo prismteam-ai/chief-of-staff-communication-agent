@@ -90,7 +90,7 @@ export default function DashboardView() {
       label: "Pending approvals",
       value: stats.pendingApprovals,
       sub: "drafts waiting for you",
-      href: "/approvals",
+      href: "/actions",
     },
     {
       label: `Answered <${stats.slaMinutes} min`,
@@ -195,8 +195,8 @@ export default function DashboardView() {
         <h3 className="text-sm font-semibold uppercase text-neutral-500">
           Recommended actions
         </h3>
-        <Link href="/approvals" className="text-xs text-neutral-400 underline hover:text-white">
-          Open approvals queue →
+        <Link href="/actions" className="text-xs text-neutral-400 underline hover:text-white">
+          Open actions queue →
         </Link>
       </div>
       <div className="mt-3 flex flex-col gap-2">

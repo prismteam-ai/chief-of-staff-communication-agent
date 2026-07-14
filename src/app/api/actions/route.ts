@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
           snippet: true,
           sentAt: true,
           provider: true,
+          threadId: true,
           participants: { where: { role: "from" }, select: { name: true, address: true } },
         },
       },

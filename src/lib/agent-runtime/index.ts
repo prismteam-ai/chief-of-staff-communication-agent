@@ -23,7 +23,7 @@ export interface RunSummary {
  *  - blocked contact / newsletter → no_action (message marked not_needed)
  *  - unclear question the agent can't confidently answer → needs_context
  *  - otherwise → drafted reply (and/or Asana task proposal), which is
- *    auto-sent only when the agent has autoReply on and mode=autopilot;
+ *    auto-sent when the agent mode is autopilot;
  *    everything else waits for approval.
  */
 export async function runAgents(userId: string): Promise<RunSummary> {
@@ -182,7 +182,8 @@ export async function runAgents(userId: string): Promise<RunSummary> {
         continue;
       }
 
-      const autoSend = agent.autoReply && agent.mode === "autopilot";
+      // Autopilot agents act autonomously; HITL agents queue for approval.
+      const autoSend = agent.mode === "autopilot";
       const action = await createAction(agent, message.id, {
         channel: message.provider,
         recipient: sender.address,

@@ -37,20 +37,62 @@ interface ActionDto {
     snippet: string | null;
     sentAt: string;
     provider: string;
+    threadId: string | null;
     participants: { name: string | null; address: string }[];
   } | null;
 }
 
-const FILTERS = [
-  { id: "pending_approval", label: "Pending" },
-  { id: "sent", label: "Sent" },
-  { id: "blocked", label: "Blocked" },
-  { id: "failed", label: "Failed" },
-  { id: "rejected", label: "Rejected" },
-  { id: "", label: "All" },
-];
+const MODE_FILTERS: Record<string, { id: string; label: string }[]> = {
+  hitl: [
+    { id: "pending_approval", label: "Needs you" },
+    { id: "sent", label: "Sent" },
+    { id: "rejected", label: "Rejected" },
+    { id: "failed", label: "Failed" },
+    { id: "", label: "All" },
+  ],
+  autopilot: [
+    { id: "", label: "All" },
+    { id: "sent", label: "Sent" },
+    { id: "blocked", label: "Blocked" },
+    { id: "failed", label: "Failed" },
+  ],
+};
 
-export default function ApprovalsView() {
+interface ThreadGroup {
+  key: string;
+  subject: string;
+  from: string;
+  actions: ActionDto[];
+  latest: number;
+}
+
+function groupByThread(actions: ActionDto[]): ThreadGroup[] {
+  const groups = new Map<string, ThreadGroup>();
+  for (const a of actions) {
+    const key = a.message?.threadId ?? a.id;
+    const from = a.message?.participants[0];
+    const g = groups.get(key);
+    if (g) {
+      g.actions.push(a);
+      g.latest = Math.max(g.latest, new Date(a.createdAt).getTime());
+    } else {
+      groups.set(key, {
+        key,
+        subject: a.message?.subject ?? a.subject ?? "(no subject)",
+        from: from?.name ?? from?.address ?? a.recipient,
+        actions: [a],
+        latest: new Date(a.createdAt).getTime(),
+      });
+    }
+  }
+  const list = [...groups.values()];
+  for (const g of list)
+    g.actions.sort((x, y) => new Date(x.createdAt).getTime() - new Date(y.createdAt).getTime());
+  return list.sort((x, y) => y.latest - x.latest);
+}
+
+export default function ActionsView() {
+  const [mode, setMode] = useState<"hitl" | "autopilot">("hitl");
   const [filter, setFilter] = useState("pending_approval");
   const [actions, setActions] = useState<ActionDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,9 +102,9 @@ export default function ApprovalsView() {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [contexts, setContexts] = useState<Record<string, string>>({});
 
-  const load = useCallback(async (status: string) => {
+  const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/actions${status ? `?status=${status}` : ""}`);
+      const res = await fetch("/api/actions");
       if (res.ok) setActions((await res.json()).actions);
     } catch {
       // transient network error (e.g. dev server restart) — keep current list
@@ -73,10 +115,10 @@ export default function ApprovalsView() {
 
   useEffect(() => {
     setLoading(true);
-    load(filter);
-    const t = setInterval(() => load(filter), 30_000); // pick up scheduler-created actions
+    load();
+    const t = setInterval(load, 30_000); // pick up scheduler-created actions
     return () => clearInterval(t);
-  }, [filter, load]);
+  }, [load]);
 
   const runAgents = async () => {
     setRunning(true);
@@ -89,7 +131,7 @@ export default function ApprovalsView() {
           ? `Scanned ${data.scanned} messages · ${data.drafted} drafts · ${data.sentOnAutopilot} sent on autopilot · ${data.blocked} blocked · ${data.failed} failed`
           : data.error ?? "Agent run failed"
       );
-      await load(filter);
+      await load();
     } catch {
       setBanner("Network error — please try again");
     } finally {
@@ -109,7 +151,7 @@ export default function ApprovalsView() {
         const data = await res.json().catch(() => ({}));
         setBanner(data.action?.statusNote ?? data.error ?? `${decision} failed`);
       }
-      await load(filter);
+      await load();
     } catch {
       setBanner("Network error — please try again");
     } finally {
@@ -133,7 +175,7 @@ export default function ApprovalsView() {
       } else {
         setContexts((prev) => ({ ...prev, [id]: "" }));
       }
-      await load(filter);
+      await load();
     } catch {
       setBanner("Network error — please try again");
     } finally {
@@ -141,14 +183,30 @@ export default function ApprovalsView() {
     }
   };
 
+  const isAutopilot = (a: ActionDto) => a.agent.mode === "autopilot";
+  const modeActions = actions.filter((a) =>
+    mode === "autopilot" ? isAutopilot(a) : !isAutopilot(a)
+  );
+  const visible = filter ? modeActions.filter((a) => a.status === filter) : modeActions;
+  const groups = groupByThread(visible);
+  const pendingCount = actions.filter(
+    (a) => !isAutopilot(a) && a.status === "pending_approval"
+  ).length;
+  const autoCount = actions.filter(isAutopilot).length;
+
+  const switchMode = (m: "hitl" | "autopilot") => {
+    setMode(m);
+    setFilter(m === "hitl" ? "pending_approval" : "");
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Agent actions</h2>
+          <h2 className="text-xl font-semibold">Actions</h2>
           <p className="mt-1 text-sm text-neutral-400">
-            Review what your agents drafted. Approving sends the message through the
-            real channel.
+            Human-in-the-loop drafts wait for your approval. Autopilot actions are
+            handled automatically and shown here as a record.
           </p>
         </div>
         <button
@@ -156,7 +214,7 @@ export default function ApprovalsView() {
           disabled={running}
           className="rounded-md bg-white px-4 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-200 disabled:opacity-50"
         >
-          {running ? "Running…" : "▶ Run agents now"}
+          {running ? "Running…" : "Run agents now"}
         </button>
       </div>
 
@@ -166,8 +224,41 @@ export default function ApprovalsView() {
         </div>
       )}
 
-      <div className="mt-5 flex flex-wrap gap-2">
-        {FILTERS.map((f) => (
+      <div className="mt-5 flex gap-2">
+        <button
+          onClick={() => switchMode("hitl")}
+          className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+            mode === "hitl"
+              ? "bg-white text-neutral-900"
+              : "border border-neutral-700 text-neutral-300 hover:bg-neutral-800"
+          }`}
+        >
+          Human in the loop
+          {pendingCount > 0 && (
+            <span className="ml-2 rounded-full bg-amber-500/90 px-2 py-0.5 text-xs text-neutral-900">
+              {pendingCount}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => switchMode("autopilot")}
+          className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+            mode === "autopilot"
+              ? "bg-white text-neutral-900"
+              : "border border-neutral-700 text-neutral-300 hover:bg-neutral-800"
+          }`}
+        >
+          Autopilot
+          {autoCount > 0 && (
+            <span className="ml-2 rounded-full bg-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
+              {autoCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {MODE_FILTERS[mode].map((f) => (
           <button
             key={f.id}
             onClick={() => setFilter(f.id)}
@@ -182,15 +273,27 @@ export default function ApprovalsView() {
         ))}
       </div>
 
-      <div className="mt-4 flex flex-col gap-4">
+      <div className="mt-4 flex flex-col gap-5">
         {loading ? (
           <p className="text-sm text-neutral-500">Loading…</p>
-        ) : actions.length === 0 ? (
+        ) : groups.length === 0 ? (
           <div className="rounded-xl border border-dashed border-neutral-700 p-10 text-center text-sm text-neutral-500">
-            Nothing here. Sync your inbox, then hit “Run agents now”.
+            {mode === "autopilot"
+              ? "No autopilot activity yet. Set an agent to Autopilot and it will reply on its own."
+              : "Nothing needs you. Sync your inbox, then hit \u201CRun agents now\u201D."}
           </div>
         ) : (
-          actions.map((a) => {
+          groups.map((g) => (
+            <div key={g.key}>
+              <div className="mb-2 flex items-baseline gap-2 px-1">
+                <p className="truncate text-sm font-medium text-neutral-200">{g.subject}</p>
+                <p className="shrink-0 text-xs text-neutral-500">
+                  {g.from} · {g.actions.length}{" "}
+                  {g.actions.length === 1 ? "action" : "actions"}
+                </p>
+              </div>
+              <div className="flex flex-col gap-3">
+                {g.actions.map((a) => {
             const from = a.message?.participants[0];
             const pending = a.status === "pending_approval";
             return (
@@ -343,7 +446,10 @@ export default function ApprovalsView() {
                 )}
               </div>
             );
-          })
+          })}
+              </div>
+            </div>
+          ))
         )}
       </div>
     </div>
