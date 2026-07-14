@@ -162,9 +162,29 @@ export default function McpSetupView() {
               : config.replace(token, `${token.slice(0, 8)}…`)
             : "Loading…"}
         </pre>
+        <div className="mt-5 flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Claude (web / desktop connectors)</h3>
+          <button
+            onClick={() => token && copy("claude", `${mcpUrl}/${token}`)}
+            className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 transition hover:bg-neutral-800"
+          >
+            {copied === "claude" ? "Copied" : "Copy URL"}
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-neutral-500">
+          Claude&apos;s custom connectors can&apos;t send an Authorization header and will ask
+          for an OAuth Client ID/secret — leave those fields empty. Instead, use this URL
+          with your token embedded: Settings → Connectors → Add custom connector → paste
+          the URL below. Treat the URL like a password.
+        </p>
+        <p className="mt-3 break-all rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 font-mono text-xs text-neutral-300">
+          {token && mcpUrl
+            ? revealed
+              ? `${mcpUrl}/${token}`
+              : `${mcpUrl}/${token.slice(0, 8)}…`
+            : "Loading…"}
+        </p>
       </div>
-
-      {/* Tools */}
       <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
         <h3 className="text-sm font-semibold">Available tools</h3>
         <div className="mt-3 flex flex-col gap-1.5">

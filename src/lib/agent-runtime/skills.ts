@@ -38,7 +38,7 @@ interface AsanaTask {
 }
 
 const STATUS_RE =
-  /\b(status|update|progress|how('s| is| are)? .{0,40}(going|coming|looking|tracking)|where (are we|do we stand)|any news)\b/i;
+  /\b(status|updates?|progress|latest|how('s| is| are)? .{0,40}(going|coming|looking|tracking)|where (are we|do we stand)|any news)\b/i;
 const CREATE_RE =
   /\b(add|create|include|put in|new task|to-?do|can you (add|create)|please (add|create)|don'?t forget to)\b/i;
 const DETAIL_RE = /\b(more (details?|info(rmation)?)|break ?down|specifics|elaborate|full (list|report)|details? please)\b/i;

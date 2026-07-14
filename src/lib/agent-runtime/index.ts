@@ -128,15 +128,19 @@ export async function runAgents(userId: string): Promise<RunSummary> {
           // retrieval failure should never block a reply
         }
 
-        // Confidence gate: a direct question we have no grounded answer for
-        // (and no LLM configured) → ask the user for context instead of
-        // sending a generic acknowledgement.
+        // Confidence gate: a question or request we have no grounded answer
+        // for (and no LLM configured) → ask the user for context instead of
+        // sending a generic acknowledgement (especially bad on autopilot).
         const hasLlm = Boolean(
           process.env.AZURE_OPENAI_ENDPOINT &&
             process.env.AZURE_OPENAI_API_KEY &&
             process.env.AZURE_OPENAI_DEPLOYMENT
         );
-        if (!skillMatched && !hasLlm && /\?/.test(messageText)) {
+        const looksLikeRequest =
+          /\?|\b(please|can you|could you|would you|give me|send me|let me know|need|what|when|where|why|how|who)\b/i.test(
+            messageText
+          );
+        if (!skillMatched && !hasLlm && looksLikeRequest) {
           const suggestions = ragChunks.slice(0, 3).map((c) => ({
             source: c.source,
             title: c.title,

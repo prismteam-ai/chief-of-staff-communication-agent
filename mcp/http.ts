@@ -18,8 +18,16 @@ const LEGACY_TOKEN = process.env.MCP_AUTH_TOKEN;
 
 async function resolveUser(req: IncomingMessage): Promise<UserResolver | null> {
   const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) return null;
-  const token = header.slice(7).trim();
+  let token: string | null = null;
+  if (header?.startsWith("Bearer ")) {
+    token = header.slice(7).trim() || null;
+  } else if (req.url) {
+    // Token-in-URL (/mcp/<token>) for clients that can't send custom
+    // headers and don't do OAuth, e.g. Claude web custom connectors.
+    const path = new URL(req.url, "http://localhost").pathname;
+    const m = path.match(/^\/mcp\/([^/]+)$/);
+    if (m) token = decodeURIComponent(m[1]);
+  }
   if (!token) return null;
   const user = await prisma.user.findUnique({ where: { mcpToken: token }, select: { id: true } });
   if (user) return async () => user.id;
