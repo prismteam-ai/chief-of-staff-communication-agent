@@ -5,8 +5,14 @@ import { getProvider } from "@/lib/providers";
 import { exchangeCode } from "@/lib/providers/oauth";
 import { saveOAuthConnection } from "@/lib/connections";
 
+// Behind Container Apps ingress, req.nextUrl.origin is the internal bind
+// address (0.0.0.0:3000) — prefer the configured public base URL.
+function baseUrl(req: NextRequest): string {
+  return process.env.APP_BASE_URL || req.nextUrl.origin;
+}
+
 function redirectToConnections(req: NextRequest, params: Record<string, string>) {
-  const url = new URL("/connections", req.nextUrl.origin);
+  const url = new URL("/connections", baseUrl(req));
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   return NextResponse.redirect(url);
 }
@@ -18,7 +24,7 @@ export async function GET(
 ) {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.redirect(new URL("/signin", req.nextUrl.origin));
+    return NextResponse.redirect(new URL("/signin", baseUrl(req)));
   }
 
   const { provider: providerId } = await params;
