@@ -147,6 +147,7 @@ resource app 'Microsoft.App/containerApps@2024-10-02-preview' = {
             { name: 'AUTH_TRUST_HOST', value: 'true' }
             { name: 'AUTH_URL', value: appBaseUrl }
             { name: 'APP_BASE_URL', value: appBaseUrl }
+            { name: 'MCP_PUBLIC_URL', value: 'https://${mcpApp.properties.configuration.ingress.fqdn}/mcp' }
           ]
         }
       ]

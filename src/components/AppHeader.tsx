@@ -8,6 +8,7 @@ const TABS = [
   { href: "/agents", label: "Agents" },
   { href: "/approvals", label: "Approvals" },
   { href: "/knowledge", label: "Knowledge" },
+  { href: "/mcp-setup", label: "MCP" },
   { href: "/connections", label: "Connections" },
 ];
 

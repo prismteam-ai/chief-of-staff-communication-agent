@@ -18,7 +18,10 @@ import { statusReport } from "../src/lib/agent-runtime/skills";
 import { retrieve } from "../src/lib/rag/retrieve";
 import { indexUserKnowledge } from "../src/lib/rag/indexer";
 
-async function getUserId(): Promise<string> {
+export type UserResolver = () => Promise<string>;
+
+/** Default resolver for stdio: MCP_USER_EMAIL env (or first user). */
+export async function envUserResolver(): Promise<string> {
   const email = process.env.MCP_USER_EMAIL;
   const user = email
     ? await prisma.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } } })
@@ -38,7 +41,7 @@ function text(payload: unknown) {
   };
 }
 
-export function createServer(): McpServer {
+export function createServer(getUserId: UserResolver = envUserResolver): McpServer {
   const server = new McpServer({ name: "chief-of-comms", version: "1.0.0" });
 
 server.tool(

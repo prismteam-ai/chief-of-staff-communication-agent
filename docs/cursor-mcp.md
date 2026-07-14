@@ -33,7 +33,10 @@ layer as tools, so you can drive it straight from Cursor's chat.
 
 The MCP server is also hosted in Azure as a Streamable HTTP endpoint
 (`mcp/http.ts`, container app `chiefcomms-mcp`), running against the
-production database. Use this from any machine — no repo checkout needed:
+production database. Tokens are **per user**: open the **MCP** tab in the
+web app (`/mcp-setup`) to get your personal token, the ready-to-copy Cursor
+JSON, and a rotate button. Every tool call authenticated with your token
+operates on your data only.
 
 ```json
 {
@@ -41,16 +44,14 @@ production database. Use this from any machine — no repo checkout needed:
     "chief-of-comms": {
       "url": "https://<mcp-fqdn>/mcp",
       "headers": {
-        "Authorization": "Bearer <MCP_AUTH_TOKEN>"
+        "Authorization": "Bearer <your token from /mcp-setup>"
       }
     }
   }
 }
 ```
 
-The FQDN comes from the `mcpFqdn` deployment output; the token is the
-`mcpAuthToken` parameter (kept locally in `.env.azure.local`, stored as a
-Container App secret). Health check: `GET https://<mcp-fqdn>/healthz`.
+Health check: `GET https://<mcp-fqdn>/healthz`.
 
 ## Tools
 
