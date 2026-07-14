@@ -43,7 +43,7 @@ export default function CredentialModal({
             <p className="mt-1 text-xs text-neutral-400">{channel.description}</p>
           </div>
           <button onClick={onClose} className="text-neutral-500 hover:text-white">
-            ✕
+            ×
           </button>
         </div>
 

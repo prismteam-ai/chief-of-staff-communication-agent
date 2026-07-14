@@ -5,13 +5,13 @@ import { useCallback, useEffect, useState } from "react";
 const STYLES = ["professional", "formal", "casual", "friendly", "direct", "empathetic"];
 const TONES = ["neutral", "warm", "concise", "playful", "assertive", "authoritative"];
 const ALL_CHANNELS = [
-  { id: "gmail", label: "Gmail", icon: "✉️" },
-  { id: "outlook", label: "Outlook", icon: "📧" },
-  { id: "whatsapp", label: "WhatsApp", icon: "💬" },
-  { id: "x", label: "X", icon: "𝕏" },
-  { id: "linkedin", label: "LinkedIn", icon: "💼" },
-  { id: "sms", label: "SMS", icon: "📱" },
-  { id: "asana", label: "Asana", icon: "✅" },
+  { id: "gmail", label: "Gmail" },
+  { id: "outlook", label: "Outlook" },
+  { id: "whatsapp", label: "WhatsApp" },
+  { id: "x", label: "X" },
+  { id: "linkedin", label: "LinkedIn" },
+  { id: "sms", label: "SMS" },
+  { id: "asana", label: "Asana" },
 ];
 
 interface Agent {
@@ -48,12 +48,12 @@ interface FormState {
 const SKILL_OPTIONS = [
   {
     id: "asana_status_report",
-    label: "📊 Asana status reports",
+    label: "Asana status reports",
     hint: "When someone asks for a project update, pull live progress, milestones and due dates from Asana and reply with real data.",
   },
   {
     id: "asana_create_task",
-    label: "➕ Asana task creation",
+    label: "Asana task creation",
     hint: "When someone asks to add something, draft an Asana task in the matching project — created on approval (or instantly on autopilot).",
   },
 ];
@@ -207,7 +207,6 @@ export default function AgentsView() {
         <p className="mt-8 text-sm text-neutral-500">Loading agents…</p>
       ) : agents.length === 0 ? (
         <div className="mt-10 flex flex-col items-center gap-3 rounded-xl border border-dashed border-neutral-700 p-10 text-center">
-          <span className="text-4xl">🤖</span>
           <p className="text-sm text-neutral-400">
             No agents yet. Create your first communications agent.
           </p>
@@ -223,7 +222,6 @@ export default function AgentsView() {
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-2xl">🤖</span>
                   <div>
                     <h3 className="font-medium">{a.name}</h3>
                     <p className="text-xs text-neutral-500 capitalize">
@@ -257,7 +255,7 @@ export default function AgentsView() {
                         key={c}
                         className="rounded bg-neutral-800 px-1.5 py-0.5 text-xs text-neutral-300"
                       >
-                        {ch?.icon} {ch?.label ?? c}
+                        {ch?.label ?? c}
                       </span>
                     );
                   })
@@ -265,15 +263,15 @@ export default function AgentsView() {
               </div>
 
               <div className="mt-2 flex flex-wrap gap-2 text-xs text-neutral-500">
-                {a.autoReply && <span>⚡ auto-reply</span>}
-                {a.skills?.includes("asana_status_report") && <span>📊 Asana status</span>}
-                {a.skills?.includes("asana_create_task") && <span>➕ Asana tasks</span>}
+                {a.autoReply && <span>auto-reply</span>}
+                {a.skills?.includes("asana_status_report") && <span>Asana status</span>}
+                {a.skills?.includes("asana_create_task") && <span>Asana tasks</span>}
                 <span>
                   {a.contactPolicy === "all"
-                    ? "👥 anyone"
+                    ? "anyone"
                     : a.contactPolicy === "allowlist"
-                      ? `👥 only ${a.contactList.length} allowed`
-                      : `👥 ${a.contactList.length} blocked`}
+                      ? `only ${a.contactList.length} allowed`
+                      : `${a.contactList.length} blocked`}
                 </span>
               </div>
 
@@ -318,7 +316,7 @@ export default function AgentsView() {
                 onClick={() => setEditing(null)}
                 className="text-neutral-500 hover:text-white"
               >
-                ✕
+                
               </button>
             </div>
 
@@ -469,7 +467,7 @@ export default function AgentsView() {
                         }
                         className="hidden"
                       />
-                      {c.icon} {c.label}
+                      {c.label}
                       {!connected && (
                         <span className={checked ? "text-neutral-600" : "text-amber-500"}>
                           (not connected)

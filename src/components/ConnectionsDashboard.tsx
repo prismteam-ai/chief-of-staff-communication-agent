@@ -27,16 +27,6 @@ export interface ChannelDto {
   } | null;
 }
 
-const ICONS: Record<string, string> = {
-  gmail: "✉️",
-  outlook: "📧",
-  linkedin: "💼",
-  x: "𝕏",
-  whatsapp: "💬",
-  sms: "📱",
-  asana: "✅",
-};
-
 function StatusBadge({ channel }: { channel: ChannelDto }) {
   if (!channel.connection) {
     return (
@@ -130,7 +120,7 @@ export default function ConnectionsDashboard() {
         >
           <span>{banner.text}</span>
           <button onClick={() => setBanner(null)} className="ml-4 text-xs opacity-70 hover:opacity-100">
-            ✕
+            
           </button>
         </div>
       )}
@@ -145,8 +135,7 @@ export default function ConnectionsDashboard() {
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl">{ICONS[channel.id] ?? "🔌"}</span>
-                  <div>
+                                    <div>
                     <h3 className="font-medium">{channel.name}</h3>
                     {channel.connection?.accountLabel && (
                       <p className="text-xs text-neutral-400">{channel.connection.accountLabel}</p>

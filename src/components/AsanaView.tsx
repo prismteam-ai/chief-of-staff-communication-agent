@@ -115,7 +115,6 @@ export default function AsanaView() {
   if (notConnected) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-        <span className="text-4xl">✅</span>
         <p className="text-sm text-neutral-300">Asana isn’t connected yet.</p>
         <Link
           href="/connections"
@@ -199,7 +198,6 @@ export default function AsanaView() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm font-medium">
-                      {t.completed ? "✅ " : "⬜ "}
                       {t.name || "(untitled)"}
                     </span>
                     {due && (
@@ -213,13 +211,13 @@ export default function AsanaView() {
                     )}
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-xs text-neutral-500">
-                    {t.assignee?.name && <span>👤 {t.assignee.name}</span>}
+                    {t.assignee?.name && <span>{t.assignee.name}</span>}
                     {(t.projects ?? []).slice(0, 2).map((p) => (
                       <span key={p.gid} className="rounded bg-neutral-800 px-1.5 py-0.5">
                         {p.name}
                       </span>
                     ))}
-                    {t.num_subtasks ? <span>☑ {t.num_subtasks}</span> : null}
+                    {t.num_subtasks ? <span>{t.num_subtasks} subtasks</span> : null}
                   </div>
                 </button>
               );
@@ -239,7 +237,7 @@ export default function AsanaView() {
             <div className="p-5">
               <div className="flex items-start justify-between gap-3">
                 <h2 className="text-base font-semibold">
-                  {selected.task.completed ? "✅ " : ""}
+
                   {selected.task.name}
                 </h2>
                 {selected.task.permalink_url && (
@@ -293,8 +291,7 @@ export default function AsanaView() {
                   <ul className="mt-2 flex flex-col gap-1">
                     {selected.subtasks.map((s) => (
                       <li key={s.gid} className="flex items-center gap-2 text-sm">
-                        <span>{s.completed ? "✅" : "⬜"}</span>
-                        <span className={s.completed ? "text-neutral-500 line-through" : ""}>
+                                                <span className={s.completed ? "text-neutral-500 line-through" : ""}>
                           {s.name}
                         </span>
                         {s.assignee?.name && (

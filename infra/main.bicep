@@ -145,6 +145,7 @@ resource app 'Microsoft.App/containerApps@2024-10-02-preview' = {
             { name: 'AUTH_MICROSOFT_ENTRA_ID_ISSUER', value: entraIssuer }
             { name: 'OUTLOOK_CLIENT_ID', value: outlookClientId }
             { name: 'AUTH_TRUST_HOST', value: 'true' }
+            { name: 'AUTH_URL', value: appBaseUrl }
             { name: 'APP_BASE_URL', value: appBaseUrl }
           ]
         }

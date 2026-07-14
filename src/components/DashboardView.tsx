@@ -3,15 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-const CHANNEL_ICON: Record<string, string> = {
-  gmail: "✉️",
-  outlook: "📧",
-  linkedin: "💼",
-  x: "𝕏",
-  whatsapp: "💬",
-  sms: "📱",
-};
-
 const TYPE_BADGE: Record<string, { label: string; cls: string }> = {
   reply: { label: "Reply", cls: "bg-sky-900/60 text-sky-300" },
   create_task: { label: "Asana task", cls: "bg-violet-900/60 text-violet-300" },
@@ -180,7 +171,7 @@ export default function DashboardView() {
               <div key={ch} className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium capitalize">
-                    {CHANNEL_ICON[ch] ?? "📡"} {ch}
+                    {ch}
                   </p>
                   <p className="text-xs text-neutral-500">{s.total} msgs</p>
                 </div>
@@ -224,17 +215,16 @@ export default function DashboardView() {
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm text-neutral-200">
-                    {CHANNEL_ICON[r.channel] ?? ""}{" "}
-                    <span className="text-neutral-400">
+                                        <span className="text-neutral-400">
                       {from?.name ?? from?.address ?? r.recipient}
                     </span>
                     {r.message?.subject ? ` — ${r.message.subject}` : ""}
                   </p>
-                  <p className="mt-0.5 text-xs text-neutral-400">💡 {r.recommendation}</p>
+                  <p className="mt-0.5 text-xs text-neutral-400">{r.recommendation}</p>
                   <p className="mt-0.5 text-xs text-neutral-600">
                     {r.agent.name} · {new Date(r.createdAt).toLocaleString()} ·{" "}
                     {r.message?.responseStatus === "answered"
-                      ? "✅ answered"
+                      ? "answered"
                       : r.message?.responseStatus === "not_needed"
                         ? "◻︎ no reply needed"
                         : "⏳ awaiting response"}

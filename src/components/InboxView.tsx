@@ -11,15 +11,6 @@ const CHANNELS = [
   { id: "sms", label: "SMS" },
 ];
 
-const CHANNEL_ICON: Record<string, string> = {
-  gmail: "✉️",
-  outlook: "📧",
-  linkedin: "💼",
-  x: "𝕏",
-  whatsapp: "💬",
-  sms: "📱",
-};
-
 interface ThreadSummary {
   id: string;
   provider: string;
@@ -223,8 +214,7 @@ export default function InboxView() {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="flex min-w-0 items-center gap-2">
-                    <span>{CHANNEL_ICON[t.provider] ?? "🔌"}</span>
-                    <span className="truncate text-sm font-medium">
+                                        <span className="truncate text-sm font-medium">
                       {t.subject || t.latest?.from?.name || t.latest?.from?.address || "(no subject)"}
                     </span>
                   </span>
@@ -238,8 +228,7 @@ export default function InboxView() {
                     {t.latest?.snippet ?? ""}
                   </p>
                   <span className="flex shrink-0 items-center gap-2 text-xs text-neutral-500">
-                    {t.latest && t.latest.attachmentCount > 0 && <span>📎</span>}
-                    {t.messageCount > 1 && <span>{t.messageCount}</span>}
+                                        {t.messageCount > 1 && <span>{t.messageCount}</span>}
                   </span>
                 </div>
               </button>
@@ -256,8 +245,7 @@ export default function InboxView() {
           ) : (
             <div className="p-5">
               <div className="flex items-center gap-2">
-                <span className="text-xl">{CHANNEL_ICON[selected.provider] ?? "🔌"}</span>
-                <h2 className="text-base font-semibold">
+                                <h2 className="text-base font-semibold">
                   {selected.subject || "(no subject)"}
                 </h2>
               </div>
@@ -313,7 +301,7 @@ export default function InboxView() {
                               key={a.id}
                               className="flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-300"
                             >
-                              📎 {a.filename}
+                              {a.filename}
                               {a.sizeBytes ? (
                                 <span className="text-neutral-500">
                                   {formatBytes(a.sizeBytes)}
@@ -331,7 +319,7 @@ export default function InboxView() {
               {related.length > 0 && (
                 <div className="mt-6">
                   <h4 className="text-xs font-semibold uppercase text-neutral-500">
-                    🔗 Related across channels
+                    Related across channels
                   </h4>
                   <div className="mt-2 flex flex-col gap-2">
                     {related.map((r) => (
@@ -342,8 +330,7 @@ export default function InboxView() {
                         className="rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-left transition hover:border-neutral-600 disabled:cursor-default"
                       >
                         <p className="truncate text-xs text-neutral-200">
-                          {CHANNEL_ICON[r.provider] ?? "🔌"}{" "}
-                          {r.from?.name ?? r.from?.address ?? "Unknown"}
+                                                    {r.from?.name ?? r.from?.address ?? "Unknown"}
                           {r.subject ? ` — ${r.subject}` : ""}
                         </p>
                         <p className="mt-0.5 truncate text-xs text-neutral-500">{r.snippet}</p>

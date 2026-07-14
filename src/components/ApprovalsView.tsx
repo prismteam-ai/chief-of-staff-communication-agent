@@ -2,15 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-const CHANNEL_ICON: Record<string, string> = {
-  gmail: "✉️",
-  outlook: "📧",
-  linkedin: "💼",
-  x: "𝕏",
-  whatsapp: "💬",
-  sms: "📱",
-};
-
 const STATUS_STYLES: Record<string, string> = {
   pending_approval: "bg-amber-900/60 text-amber-300",
   sent: "bg-emerald-900/60 text-emerald-300",
@@ -207,7 +198,7 @@ export default function ApprovalsView() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="text-xs text-neutral-400">
                     <p>
-                      <span className="font-medium text-neutral-200">🤖 {a.agent.name}</span>{" "}
+                      <span className="font-medium text-neutral-200">{a.agent.name}</span>{" "}
                       {a.type === "create_task"
                         ? "wants to create an Asana task and confirm"
                         : a.type === "needs_context"
@@ -215,7 +206,7 @@ export default function ApprovalsView() {
                           : a.type === "no_action"
                             ? "recommends no action"
                             : "wants to reply"}{" "}
-                      via {CHANNEL_ICON[a.channel] ?? ""} {a.channel} to{" "}
+                      via {a.channel} to{" "}
                       <span className="text-neutral-200">{a.recipient}</span>
                     </p>
                     <p className="mt-0.5">
@@ -243,7 +234,7 @@ export default function ApprovalsView() {
                 {a.type === "create_task" && a.meta?.proposal && (
                   <div className="mt-3 rounded-lg border border-violet-900/60 bg-violet-950/30 p-3 text-xs">
                     <p className="font-medium text-violet-300">
-                      ➕ Asana task: {a.meta.proposal.taskName}
+                      Asana task: {a.meta.proposal.taskName}
                     </p>
                     <p className="mt-1 text-neutral-400">
                       {a.meta.proposal.projectName
@@ -254,7 +245,7 @@ export default function ApprovalsView() {
                 )}
 
                 {a.recommendation && (
-                  <p className="mt-2 text-xs text-neutral-400">💡 {a.recommendation}</p>
+                  <p className="mt-2 text-xs text-neutral-400">{a.recommendation}</p>
                 )}
 
                 {a.statusNote && (
@@ -270,7 +261,7 @@ export default function ApprovalsView() {
                     {a.meta?.ragSuggestions && a.meta.ragSuggestions.length > 0 && (
                       <div className="mb-3">
                         <p className="text-xs font-medium text-neutral-300">
-                          📚 Possibly relevant knowledge:
+                          Possibly relevant knowledge:
                         </p>
                         {a.meta.ragSuggestions.map((s, i) => (
                           <p key={i} className="mt-1 line-clamp-2 text-xs text-neutral-500">

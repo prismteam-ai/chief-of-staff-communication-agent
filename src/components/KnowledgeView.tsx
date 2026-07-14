@@ -126,7 +126,7 @@ export default function KnowledgeView() {
           disabled={reindexing}
           className="rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-300 transition hover:bg-neutral-800 disabled:opacity-50"
         >
-          {reindexing ? "Indexing…" : "↻ Rebuild index"}
+          {reindexing ? "Indexing…" : "Rebuild index"}
         </button>
       </div>
 
@@ -197,8 +197,8 @@ export default function KnowledgeView() {
           </p>
           <div className="mt-3 flex gap-2">
             {[
-              { v: "org", label: "🏢 Org knowledge" },
-              { v: "preference", label: "⭐ Preference" },
+              { v: "org", label: "Org knowledge" },
+              { v: "preference", label: "Preference" },
             ].map((opt) => (
               <button
                 key={opt.v}
@@ -242,8 +242,8 @@ export default function KnowledgeView() {
         {/* Existing items */}
         <div className="flex flex-col gap-4">
           {[
-            { label: "🏢 Organizational knowledge", list: orgItems },
-            { label: "⭐ Preferences", list: prefItems },
+            { label: "Organizational knowledge", list: orgItems },
+            { label: "Preferences", list: prefItems },
           ].map((section) => (
             <div key={section.label} className="rounded-xl border border-neutral-800 bg-neutral-900 p-5">
               <h3 className="text-sm font-semibold">{section.label}</h3>
@@ -264,7 +264,7 @@ export default function KnowledgeView() {
                         onClick={() => remove(i.id)}
                         className="shrink-0 text-xs text-neutral-600 transition hover:text-red-400"
                       >
-                        ✕
+                        
                       </button>
                     </div>
                   ))}
