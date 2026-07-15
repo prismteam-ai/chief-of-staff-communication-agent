@@ -92,7 +92,7 @@ export async function indexUserKnowledge(userId: string): Promise<IndexSummary> 
 }
 
 async function messageChunks(userId: string): Promise<ChunkInput[]> {
-  const since = new Date(Date.now() - 30 * 86_400_000);
+  const since = new Date(Date.now() - 365 * 86_400_000);
   const messages = await prisma.message.findMany({
     where: { userId, sentAt: { gte: since } },
     orderBy: { sentAt: "desc" },
