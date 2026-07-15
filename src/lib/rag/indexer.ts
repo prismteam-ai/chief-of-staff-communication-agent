@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
-import { asanaGet } from "@/lib/asana";
+import { asanaGet, hasSharedAsanaToken } from "@/lib/asana";
 import { embed } from "./embeddings";
 
 /**
@@ -124,11 +124,13 @@ async function messageChunks(userId: string): Promise<ChunkInput[]> {
 }
 
 async function asanaChunks(userId: string): Promise<ChunkInput[]> {
-  const conn = await prisma.channelConnection.findUnique({
-    where: { userId_provider: { userId, provider: "asana" } },
-    select: { status: true },
-  });
-  if (!conn || conn.status !== "connected") return [];
+  if (!hasSharedAsanaToken()) {
+    const conn = await prisma.channelConnection.findUnique({
+      where: { userId_provider: { userId, provider: "asana" } },
+      select: { status: true },
+    });
+    if (!conn || conn.status !== "connected") return [];
+  }
 
   try {
     const workspaces = await asanaGet<{ gid: string }[]>(userId, "/workspaces?limit=5");
