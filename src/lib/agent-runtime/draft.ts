@@ -23,6 +23,7 @@ export function buildSystemPrompt(agent: Agent): string {
     `Tone of voice: ${agent.toneOfVoice}.`,
     agent.customInstructions ? `Additional instructions: ${agent.customInstructions}` : null,
     "Reply concisely and appropriately for the channel. Output only the reply body — no subject line, no explanations.",
+    "Never claim you performed an action (created a task, scheduled something, sent something) unless the provided context explicitly confirms it was done. If asked to do something you cannot confirm, say it has been noted and will be handled.",
   ];
   return lines.filter(Boolean).join("\n");
 }
