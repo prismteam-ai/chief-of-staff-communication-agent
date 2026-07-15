@@ -52,7 +52,7 @@ export async function generateDraft(agent: Agent, input: DraftInput): Promise<st
 
   if (endpoint && apiKey && deployment) {
     const res = await fetch(
-      `${endpoint.replace(/\/$/, "")}/openai/deployments/${deployment}/chat/completions?api-version=2024-06-01`,
+      `${endpoint.replace(/\/$/, "")}/openai/deployments/${deployment}/chat/completions?api-version=2024-12-01-preview`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "api-key": apiKey },
@@ -77,8 +77,8 @@ export async function generateDraft(agent: Agent, input: DraftInput): Promise<st
                 `\n\nWrite the reply.`,
             },
           ],
-          max_tokens: 500,
-          temperature: 0.4,
+          // Newer models (gpt-5.x) accept only max_completion_tokens and default temperature
+          max_completion_tokens: 800,
         }),
       }
     );
