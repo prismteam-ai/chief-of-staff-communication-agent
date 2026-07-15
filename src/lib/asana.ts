@@ -10,21 +10,39 @@ export class AsanaError extends Error {
   }
 }
 
-/** Authenticated POST against the Asana API using the user's stored PAT. */
+/** True when the deployment provides one shared org-wide Asana token. */
+export function hasSharedAsanaToken(): boolean {
+  return Boolean(process.env.ASANA_SHARED_TOKEN);
+}
+
+/**
+ * Resolve the Asana PAT to use for a request. The shared organization token
+ * (sourced from Azure Key Vault and injected as ASANA_SHARED_TOKEN) wins so
+ * every user works against the same Asana instance; per-user stored
+ * credentials remain as a fallback for self-hosted setups.
+ */
+export async function getAsanaToken(userId: string): Promise<string | null> {
+  const shared = process.env.ASANA_SHARED_TOKEN;
+  if (shared) return shared;
+  const credentials = await getCredentials(userId, "asana");
+  return credentials?.personalAccessToken ?? null;
+}
+
+/** Authenticated POST against the Asana API. */
 export async function asanaPost<T>(
   userId: string,
   path: string,
   body: Record<string, unknown>
 ): Promise<T> {
-  const credentials = await getCredentials(userId, "asana");
-  if (!credentials?.personalAccessToken) {
+  const token = await getAsanaToken(userId);
+  if (!token) {
     throw new AsanaError("Asana is not connected", 400);
   }
 
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${credentials.personalAccessToken}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ data: body }),
@@ -43,8 +61,8 @@ export async function asanaGet<T>(
   path: string,
   params?: Record<string, string>
 ): Promise<T> {
-  const credentials = await getCredentials(userId, "asana");
-  if (!credentials?.personalAccessToken) {
+  const token = await getAsanaToken(userId);
+  if (!token) {
     throw new AsanaError("Asana is not connected", 400);
   }
 
@@ -52,7 +70,7 @@ export async function asanaGet<T>(
   for (const [k, v] of Object.entries(params ?? {})) url.searchParams.set(k, v);
 
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${credentials.personalAccessToken}` },
+    headers: { Authorization: `Bearer ${token}` },
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {

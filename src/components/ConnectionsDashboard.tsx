@@ -19,6 +19,7 @@ export interface ChannelDto {
   fields?: CredentialFieldDto[];
   helpUrl?: string;
   configured: boolean;
+  shared?: boolean;
   connection: {
     status: string;
     accountLabel: string | null;
@@ -157,7 +158,11 @@ export default function ConnectionsDashboard() {
               )}
 
               <div className="mt-4 flex gap-2">
-                {connected ? (
+                {channel.shared ? (
+                  <p className="text-xs text-neutral-500">
+                    Managed by your organization — everyone shares this Asana instance.
+                  </p>
+                ) : connected ? (
                   <>
                     <button
                       onClick={() => testConnection(channel.id)}
