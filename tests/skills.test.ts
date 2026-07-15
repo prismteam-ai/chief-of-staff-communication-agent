@@ -72,3 +72,13 @@ describe("matchProject", () => {
     expect(matchProject("completely unrelated text", projects)).toBeNull();
   });
 });
+
+describe("extractTaskName — subject-prefixed unquoted title", () => {
+  it("extracts an unquoted 'task called X in the Y project' even with a subject prefix", () => {
+    expect(
+      extractTaskName(
+        "Create Task\nPlease create a task called Prepare investor update deck in the Automation requests queue project"
+      )
+    ).toBe("Prepare investor update deck");
+  });
+});

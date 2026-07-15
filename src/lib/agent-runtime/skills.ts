@@ -255,7 +255,17 @@ export function extractTaskName(text: string): string | null {
   const quoted = cleaned.match(/(?:add|create|include)[^"“']{0,60}["“']([^"”']{3,120})["”']/i);
   if (quoted?.[1]) return finishTaskName(quoted[1]);
 
-  // 3. Free-text extraction after the verb
+  // 3. Unquoted "task called/named/titled X" (strip trailing project reference)
+  const calledPlain = cleaned.match(/task\s+(?:call(?:ed)?|named?|titled?)\s+(.+?)(?:[.?!\n]|$)/i);
+  if (calledPlain?.[1]) {
+    const name = calledPlain[1]
+      .replace(/\s+(?:to|in|on|for)\s+(?:the\s+)?(?:.*\b(?:project|board)\b.*)$/i, "")
+      .trim();
+    const finished = finishTaskName(name);
+    if (finished) return finished;
+  }
+
+  // 4. Free-text extraction after the verb
   const patterns = [
     /(?:please\s+)?(?:can|could)\s+you\s+(?:add|create|include)\s+(?:a\s+task\s+(?:for|to)\s+)?(.+?)(?:[.?!\n]|$)/i,
     /(?:please\s+)?(?:add|create|include)\s+(?:a\s+(?:new\s+)?task\s+(?:for|to|called|named)?\s*)?(.+?)(?:[.?!\n]|$)/i,
