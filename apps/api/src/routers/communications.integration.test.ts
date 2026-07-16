@@ -127,6 +127,9 @@ function inMemoryAccountsRepo(): AccountsRepo {
     async getOwnAddress(accountId) {
       return accountId === ACCOUNT_ID ? 'demoalex775@gmail.com' : undefined;
     },
+    async listByUser() {
+      return [];
+    },
   };
 }
 

@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import type { Account } from '@chief-of-staff/shared';
 
 /**
@@ -25,6 +25,19 @@ export interface AccountsRepo {
    * `role === 'from'` would address the reply back to the account's own mailbox).
    */
   getOwnAddress(accountId: string): Promise<string | undefined>;
+
+  /**
+   * The connected-channels list for the connect-channel wizard (README L12, Task 8 brief
+   * constraint 2). The accounts table has no GSI on `userId` (its only key is `accountId`) — at
+   * demo scale (a handful of accounts total) a `Scan` with a server-side `FilterExpression` is the
+   * pragmatic, deliberately-scoped choice over provisioning a new index for one low-traffic list
+   * view. The filter runs IN DynamoDB, not after the fact in application code trusting the
+   * caller — a user can never receive another user's account rows off the wire, satisfying the
+   * same "server enforces scoping, never the client" rule every other read path in this file uses.
+   * A production-scale version would add a `byUser` GSI instead; documented here as the deliberate
+   * demo-scope tradeoff (mirrors `DataTables`'s own "demo-scoped choices" doc comment).
+   */
+  listByUser(userId: string): Promise<Account[]>;
 }
 
 export function createAccountsRepo(tableName: string): AccountsRepo {
@@ -43,6 +56,16 @@ export function createAccountsRepo(tableName: string): AccountsRepo {
     async getOwnAddress(accountId) {
       const account = await getAccount(accountId);
       return account?.displayName;
+    },
+    async listByUser(userId) {
+      const result = await client().send(
+        new ScanCommand({
+          TableName: tableName,
+          FilterExpression: 'userId = :userId',
+          ExpressionAttributeValues: { ':userId': userId },
+        }),
+      );
+      return (result.Items ?? []) as Account[];
     },
   };
 }

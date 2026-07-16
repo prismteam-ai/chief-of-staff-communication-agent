@@ -105,7 +105,12 @@ export class ApiStack extends TaggedStack {
       );
       handler.addToRolePolicy(
         new iam.PolicyStatement({
-          actions: ['dynamodb:GetItem'],
+          // `dynamodb:Scan` is Task 8's addition — `accounts-repo.ts#listByUser` backs the
+          // connect-channel wizard's connected-accounts list (README L12). The accounts table has
+          // no GSI on `userId` (see that repo's doc comment on the demo-scoped Scan-with-
+          // FilterExpression tradeoff); `GetItem`/`Query` remain for the pre-existing per-account
+          // ownership lookups the approval/Asana/metrics services use.
+          actions: ['dynamodb:GetItem', 'dynamodb:Scan'],
           resources: [props.ingestStack.accountsTableArn],
         }),
       );

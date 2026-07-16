@@ -5,10 +5,13 @@ import { router } from '../trpc.js';
 import { healthRouter } from './health.js';
 import { createCommunicationsRouter } from './communications.js';
 import { createAsanaRouter } from './asana.js';
+import { createMetricsRouter } from './metrics.js';
+import { createAccountsRouter } from './accounts.js';
 import { ApprovalService } from '../services/approval-service.js';
 import { AsanaService } from '../services/asana-service.js';
+import { MetricsService } from '../services/metrics-service.js';
 import { createCommunicationsRepo } from '../repos/communications-repo.js';
-import { createAccountsRepo } from '../repos/accounts-repo.js';
+import { createAccountsRepo, type AccountsRepo } from '../repos/accounts-repo.js';
 import { createRealGmailConnector } from '../gmail-send.js';
 import { createAgentTrigger, noopAgentTrigger } from '../agent-trigger.js';
 import { loadApiRuntimeEnv } from '../env.js';
@@ -22,6 +25,8 @@ const env = loadApiRuntimeEnv();
 // unit tests importing this module indirectly) never throws at import time.
 let cachedApprovalService: ApprovalService | undefined;
 let cachedAsanaService: AsanaService | undefined;
+let cachedMetricsService: MetricsService | undefined;
+let cachedAccountsRepo: AccountsRepo | undefined;
 
 function connectorFor(channelType: ChannelType): Connector | undefined {
   // Gmail is the only sendable channel wired today (design.md's Live tier — channel-access-tiers.md);
@@ -67,10 +72,35 @@ function asanaService(): AsanaService {
   return cachedAsanaService;
 }
 
+function metricsService(): MetricsService {
+  if (!cachedMetricsService) {
+    if (!env.communicationsTableName || !env.accountsTableName) {
+      throw new Error('COMMUNICATIONS_TABLE_NAME and ACCOUNTS_TABLE_NAME must be set');
+    }
+    cachedMetricsService = new MetricsService({
+      communicationsRepo: createCommunicationsRepo(env.communicationsTableName),
+      accountsRepo: createAccountsRepo(env.accountsTableName),
+    });
+  }
+  return cachedMetricsService;
+}
+
+function accountsRepo(): AccountsRepo {
+  if (!cachedAccountsRepo) {
+    if (!env.accountsTableName) {
+      throw new Error('ACCOUNTS_TABLE_NAME must be set');
+    }
+    cachedAccountsRepo = createAccountsRepo(env.accountsTableName);
+  }
+  return cachedAccountsRepo;
+}
+
 export const appRouter = router({
   health: healthRouter,
   communications: createCommunicationsRouter(() => approvalService()),
   asana: createAsanaRouter(() => asanaService()),
+  metrics: createMetricsRouter(() => metricsService()),
+  accounts: createAccountsRouter(() => accountsRepo()),
 });
 
 export type AppRouter = typeof appRouter;

@@ -121,6 +121,9 @@ function fakeAccountsRepo(
     async getOwnAddress(accountId) {
       return ownAddresses[accountId];
     },
+    async listByUser() {
+      return [];
+    },
   };
 }
 

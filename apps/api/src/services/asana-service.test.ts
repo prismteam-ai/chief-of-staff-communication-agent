@@ -94,6 +94,9 @@ function fakeAccountsRepo(ownership: Record<string, string>): AccountsRepo {
     async getOwnAddress() {
       return 'demoalex775@gmail.com';
     },
+    async listByUser() {
+      return [];
+    },
   };
 }
 
