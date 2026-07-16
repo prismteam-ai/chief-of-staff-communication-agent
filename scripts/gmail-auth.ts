@@ -34,6 +34,7 @@ const OAUTH_CLIENT_SECRET_ID = 'cos/gmail-oauth-client';
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.insert', // insert is needed ONLY for demo seeding (messages.insert); a production channel connection needs just readonly+send.
 ];
 const DEMO_USER_ID = 'demo-alex';
 
