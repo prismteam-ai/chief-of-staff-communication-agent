@@ -1,0 +1,35 @@
+{
+  "name": "@chief-of-staff/ingest",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aws-lambda-powertools/logger": "^2.11.0",
+    "@aws-lambda-powertools/metrics": "^2.11.0",
+    "@aws-lambda-powertools/tracer": "^2.11.0",
+    "@aws-sdk/client-s3": "^3.1088.0",
+    "@aws-sdk/client-secrets-manager": "^3.1088.0",
+    "@aws-sdk/client-sns": "^3.1088.0",
+    "@aws-sdk/client-sqs": "^3.1088.0",
+    "@aws-sdk/lib-dynamodb": "^3.1088.0",
+    "@aws-sdk/client-dynamodb": "^3.1088.0",
+    "@middy/core": "^5.5.1",
+    "@chief-of-staff/connectors": "workspace:*",
+    "@chief-of-staff/shared": "workspace:*",
+    "googleapis": "^173.0.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@chief-of-staff/tsconfig": "workspace:*",
+    "@types/aws-lambda": "^8.10.146",
+    "aws-sdk-client-mock": "^4.1.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
