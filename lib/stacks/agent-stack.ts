@@ -269,7 +269,7 @@ export class AgentStack extends TaggedStack {
       dashboardName: `${PROJECT_NAME}-agent`,
       namespace: METRICS_NAMESPACE,
       processedMetricNames: ['RecommendationProduced', 'DraftProduced'],
-      failedMetricNames: ['AgentTurnFailed'],
+      failedMetricNames: ['AgentTurnFailed', 'MemoryAppendFailed'],
       durationMetricName: 'AgentTurnDuration',
       titlePrefix: 'Agent',
     });

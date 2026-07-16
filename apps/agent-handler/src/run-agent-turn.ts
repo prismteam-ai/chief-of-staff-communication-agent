@@ -30,7 +30,9 @@ import type { logger as LoggerType, metrics as MetricsType } from './context.js'
  *   4. apply the confidence GATE IN CODE (`routeByConfidence`) — never a prompt instruction
  *   5a. below threshold → transition ingested→recommended→needs_context, persist, STOP (no draft)
  *   5b. at/above       → draft, transition ingested→recommended→drafted, persist recommendation+draft
- *   6. append the turn to the ConversationEventStore (idempotent tokens from the provider msg id)
+ *   6. append the turn to the ConversationEventStore (idempotent tokens from the provider msg id),
+ *      isolated (`appendTurnIsolated`) so a memory-write failure never flips an already-persisted
+ *      outcome to 'failed' — see the helper's doc comment for why that matters for redelivery
  *
  * Logging/metrics carry ids, action type, confidence, and route only — NEVER the message body,
  * participant addresses, or draft text (mirrors `processor-logic.ts`'s discipline; Task 5
@@ -145,9 +147,14 @@ export async function runAgentTurn(
         recommendation,
         transitions,
       });
-      await appendTurn(conversationStore, sessionId, actorId, record, {
-        recommendation,
-      });
+      await appendTurnIsolated(
+        conversationStore,
+        sessionId,
+        actorId,
+        record,
+        { recommendation },
+        { commId, log, metricsClient },
+      );
       log.info('Routed to needs_context (below confidence threshold)', {
         commId,
         confidence: recommendation.confidence,
@@ -181,7 +188,14 @@ export async function runAgentTurn(
       draft,
       transitions,
     });
-    await appendTurn(conversationStore, sessionId, actorId, record, { recommendation, draft });
+    await appendTurnIsolated(
+      conversationStore,
+      sessionId,
+      actorId,
+      record,
+      { recommendation, draft },
+      { commId, log, metricsClient },
+    );
 
     log.info('Recommendation + draft persisted', {
       commId,
@@ -235,6 +249,41 @@ function twoHopTransitions(params: {
     now,
   });
   return [first, second];
+}
+
+/**
+ * Appends the turn to AgentCore Memory, isolated the same way as `indexChunksIsolated` /
+ * `triggerAgentIsolated` in the ingest processor (grep those for the shape): by the time this
+ * runs, the recommendation/draft is already durably persisted via `persistOutcome` — that IS the
+ * successful outcome of the turn. Memory is best-effort conversation history, not the source of
+ * truth, so a throttled/failed AgentCore `CreateEvent` must never flip the turn to 'failed' and
+ * must never trigger SQS redelivery: a redelivery would hit the idempotency guard (`record.status
+ * !== 'ingested'`) and skip, permanently losing the retry without ever re-attempting the memory
+ * write. Failure is a warn (ids only, no message body/PII) + a dedicated `MemoryAppendFailed`
+ * metric instead.
+ */
+async function appendTurnIsolated(
+  store: ConversationEventStore,
+  sessionId: string,
+  actorId: string,
+  record: AgentCommunicationRecord,
+  outcome: { recommendation: Recommendation; draft?: Draft },
+  deps: {
+    commId: string;
+    log: Pick<typeof LoggerType, 'info' | 'warn' | 'error'>;
+    metricsClient: Pick<typeof MetricsType, 'addMetric'>;
+  },
+): Promise<void> {
+  try {
+    await appendTurn(store, sessionId, actorId, record, outcome);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    deps.log.warn('Failed to append agent turn to conversation memory — turn still succeeded', {
+      commId: deps.commId,
+      error: message,
+    });
+    deps.metricsClient.addMetric('MemoryAppendFailed', MetricUnit.Count, 1);
+  }
 }
 
 /** Appends the user turn + the assistant turn to memory with deterministic, id-derived tokens. */

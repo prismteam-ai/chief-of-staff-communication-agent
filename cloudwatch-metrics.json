@@ -95,6 +95,13 @@
       "unit": "Milliseconds",
       "service": "agent",
       "description": "Wall-clock time for one agent turn on the agent Lambda, from reading the communication to persisting the recommendation/draft and appending conversation memory."
+    },
+    {
+      "name": "MemoryAppendFailed",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Count",
+      "service": "agent",
+      "description": "Emitted once per agent turn whose post-persist AgentCore Memory append (CreateEvent) failed. Isolated like ChunkIndexFailed/AgentTriggerFailed on the ingest service: the recommendation/draft is already persisted by the time this can fire, so a memory-append failure never fails the turn or triggers SQS redelivery — it is a warn-and-count degradation only."
     }
   ]
 }

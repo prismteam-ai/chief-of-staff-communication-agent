@@ -149,6 +149,96 @@ describe('runAgentTurn — low confidence: the gate routes to needs_context IN C
   });
 });
 
+describe('runAgentTurn — memory append is isolated from the turn outcome', () => {
+  it('still returns recommended_and_drafted (with the outcome already persisted) when appendEvents throws', async () => {
+    const { repo, persisted } = fakeRepo(baseRecord());
+    const runner = fakeRunner(
+      { actionType: 'reply_needed', confidence: 0.9, rationale: 'Direct request.' },
+      { body: 'Sure — attached are the Q3 numbers.', confidence: 0.88 },
+    );
+    const throwingStore = {
+      loadSessionEvents: async () => [],
+      appendEvents: async () => {
+        throw new Error('AgentCore throttled');
+      },
+    };
+    log.warn.mockClear();
+    log.error.mockClear();
+    metricsClient.addMetric.mockClear();
+
+    const result = await runAgentTurn(
+      { commId: 'gmail#ext-1', accountId: 'acct-1' },
+      {
+        ...commonDeps,
+        conversationStore: throwingStore,
+        agentRunner: runner,
+        communicationsRepo: repo,
+      },
+    );
+
+    expect(result.outcome).toBe('recommended_and_drafted');
+    // The recommendation + draft were already durably persisted — that IS the successful outcome.
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]!.status).toBe('drafted');
+
+    // Memory failure degrades: warn + MemoryAppendFailed, never AgentTurnFailed / error log.
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('conversation memory'),
+      expect.objectContaining({ commId: 'gmail#ext-1' }),
+    );
+    expect(log.error).not.toHaveBeenCalled();
+    expect(metricsClient.addMetric).toHaveBeenCalledWith(
+      'MemoryAppendFailed',
+      expect.anything(),
+      1,
+    );
+    expect(metricsClient.addMetric).not.toHaveBeenCalledWith(
+      'AgentTurnFailed',
+      expect.anything(),
+      1,
+    );
+  });
+
+  it('still returns needs_context (with the outcome already persisted) when appendEvents throws', async () => {
+    const { repo, persisted } = fakeRepo(baseRecord());
+    const runner = fakeRunner(
+      { actionType: 'reply_needed', confidence: 0.3, rationale: 'Unsure.' },
+      { body: 'should not be produced', confidence: 0.5 },
+    );
+    const throwingStore = {
+      loadSessionEvents: async () => [],
+      appendEvents: async () => {
+        throw new Error('AgentCore throttled');
+      },
+    };
+    metricsClient.addMetric.mockClear();
+
+    const result = await runAgentTurn(
+      { commId: 'gmail#ext-1', accountId: 'acct-1' },
+      {
+        ...commonDeps,
+        conversationStore: throwingStore,
+        agentRunner: runner,
+        communicationsRepo: repo,
+      },
+    );
+
+    expect(result.outcome).toBe('needs_context');
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]!.status).toBe('needs_context');
+    expect(metricsClient.addMetric).toHaveBeenCalledWith(
+      'MemoryAppendFailed',
+      expect.anything(),
+      1,
+    );
+    expect(metricsClient.addMetric).not.toHaveBeenCalledWith(
+      'AgentTurnFailed',
+      expect.anything(),
+      1,
+    );
+  });
+});
+
 describe('runAgentTurn — idempotency / skip paths', () => {
   it('skips a communication that is not in ingested state', async () => {
     const { repo, persisted } = fakeRepo(baseRecord({ status: 'drafted' }));
