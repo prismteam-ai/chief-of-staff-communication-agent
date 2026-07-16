@@ -17,7 +17,9 @@ function fakeMetrics() {
   return { addMetric: vi.fn() };
 }
 
-function fakeTokensRepo(seed: McpTokenRecord[] = []): McpTokensRepo & { store: Map<string, McpTokenRecord> } {
+function fakeTokensRepo(
+  seed: McpTokenRecord[] = [],
+): McpTokensRepo & { store: Map<string, McpTokenRecord> } {
   const store = new Map(seed.map((r) => [r.tokenHash, r]));
   return {
     store,

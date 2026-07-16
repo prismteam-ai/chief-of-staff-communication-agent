@@ -192,7 +192,10 @@ function buildRouterHarness(opts?: { sendCalls?: unknown[]; asanaCreateCalls?: u
 
   const authService = new McpAuthService({
     tokensRepo: (() => {
-      const store = new Map<string, { tokenHash: string; userId: string; label: string; createdAt: string }>();
+      const store = new Map<
+        string,
+        { tokenHash: string; userId: string; label: string; createdAt: string }
+      >();
       return {
         async put(record) {
           store.set(record.tokenHash, record);

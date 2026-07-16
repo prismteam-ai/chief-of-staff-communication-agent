@@ -60,7 +60,8 @@ export class McpAuthService {
     this.log = deps.log;
     this.metricsClient = deps.metricsClient;
     this.now = deps.now ?? (() => new Date());
-    this.generateToken = deps.generateToken ?? (() => `${TOKEN_PREFIX}${randomBytes(TOKEN_BYTES).toString('hex')}`);
+    this.generateToken =
+      deps.generateToken ?? (() => `${TOKEN_PREFIX}${randomBytes(TOKEN_BYTES).toString('hex')}`);
   }
 
   /** Mints a new token for `userId` (dashboard action, Task 8's token-issuance view). The plaintext

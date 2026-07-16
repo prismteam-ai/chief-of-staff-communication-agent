@@ -45,7 +45,10 @@ import { metrics } from '../context.js';
 const mcpAuthedMiddleware = (getAuthService: () => McpAuthService) =>
   middleware(async ({ ctx, next }) => {
     if (!ctx.mcpBearerToken) {
-      throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Missing Authorization: Bearer <token> header.' });
+      throw new TRPCError({
+        code: 'UNAUTHORIZED',
+        message: 'Missing Authorization: Bearer <token> header.',
+      });
     }
     let userId: string;
     try {
@@ -145,19 +148,25 @@ export function createMcpRouter(deps: McpRouterDeps) {
     recommendAction: authed
       .input(z.object({ commId: z.string().min(1) }))
       .query(async ({ ctx, input }) => {
-        const record = await deps
-          .approvalService()
-          .getCommunication({ commId: input.commId, userId: (ctx as Context & { mcpUserId: string }).mcpUserId });
-        return { commId: record.commId, status: record.status, recommendation: record.recommendation ?? null };
+        const record = await deps.approvalService().getCommunication({
+          commId: input.commId,
+          userId: (ctx as Context & { mcpUserId: string }).mcpUserId,
+        });
+        return {
+          commId: record.commId,
+          status: record.status,
+          recommendation: record.recommendation ?? null,
+        };
       }),
 
     /** Read-accessor over the agent's already-produced draft for `commId` (see module doc comment). */
     draftReply: authed
       .input(z.object({ commId: z.string().min(1) }))
       .query(async ({ ctx, input }) => {
-        const record = await deps
-          .approvalService()
-          .getCommunication({ commId: input.commId, userId: (ctx as Context & { mcpUserId: string }).mcpUserId });
+        const record = await deps.approvalService().getCommunication({
+          commId: input.commId,
+          userId: (ctx as Context & { mcpUserId: string }).mcpUserId,
+        });
         return { commId: record.commId, status: record.status, draft: record.draft ?? null };
       }),
 
