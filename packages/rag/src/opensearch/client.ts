@@ -2,7 +2,8 @@ import { Client } from '@opensearch-project/opensearch';
 // `aws-v3` subpath — the SDK-v3-flavored SigV4 signer this package ships (see the package's own
 // `exports` map). It signs every request against the deployed domain using the resolved AWS
 // credential chain, which is exactly what's needed for RagStack's IAM-scoped access policy
-// (`rag-stack.ts`: account-root principal now, the processor Lambda's execution role once wired).
+// (`rag-stack.ts`: account-root-principal resource policy + the processor Lambda's execution role
+// granted `es:ESHttp*` identity-side in `ingest-stack.ts`'s `grantIndexAccess` call).
 import { AwsSigv4Signer } from '@opensearch-project/opensearch/aws-v3';
 
 /**

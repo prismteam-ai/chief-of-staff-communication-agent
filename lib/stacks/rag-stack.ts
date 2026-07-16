@@ -18,10 +18,10 @@ import { PROJECT_NAME } from '../constructs/tags.js';
  *    demo-scoped single point of failure traded for cost/setup time, matching `DataTables`'
  *    `PAY_PER_REQUEST`/`RemovalPolicy.DESTROY` demo-scoped precedent in `IngestStack`.
  *  - 10GB gp3 EBS — comfortably above what the fixture + live-demo corpus needs.
- *  - Access policy starts scoped to the account root principal (so the operator/CDK deployer and
- *    any same-account IAM principal can reach it during setup) plus resource tags; the processor
- *    Lambda's execution role is granted narrowly via `grantIndexAccess` once that role exists
- *    (wired in this same task once the domain CREATE completes — see task report).
+ *  - Access policy is scoped to the account root principal (resource-side); per-principal access
+ *    is enforced identity-side instead — `grantIndexAccess` grants a specific IAM grantee (the
+ *    processor Lambda's execution role, wired in `ingest-stack.ts`) `es:ESHttp*`, which is what
+ *    actually authorizes its SigV4-signed calls.
  *  - `RemovalPolicy.DESTROY` — same throwaway-demo-environment rationale as `DataTables`.
  */
 export class RagStack extends TaggedStack {
