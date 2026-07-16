@@ -25,6 +25,7 @@ const STATUS_FILTERS: { label: string; value: CommunicationState | 'all' }[] = [
   { label: 'Drafted', value: 'drafted' },
   { label: 'Awaiting approval', value: 'awaiting_approval' },
   { label: 'Needs context', value: 'needs_context' },
+  { label: 'Awaiting re-processing', value: 'awaiting_reprocess' },
   { label: 'Answered', value: 'answered' },
   { label: 'Dismissed', value: 'dismissed' },
 ];

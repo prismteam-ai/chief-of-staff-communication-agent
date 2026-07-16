@@ -18,11 +18,28 @@ const STATUS_COLORS: Partial<Record<CommunicationDto['status'], string>> = {
   answered: '#15803d',
   dismissed: '#6b7280',
   needs_context: '#b91c1c',
+  awaiting_reprocess: '#6b7280',
 };
 
 function counterpart(communication: CommunicationDto): string {
   const others = communication.participants.filter((p) => p.role === 'to' || p.role === 'from');
   return others.map((p) => p.displayName ?? p.id).join(', ') || '(unknown)';
+}
+
+/**
+ * Whether the Approve action should be reachable for a communication (Task 6 review fix). Gated on
+ * `draft` actually being present, not status alone: a `needs_context` record has NO draft (the
+ * agent never got far enough to write one), and the previous `status === 'drafted' ||
+ * status === 'awaiting_approval'`-only check surfaced an Approve button for a draftless record that
+ * had reached `drafted` (e.g. via the old `supplyContext` shortcut, or any other future path that
+ * skips the agent re-run) — clicking it always threw `IllegalActionError('no draft to approve')` in
+ * `approval-service.ts`. Exported as a pure function (no component/rendering harness needed) so it
+ * is independently unit-testable.
+ */
+export function canApproveCommunication(c: Pick<CommunicationDto, 'status' | 'draft'>): boolean {
+  return (
+    (c.status === 'drafted' || c.status === 'awaiting_approval') && Boolean(c.draft?.body?.trim())
+  );
 }
 
 /**
@@ -46,7 +63,7 @@ export function CommunicationCard(props: CommunicationCardProps) {
   const [draftBody, setDraftBody] = useState(c.draft?.body ?? '');
   const [contextText, setContextText] = useState('');
 
-  const canApprove = c.status === 'drafted' || c.status === 'awaiting_approval';
+  const canApprove = canApproveCommunication(c);
   // `approved` with no `sentMessageId` yet is a record whose send failed after a prior approval
   // claimed it (approval-service.ts's retry-after-failed-send path) — surfacing a retry action
   // here is what makes that recovery reachable from the UI, not just the API directly.
