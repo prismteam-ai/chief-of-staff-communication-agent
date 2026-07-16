@@ -93,6 +93,9 @@ function inMemoryCommunicationsRepo(
       if (status && record.status !== status) return [];
       return [{ ...record }];
     },
+    async putIngested() {
+      throw new Error('not used in communications integration tests');
+    },
     async transition(t, patch) {
       if (record.status !== t.from) throw new TransitionConflictError(t.commId, t.from);
       record = {

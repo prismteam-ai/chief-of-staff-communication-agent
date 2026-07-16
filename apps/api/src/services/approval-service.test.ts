@@ -73,6 +73,9 @@ function fakeCommunicationsRepo(
       if (status && state.record.status !== status) return [];
       return [{ ...state.record }];
     },
+    async putIngested() {
+      throw new Error('not used in approval-service tests');
+    },
     async transition(record, patch) {
       if (state.record.status !== record.from) {
         throw new TransitionConflictError(record.commId, record.from);

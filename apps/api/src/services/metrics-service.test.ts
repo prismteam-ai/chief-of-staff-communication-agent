@@ -43,6 +43,9 @@ function inMemoryRepo(records: ApiCommunicationRecord[]): CommunicationsRepo {
     async listByAccount(accountId, status) {
       return records.filter((r) => r.accountId === accountId && (!status || r.status === status));
     },
+    async putIngested() {
+      throw new Error('not used in metrics tests');
+    },
     async transition() {
       throw new Error('not used in metrics tests');
     },

@@ -57,6 +57,9 @@ function inMemoryCommunicationsRepo(
     async listByAccount(accountId) {
       return record.accountId === accountId ? [{ ...record }] : [];
     },
+    async putIngested() {
+      throw new Error('not used in asana integration tests');
+    },
     async transition() {},
     async claimSend() {},
     async recordSent() {},

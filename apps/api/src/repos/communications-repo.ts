@@ -2,6 +2,7 @@ import { ConditionalCheckFailedException, DynamoDBClient } from '@aws-sdk/client
 import {
   DynamoDBDocumentClient,
   GetCommand,
+  PutCommand,
   QueryCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
@@ -13,6 +14,7 @@ import type {
   SuggestedAsanaAction,
   TransitionRecord,
 } from '@chief-of-staff/shared';
+import { commIdFor } from '@chief-of-staff/shared';
 
 /**
  * Communications table repository for the API/approval layer (Task 6, design.md §7/§8). Mirrors
@@ -99,6 +101,16 @@ export interface CommunicationsRepo {
   listByAccount(accountId: string, status?: CommunicationState): Promise<ApiCommunicationRecord[]>;
 
   /**
+   * Persists a freshly normalized inbound message in state `ingested` (Task 9: the WhatsApp inbound
+   * webhook Lambda lives in `apps/api`, not `apps/ingest`, since it must share the deployed API
+   * Gateway's stable URL — see `whatsapp-webhook.ts`). Identical shape/semantics to
+   * `apps/ingest/src/communications-repo.ts#putIngested`: `commId` derived deterministically from
+   * channel + externalId, so a duplicate write (should dedupe ever be bypassed) is idempotent by
+   * construction rather than creating a second row.
+   */
+  putIngested(message: NormalizedMessage): Promise<ApiCommunicationRecord>;
+
+  /**
    * Applies one already-validated `TransitionRecord` (the caller runs it through
    * `applyTransition` first — this repo does not re-derive legality, only persists it): sets
    * `status` to `record.to`, appends the record to the audit trail, optionally merges `draft`
@@ -147,6 +159,17 @@ export function createCommunicationsRepo(tableName: string): CommunicationsRepo 
     async getById(commId) {
       const result = await client().send(new GetCommand({ TableName: tableName, Key: { commId } }));
       return result.Item as ApiCommunicationRecord | undefined;
+    },
+
+    async putIngested(message) {
+      const record: ApiCommunicationRecord = {
+        ...message,
+        commId: commIdFor(message.channelType, message.externalId),
+        status: 'ingested',
+        ingestedAt: new Date().toISOString(),
+      };
+      await client().send(new PutCommand({ TableName: tableName, Item: record }));
+      return record;
     },
 
     async listByAccount(accountId, status) {
