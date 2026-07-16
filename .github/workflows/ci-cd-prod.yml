@@ -1,0 +1,47 @@
+# Documented adaptation: the kit's prod trigger is push to `main`, but this
+# fork's `main` mirrors the upstream assignment repo — `feat/pidgeot-agent`
+# is the deployable line for this assignment (see infra/run-records/first-deploy.md).
+name: PROD CI/CD
+
+on:
+  push:
+    branches: [feat/pidgeot-agent]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-2
+  CDK_BOOTSTRAP_QUALIFIER: hnb659fds
+
+jobs:
+  prod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: extractions/setup-just@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - run: just setup
+      - run: just format
+      - run: just lint
+      - run: just type-check
+      - run: just test
+      - run: just build
+      - run: just deploy
