@@ -14,6 +14,7 @@ import { PROJECT_NAME } from '../constructs/tags.js';
 import { TaggedStack } from '../constructs/tagged-stack.js';
 import { AGENT_QUEUE_NAME } from './agent-stack.js';
 import type { IngestStack } from './ingest-stack.js';
+import type { RagStack } from './rag-stack.js';
 
 const SERVICE_NAME = 'chief-of-staff-api';
 const METRICS_NAMESPACE = 'ChiefOfStaffApi';
@@ -31,6 +32,13 @@ export interface ApiStackProps extends cdk.StackProps {
    * throws a clear error at first request rather than the stack failing to synthesize.
    */
   readonly ingestStack?: IngestStack;
+  /**
+   * RAG knowledge-layer domain the Task 10 feedback loop indexes new sent_style exemplars into.
+   * Optional so ApiStack still synthesizes standalone; unset, `routers/index.ts`'s
+   * `styleFeedbackHook()` resolves to `undefined` and `approveDraft` runs exactly as it did before
+   * Task 10 (no feedback loop, never a hard failure).
+   */
+  readonly ragStack?: RagStack;
 }
 
 export class ApiStack extends TaggedStack {
@@ -79,8 +87,14 @@ export class ApiStack extends TaggedStack {
           ? {
               COMMUNICATIONS_TABLE_NAME: props.ingestStack.communicationsTableName,
               ACCOUNTS_TABLE_NAME: props.ingestStack.accountsTableName,
+              // Task 10 feedback loop: bumps the style profile's sourceCount on a successful send.
+              STYLE_PROFILES_TABLE_NAME: props.ingestStack.styleProfilesTableName,
             }
           : {}),
+        // Task 10 feedback loop: indexes the sent reply as a new sent_style exemplar. Unset when
+        // RagStack isn't wired for this deploy — `routers/index.ts`'s `styleFeedbackHook()` then
+        // resolves to `undefined` and `approveDraft` runs with no feedback loop (never a failure).
+        ...(props?.ragStack ? { RAG_DOMAIN_ENDPOINT: props.ragStack.domainEndpoint } : {}),
       },
       bundling: {
         minify: true,
@@ -112,6 +126,37 @@ export class ApiStack extends TaggedStack {
           // ownership lookups the approval/Asana/metrics services use.
           actions: ['dynamodb:GetItem', 'dynamodb:Scan'],
           resources: [props.ingestStack.accountsTableArn],
+        }),
+      );
+      // Task 10 feedback loop: read (getStyleProfile-equivalent lookups are agent-side only) +
+      // write (bumpSourceCount) on style-profiles. No Scan/Query needed — `StyleProfileRepo` is a
+      // single-item GetItem/PutItem repo keyed on `userId`, same access shape as `agent-stack.ts`.
+      handler.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['dynamodb:GetItem', 'dynamodb:PutItem'],
+          resources: [props.ingestStack.styleProfilesTableArn],
+        }),
+      );
+    }
+
+    // Task 10 feedback loop: RAG index access + Bedrock embed on the pinned Cohere profile (the
+    // feedback loop chunks + embeds + indexes the sent reply exactly like `build-style-profile.ts`
+    // does) — same grant shape as `agent-stack.ts`'s `retrieveContext` wiring.
+    if (props?.ragStack) {
+      props.ragStack.grantIndexAccess(handler);
+      handler.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['bedrock:InvokeModel'],
+          resources: [
+            cdk.Stack.of(this).formatArn({
+              service: 'bedrock',
+              region: 'us-east-2',
+              resource: 'inference-profile',
+              resourceName: 'us.cohere.embed-v4:0',
+              arnFormat: cdk.ArnFormat.SLASH_RESOURCE_NAME,
+            }),
+            'arn:aws:bedrock:*::foundation-model/cohere.embed-v4:0',
+          ],
         }),
       );
     }

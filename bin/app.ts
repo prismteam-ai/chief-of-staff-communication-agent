@@ -22,6 +22,7 @@ const ragStack = new RagStack(app, 'RagStack', { env });
 const ingestStack = new IngestStack(app, 'IngestStack', { env, ragStack });
 new AgentStack(app, 'AgentStack', { env, ingestStack, ragStack });
 // ApiStack (Task 6) depends on IngestStack for the communications + accounts tables the approval
-// loop reads/writes and the account permission guard's ownership lookup.
-new ApiStack(app, 'ApiStack', { env, ingestStack });
+// loop reads/writes and the account permission guard's ownership lookup; ragStack (Task 10) wires
+// the feedback loop's exemplar indexing (optional — see api-stack.ts's ragStack prop doc).
+new ApiStack(app, 'ApiStack', { env, ingestStack, ragStack });
 new AmplifyStack(app, 'AmplifyStack', { env });

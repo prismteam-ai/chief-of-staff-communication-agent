@@ -9,6 +9,7 @@ import {
 } from '../repos/communications-repo.js';
 import type { AccountsRepo } from '../repos/accounts-repo.js';
 import type { AgentTrigger } from '../agent-trigger.js';
+import type { RecordSentReplyInput, StyleFeedbackHook } from './style-feedback.js';
 import {
   ApprovalService,
   CommunicationNotFoundError,
@@ -150,12 +151,23 @@ function fakeAgentTrigger(): AgentTrigger & { published: { commId: string; accou
   };
 }
 
+function fakeStyleFeedbackHook(): StyleFeedbackHook & { calls: RecordSentReplyInput[] } {
+  const calls: RecordSentReplyInput[] = [];
+  return {
+    calls,
+    async recordSentReply(input) {
+      calls.push(input);
+    },
+  };
+}
+
 function makeService(
   record: ApiCommunicationRecord,
   opts: {
     sendImpl?: (message: OutboundMessage) => Promise<SendResult>;
     ownership?: Record<string, string>;
     agentTrigger?: AgentTrigger;
+    styleFeedbackHook?: StyleFeedbackHook;
   } = {},
 ) {
   const repo = fakeCommunicationsRepo(record);
@@ -177,6 +189,7 @@ function makeService(
     now: NOW,
     log,
     metricsClient,
+    styleFeedbackHook: opts.styleFeedbackHook,
   });
 
   return { service, repo, metricsClient, log, agentTrigger };
@@ -574,6 +587,106 @@ describe('ApprovalService — approveDraft (drafted -> awaiting_approval -> appr
     await expect(service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID })).rejects.toThrow(
       IllegalActionError,
     );
+  });
+});
+
+describe('ApprovalService — style feedback loop (Task 10, design.md §6)', () => {
+  it('feeds the approved draft body back as a new style exemplar once the send succeeds', async () => {
+    const styleFeedbackHook = fakeStyleFeedbackHook();
+    const { service } = makeService(fixtureRecord({ status: 'drafted' }), { styleFeedbackHook });
+
+    await service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID });
+
+    expect(styleFeedbackHook.calls).toHaveLength(1);
+    const call = styleFeedbackHook.calls[0]!;
+    expect(call.userId).toBe(OWNER_USER_ID);
+    expect(call.accountId).toBe(ACCOUNT_ID);
+    expect(call.commId).toBe(COMM_ID);
+    expect(call.body).toBe('Thanks — noted.'); // the original draft body, approved as-is
+  });
+
+  it('feeds back the EDITED body, not the original draft, when editDraft ran first', async () => {
+    const styleFeedbackHook = fakeStyleFeedbackHook();
+    const { service } = makeService(fixtureRecord({ status: 'drafted' }), { styleFeedbackHook });
+
+    await service.editDraft({
+      commId: COMM_ID,
+      userId: OWNER_USER_ID,
+      newBody: 'A much better, personally rewritten reply.',
+    });
+    await service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID });
+
+    expect(styleFeedbackHook.calls).toHaveLength(1);
+    expect(styleFeedbackHook.calls[0]!.body).toBe('A much better, personally rewritten reply.');
+  });
+
+  it('emits StyleExemplarAdded on a successful feedback call', async () => {
+    const styleFeedbackHook = fakeStyleFeedbackHook();
+    const { service, metricsClient } = makeService(fixtureRecord({ status: 'drafted' }), {
+      styleFeedbackHook,
+    });
+
+    await service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID });
+
+    const metricNames = metricsClient.addMetric.mock.calls.map((call) => call[0]);
+    expect(metricNames).toContain('StyleExemplarAdded');
+  });
+
+  it('is a total no-op (no throw, no metric) when styleFeedbackHook is not wired', async () => {
+    const { service, metricsClient } = makeService(fixtureRecord({ status: 'drafted' })); // no hook
+    const result = await service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID });
+
+    expect(result.status).toBe('answered'); // send still completed normally
+    const metricNames = metricsClient.addMetric.mock.calls.map((call) => call[0]);
+    expect(metricNames).not.toContain('StyleExemplarAdded');
+    expect(metricNames).not.toContain('StyleFeedbackFailed');
+  });
+
+  it('does not fail the approval when the feedback hook throws — the send already succeeded', async () => {
+    const throwingHook: StyleFeedbackHook = {
+      async recordSentReply() {
+        throw new Error('OpenSearch unavailable');
+      },
+    };
+    const { service, metricsClient, log } = makeService(fixtureRecord({ status: 'drafted' }), {
+      styleFeedbackHook: throwingHook,
+    });
+
+    const result = await service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID });
+
+    expect(result.status).toBe('answered');
+    const metricNames = metricsClient.addMetric.mock.calls.map((call) => call[0]);
+    expect(metricNames).toContain('StyleFeedbackFailed');
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('feedback'),
+      expect.objectContaining({ commId: COMM_ID }),
+    );
+  });
+
+  it('is account-scoped: the fed-back exemplar carries the SAME accountId the communication belongs to, never another', async () => {
+    const styleFeedbackHook = fakeStyleFeedbackHook();
+    const { service } = makeService(fixtureRecord({ status: 'drafted', accountId: ACCOUNT_ID }), {
+      styleFeedbackHook,
+    });
+
+    await service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID });
+
+    expect(styleFeedbackHook.calls[0]!.accountId).toBe(ACCOUNT_ID);
+  });
+
+  it('idempotent: a retried approval on an already-answered communication never calls the hook again', async () => {
+    const styleFeedbackHook = fakeStyleFeedbackHook();
+    const { service } = makeService(fixtureRecord({ status: 'drafted' }), { styleFeedbackHook });
+
+    await service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID });
+    expect(styleFeedbackHook.calls).toHaveLength(1);
+
+    // Retried approval on an already-answered record fails fast on the state check — no second
+    // send, and therefore no second feedback call.
+    await expect(service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID })).rejects.toThrow(
+      IllegalActionError,
+    );
+    expect(styleFeedbackHook.calls).toHaveLength(1);
   });
 });
 

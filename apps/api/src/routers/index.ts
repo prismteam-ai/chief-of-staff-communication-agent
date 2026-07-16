@@ -1,6 +1,11 @@
 import type { ChannelType } from '@chief-of-staff/shared';
 import type { Connector } from '@chief-of-staff/connectors';
 import { AsanaClient } from '@chief-of-staff/connectors/asana';
+import { createStyleProfileRepo } from '@chief-of-staff/agent-handler/style';
+import {
+  createSignedOpenSearchClient,
+  OpenSearchRetrievalIndex,
+} from '@chief-of-staff/rag/opensearch';
 import { router } from '../trpc.js';
 import { healthRouter } from './health.js';
 import { createCommunicationsRouter } from './communications.js';
@@ -10,6 +15,8 @@ import { createAccountsRouter } from './accounts.js';
 import { ApprovalService } from '../services/approval-service.js';
 import { AsanaService } from '../services/asana-service.js';
 import { MetricsService } from '../services/metrics-service.js';
+import { createStyleFeedbackHook } from '../services/style-feedback.js';
+import type { StyleFeedbackHook } from '../services/style-feedback.js';
 import { createCommunicationsRepo } from '../repos/communications-repo.js';
 import { createAccountsRepo, type AccountsRepo } from '../repos/accounts-repo.js';
 import { createRealGmailConnector } from '../gmail-send.js';
@@ -36,6 +43,23 @@ function connectorFor(channelType: ChannelType): Connector | undefined {
   return undefined;
 }
 
+/**
+ * Task 10 feedback loop: `undefined` (not wired) unless BOTH `STYLE_PROFILES_TABLE_NAME` and
+ * `RAG_DOMAIN_ENDPOINT` are set — same "degrade to no-op rather than a crash" posture every other
+ * optional dependency in this module uses (`connectorFor` returning `undefined`, `agentTrigger`
+ * falling back to `noopAgentTrigger`). `ApprovalService.approveDraft` treats an unwired hook as a
+ * total no-op (see `feedBackStyleExemplarIsolated`'s doc comment).
+ */
+function styleFeedbackHook(): StyleFeedbackHook | undefined {
+  if (!env.styleProfilesTableName || !env.ragDomainEndpoint) return undefined;
+  return createStyleFeedbackHook({
+    styleProfileRepo: createStyleProfileRepo(env.styleProfilesTableName),
+    retrievalIndex: new OpenSearchRetrievalIndex(
+      createSignedOpenSearchClient({ endpoint: env.ragDomainEndpoint, region: env.region }),
+    ),
+  });
+}
+
 function approvalService(): ApprovalService {
   if (!cachedApprovalService) {
     if (!env.communicationsTableName || !env.accountsTableName) {
@@ -51,6 +75,7 @@ function approvalService(): ApprovalService {
       agentTrigger: env.agentQueueUrl ? createAgentTrigger(env.agentQueueUrl) : noopAgentTrigger,
       log: logger,
       metricsClient: metrics,
+      styleFeedbackHook: styleFeedbackHook(),
     });
   }
   return cachedApprovalService;

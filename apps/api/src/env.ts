@@ -14,6 +14,12 @@ export interface ApiRuntimeEnv {
    * `IllegalActionError` rather than a crash, same posture as `connectorFor` returning `undefined`.
    */
   readonly agentQueueUrl: string;
+  /** Task 10 feedback loop: style-profiles table (`sourceCount` bump) and the RAG domain endpoint
+   * (new sent_style exemplar indexing). Empty -> `routers/index.ts` wires no `styleFeedbackHook`,
+   * and `ApprovalService.approveDraft` runs exactly as it did before Task 10 (see that service's
+   * `feedBackStyleExemplarIsolated` doc comment: a no-op, not an error, when unwired). */
+  readonly styleProfilesTableName: string;
+  readonly ragDomainEndpoint: string;
 }
 
 export function loadApiRuntimeEnv(source: NodeJS.ProcessEnv = process.env): ApiRuntimeEnv {
@@ -22,5 +28,7 @@ export function loadApiRuntimeEnv(source: NodeJS.ProcessEnv = process.env): ApiR
     communicationsTableName: source.COMMUNICATIONS_TABLE_NAME?.trim() ?? '',
     accountsTableName: source.ACCOUNTS_TABLE_NAME?.trim() ?? '',
     agentQueueUrl: source.AGENT_QUEUE_URL?.trim() ?? '',
+    styleProfilesTableName: source.STYLE_PROFILES_TABLE_NAME?.trim() ?? '',
+    ragDomainEndpoint: source.RAG_DOMAIN_ENDPOINT?.trim() ?? '',
   };
 }
