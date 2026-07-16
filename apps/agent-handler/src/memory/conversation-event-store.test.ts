@@ -7,8 +7,28 @@ import {
 import {
   AgentCoreConversationEventStore,
   NoopConversationEventStore,
+  sanitizeAgentCoreKey,
   type ConversationEvent,
 } from './conversation-event-store.js';
+
+describe('sanitizeAgentCoreKey', () => {
+  it('maps an email actor into the AgentCore-allowed charset', () => {
+    // `@` and `.` are disallowed by AgentCore's actorId/sessionId regex — must be replaced.
+    expect(sanitizeAgentCoreKey('demoalex775@gmail.com')).toBe('demoalex775_gmail_com');
+    expect(/^[a-zA-Z0-9][a-zA-Z0-9-_/]*$/.test(sanitizeAgentCoreKey('demoalex775@gmail.com'))).toBe(
+      true,
+    );
+  });
+
+  it('maps a thread key containing # into the allowed charset', () => {
+    expect(sanitizeAgentCoreKey('gmail#19f6aff00ee81d98')).toBe('gmail_19f6aff00ee81d98');
+  });
+
+  it('is deterministic and leaves an already-valid key unchanged', () => {
+    expect(sanitizeAgentCoreKey('thread-1')).toBe('thread-1');
+    expect(sanitizeAgentCoreKey('thread-1')).toBe(sanitizeAgentCoreKey('thread-1'));
+  });
+});
 
 describe('NoopConversationEventStore', () => {
   it('never throws when memory is unconfigured — loads empty, appends nothing', async () => {
@@ -66,9 +86,9 @@ describe('AgentCoreConversationEventStore', () => {
     expect(createCommands).toHaveLength(2);
     expect(createCommands[0]!.input.clientToken).toBe('msg-123:0');
     expect(createCommands[1]!.input.clientToken).toBe('msg-123:1');
-    // Session/actor carried through unchanged.
+    // Session/actor are sanitized into the AgentCore-allowed charset (email `@`/`.` → `_`).
     expect(createCommands[0]!.input.sessionId).toBe('thread-1');
-    expect(createCommands[0]!.input.actorId).toBe('sender@example.com');
+    expect(createCommands[0]!.input.actorId).toBe('sender_example_com');
   });
 
   it('loadSessionEvents issues a ListEvents with the session/actor and returns [] on an empty page', async () => {
@@ -83,7 +103,7 @@ describe('AgentCoreConversationEventStore', () => {
     );
     expect(listCommands).toHaveLength(1);
     expect(listCommands[0]!.input.sessionId).toBe('thread-1');
-    expect(listCommands[0]!.input.actorId).toBe('sender@example.com');
+    expect(listCommands[0]!.input.actorId).toBe('sender_example_com');
     expect(listCommands[0]!.input.includePayloads).toBe(true);
   });
 });

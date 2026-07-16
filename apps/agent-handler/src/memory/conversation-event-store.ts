@@ -20,6 +20,23 @@ import { logger } from '../context.js';
  * never imports the AWS SDK directly.
  */
 
+/**
+ * AgentCore constrains `sessionId`/`actorId` to `[a-zA-Z0-9][a-zA-Z0-9-_/]*(?::[a-zA-Z0-9-_/]+)*`
+ * — an email actor (`demoalex775@gmail.com`) or a thread key with `#`/`@`/`.` violates it. This
+ * maps any identifier deterministically into that charset by replacing every disallowed character
+ * with `_` and prefixing an alphanumeric if needed, so a stable email/thread key yields a stable
+ * AgentCore key (collisions are acceptable here — memory is per-session history, not an auth
+ * boundary). The AgentCore constraint is confined to this adapter; the orchestration keeps the raw
+ * semantic identity.
+ */
+export function sanitizeAgentCoreKey(raw: string): string {
+  const replaced = raw.replace(/[^a-zA-Z0-9-_/]/g, '_');
+  const trimmed = replaced.replace(/^[^a-zA-Z0-9]+/, '');
+  const candidate = trimmed.length > 0 ? trimmed : `id_${replaced}`;
+  // AgentCore keys have a max length; keep well under it.
+  return candidate.slice(0, 200);
+}
+
 export type ConversationEventKind = 'user' | 'assistant';
 
 export interface ConversationEvent {
@@ -121,6 +138,8 @@ export class AgentCoreConversationEventStore implements ConversationEventStore {
   }
 
   async loadSessionEvents(sessionId: string, actorId: string): Promise<ConversationEvent[]> {
+    const safeSession = sanitizeAgentCoreKey(sessionId);
+    const safeActor = sanitizeAgentCoreKey(actorId);
     const collected: ConversationEvent[] = [];
     let nextToken: string | undefined;
 
@@ -128,8 +147,8 @@ export class AgentCoreConversationEventStore implements ConversationEventStore {
       const page = await this.client.send(
         new ListEventsCommand({
           memoryId: this.memoryId,
-          sessionId,
-          actorId,
+          sessionId: safeSession,
+          actorId: safeActor,
           includePayloads: true,
           maxResults: Math.min(100, this.historyLimit),
           nextToken,
@@ -154,13 +173,15 @@ export class AgentCoreConversationEventStore implements ConversationEventStore {
     events: ConversationEvent[],
     options: AppendEventsOptions,
   ): Promise<void> {
+    const safeSession = sanitizeAgentCoreKey(sessionId);
+    const safeActor = sanitizeAgentCoreKey(actorId);
     let ordinal = 0;
     for (const event of events) {
       await this.client.send(
         new CreateEventCommand({
           memoryId: this.memoryId,
-          actorId,
-          sessionId,
+          actorId: safeActor,
+          sessionId: safeSession,
           eventTimestamp: new Date(event.at),
           payload: encodeEventPayload(event),
           // Deterministic token derived from the provider message id + ordinal (kit skill key rule
