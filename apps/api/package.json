@@ -1,0 +1,27 @@
+{
+  "name": "@chief-of-staff/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aws-lambda-powertools/logger": "^2.11.0",
+    "@aws-lambda-powertools/metrics": "^2.11.0",
+    "@aws-lambda-powertools/tracer": "^2.11.0",
+    "@chief-of-staff/shared": "workspace:*",
+    "@middy/core": "^5.5.1",
+    "@trpc/server": "^11.0.0-rc.638",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@chief-of-staff/tsconfig": "workspace:*",
+    "@types/aws-lambda": "^8.10.146",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
