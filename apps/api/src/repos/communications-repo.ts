@@ -1,0 +1,191 @@
+import { ConditionalCheckFailedException, DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  QueryCommand,
+  UpdateCommand,
+} from '@aws-sdk/lib-dynamodb';
+import type {
+  CommunicationState,
+  Draft,
+  NormalizedMessage,
+  Recommendation,
+  TransitionRecord,
+} from '@chief-of-staff/shared';
+
+/**
+ * Communications table repository for the API/approval layer (Task 6, design.md §7/§8). Mirrors
+ * the shape `apps/agent-handler/src/communications-repo.ts` and `apps/ingest/src/communications-repo.ts`
+ * already agree on — one item per `commId` — and adds the two capabilities the approval loop needs
+ * that neither of those owns yet: an account-scoped list query (the `byAccountStatus` GSI
+ * `lib/constructs/data-tables.ts` already provisions) and a generic conditional state-transition
+ * write (generalizing `AgentCommunicationsRepo.persistOutcome`'s single-purpose update into the
+ * approve/edit/reject/dismiss/supplyContext/send/answered set of moves the approval router drives).
+ *
+ * `sentMessageId`/`sendClaimedAt` are additive fields on the same item (Task 6 brief constraint 2:
+ * send idempotency via conditional write) — no new table, no GSI change.
+ */
+export interface ApiCommunicationRecord extends NormalizedMessage {
+  commId: string;
+  status: CommunicationState;
+  ingestedAt: string;
+  recommendation?: Recommendation;
+  draft?: Draft;
+  transitions?: TransitionRecord[];
+  /** Set once `approveDraft` claims the send — the idempotency guard (see `claimSend`). */
+  sendClaimedAt?: string;
+  /** Set on provider send confirmation (Gmail's returned message id) — proof the send happened. */
+  sentMessageId?: string;
+}
+
+let cachedClient: DynamoDBDocumentClient | undefined;
+function client(): DynamoDBDocumentClient {
+  cachedClient ??= DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+    marshallOptions: { removeUndefinedValues: true },
+  });
+  return cachedClient;
+}
+
+export const ACCOUNT_STATUS_INDEX = 'byAccountStatus';
+
+export class TransitionConflictError extends Error {
+  constructor(
+    public readonly commId: string,
+    public readonly expectedFrom: CommunicationState,
+  ) {
+    super(
+      `Communication "${commId}" was not in state "${expectedFrom}" when the transition was applied ` +
+        '(concurrent writer, or a retried request that already succeeded).',
+    );
+    this.name = 'TransitionConflictError';
+  }
+}
+
+export class SendAlreadyClaimedError extends Error {
+  constructor(public readonly commId: string) {
+    super(
+      `Communication "${commId}" already has a claimed/completed send — refusing to send again.`,
+    );
+    this.name = 'SendAlreadyClaimedError';
+  }
+}
+
+export interface CommunicationsRepo {
+  getById(commId: string): Promise<ApiCommunicationRecord | undefined>;
+  listByAccount(accountId: string, status?: CommunicationState): Promise<ApiCommunicationRecord[]>;
+
+  /**
+   * Applies one already-validated `TransitionRecord` (the caller runs it through
+   * `applyTransition` first — this repo does not re-derive legality, only persists it): sets
+   * `status` to `record.to`, appends the record to the audit trail, optionally merges `draft`
+   * (the `editDraft` case). The `ConditionExpression` guards against a concurrent/duplicate
+   * writer having already moved the record off `record.from` — fails closed with
+   * `TransitionConflictError` rather than silently double-applying.
+   */
+  transition(record: TransitionRecord, patch?: { draft?: Draft }): Promise<void>;
+
+  /**
+   * Send-idempotency claim (Task 6 brief constraint 2): a conditional write that only succeeds
+   * once per communication. `approveDraft` calls this immediately before invoking the connector's
+   * `send` — a retried/duplicate approval request for a communication that already has a claim
+   * throws `SendAlreadyClaimedError` instead of sending a second time.
+   */
+  claimSend(commId: string): Promise<void>;
+
+  /** Persists the provider's send confirmation id — called once the connector confirms delivery. */
+  recordSent(commId: string, sentMessageId: string): Promise<void>;
+}
+
+export function createCommunicationsRepo(tableName: string): CommunicationsRepo {
+  return {
+    async getById(commId) {
+      const result = await client().send(new GetCommand({ TableName: tableName, Key: { commId } }));
+      return result.Item as ApiCommunicationRecord | undefined;
+    },
+
+    async listByAccount(accountId, status) {
+      const result = await client().send(
+        new QueryCommand({
+          TableName: tableName,
+          IndexName: ACCOUNT_STATUS_INDEX,
+          KeyConditionExpression: status
+            ? 'accountId = :accountId AND #status = :status'
+            : 'accountId = :accountId',
+          ExpressionAttributeNames: status ? { '#status': 'status' } : undefined,
+          ExpressionAttributeValues: {
+            ':accountId': accountId,
+            ...(status ? { ':status': status } : {}),
+          },
+        }),
+      );
+      return (result.Items ?? []) as ApiCommunicationRecord[];
+    },
+
+    async transition(record, patch) {
+      const setClauses = [
+        '#status = :status',
+        'transitions = list_append(if_not_exists(transitions, :empty), :newTransition)',
+      ];
+      const values: Record<string, unknown> = {
+        ':status': record.to,
+        ':newTransition': [record],
+        ':empty': [] as TransitionRecord[],
+        ':expectedFrom': record.from,
+      };
+
+      if (patch?.draft) {
+        setClauses.push('draft = :draft');
+        values[':draft'] = patch.draft;
+      }
+
+      try {
+        await client().send(
+          new UpdateCommand({
+            TableName: tableName,
+            Key: { commId: record.commId },
+            UpdateExpression: `SET ${setClauses.join(', ')}`,
+            ConditionExpression: '#status = :expectedFrom',
+            ExpressionAttributeNames: { '#status': 'status' },
+            ExpressionAttributeValues: values,
+          }),
+        );
+      } catch (error) {
+        if (error instanceof ConditionalCheckFailedException) {
+          throw new TransitionConflictError(record.commId, record.from);
+        }
+        throw error;
+      }
+    },
+
+    async claimSend(commId) {
+      try {
+        await client().send(
+          new UpdateCommand({
+            TableName: tableName,
+            Key: { commId },
+            UpdateExpression: 'SET sendClaimedAt = :now',
+            ConditionExpression: 'attribute_not_exists(sendClaimedAt)',
+            ExpressionAttributeValues: { ':now': new Date().toISOString() },
+          }),
+        );
+      } catch (error) {
+        if (error instanceof ConditionalCheckFailedException) {
+          throw new SendAlreadyClaimedError(commId);
+        }
+        throw error;
+      }
+    },
+
+    async recordSent(commId, sentMessageId) {
+      await client().send(
+        new UpdateCommand({
+          TableName: tableName,
+          Key: { commId },
+          UpdateExpression: 'SET sentMessageId = :sentMessageId',
+          ConditionExpression: 'attribute_exists(commId)',
+          ExpressionAttributeValues: { ':sentMessageId': sentMessageId },
+        }),
+      );
+    },
+  };
+}

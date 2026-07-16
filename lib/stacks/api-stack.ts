@@ -6,11 +6,13 @@ import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { MetricsDashboard } from '../constructs/metrics-dashboard.js';
 import { GitHubOidcDeployRole } from '../constructs/github-oidc-deploy-role.js';
 import { PROJECT_NAME } from '../constructs/tags.js';
 import { TaggedStack } from '../constructs/tagged-stack.js';
+import type { IngestStack } from './ingest-stack.js';
 
 const SERVICE_NAME = 'chief-of-staff-api';
 const METRICS_NAMESPACE = 'ChiefOfStaffApi';
@@ -19,11 +21,22 @@ const GITHUB_REPO = 'jzubielik/chief-of-staff-communication-agent';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API_HANDLER_ENTRY = path.join(__dirname, '../../apps/api/src/handler.ts');
 
+export interface ApiStackProps extends cdk.StackProps {
+  /**
+   * IngestStack provides the communications + accounts tables the approval loop (Task 6) reads/
+   * writes: `listCommunications`/`getCommunication`/every transition procedure, and the account
+   * permission guard's ownership lookup. Optional so ApiStack still synthesizes standalone (same
+   * pattern as AgentStack's `ragStack`/`ingestStack` props) — unset, the API Lambda's `requireEnv`
+   * throws a clear error at first request rather than the stack failing to synthesize.
+   */
+  readonly ingestStack?: IngestStack;
+}
+
 export class ApiStack extends TaggedStack {
   /** No custom domain — this account owns none; execute-api default URL is used (documented adaptation). */
   public readonly apiUrl: string;
 
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props?: ApiStackProps) {
     super(scope, id, props);
 
     const handler = new nodejs.NodejsFunction(this, 'TrpcHandler', {
@@ -47,6 +60,12 @@ export class ApiStack extends TaggedStack {
         NODE_OPTIONS: '--enable-source-maps',
         POWERTOOLS_SERVICE_NAME: SERVICE_NAME,
         POWERTOOLS_METRICS_NAMESPACE: METRICS_NAMESPACE,
+        ...(props?.ingestStack
+          ? {
+              COMMUNICATIONS_TABLE_NAME: props.ingestStack.communicationsTableName,
+              ACCOUNTS_TABLE_NAME: props.ingestStack.accountsTableName,
+            }
+          : {}),
       },
       bundling: {
         minify: true,
@@ -57,6 +76,48 @@ export class ApiStack extends TaggedStack {
           "import { createRequire as topLevelCreateRequire } from 'module'; const require = topLevelCreateRequire(import.meta.url);",
       },
     });
+
+    // --- IAM: approval loop reads/writes the communications+accounts tables, sends via Gmail ---
+    if (props?.ingestStack) {
+      handler.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
+          resources: [
+            props.ingestStack.communicationsTableArn,
+            `${props.ingestStack.communicationsTableArn}/index/*`,
+          ],
+        }),
+      );
+      handler.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['dynamodb:GetItem'],
+          resources: [props.ingestStack.accountsTableArn],
+        }),
+      );
+    }
+
+    // Gmail send needs the same OAuth secrets the ingest poller/processor already read (Task 6
+    // brief constraint 2/5: `gmail.send` scope already requested, no re-consent). Same
+    // name-pattern grant `ingest-stack.ts` uses — Secrets Manager appends a random ARN suffix, so
+    // a wildcard is required for a name-based grant.
+    const gmailOAuthClientSecretArn = cdk.Stack.of(this).formatArn({
+      service: 'secretsmanager',
+      resource: 'secret',
+      resourceName: 'cos/gmail-oauth-client-??????',
+      arnFormat: cdk.ArnFormat.COLON_RESOURCE_NAME,
+    });
+    const gmailTokenSecretArnPattern = cdk.Stack.of(this).formatArn({
+      service: 'secretsmanager',
+      resource: 'secret',
+      resourceName: 'cos/gmail-token-*',
+      arnFormat: cdk.ArnFormat.COLON_RESOURCE_NAME,
+    });
+    handler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [gmailOAuthClientSecretArn, gmailTokenSecretArnPattern],
+      }),
+    );
 
     const httpApi = new apigwv2.HttpApi(this, 'HttpApi', {
       apiName: `${PROJECT_NAME}-api`,
@@ -84,6 +145,16 @@ export class ApiStack extends TaggedStack {
     const { dashboard } = new MetricsDashboard(this, 'ApiMetricsDashboard', {
       dashboardName: `${PROJECT_NAME}-api`,
       namespace: METRICS_NAMESPACE,
+      // Approval-loop metrics (Task 6, design.md §7) ride the same processed-vs-failed graph
+      // shape as the generic request counters — DraftApproved/ReplySent/CommunicationDismissed on
+      // the "processed" axis, SendFailed alongside RequestFailed on the "failed" axis.
+      processedMetricNames: [
+        'RequestProcessed',
+        'DraftApproved',
+        'ReplySent',
+        'CommunicationDismissed',
+      ],
+      failedMetricNames: ['RequestFailed', 'SendFailed'],
     });
 
     new cdk.CfnOutput(this, 'DashboardName', { value: dashboard.dashboardName });

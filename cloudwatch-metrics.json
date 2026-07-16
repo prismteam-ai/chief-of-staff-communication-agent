@@ -102,6 +102,41 @@
       "unit": "Count",
       "service": "agent",
       "description": "Emitted once per agent turn whose post-persist AgentCore Memory append (CreateEvent) failed. Isolated like ChunkIndexFailed/AgentTriggerFailed on the ingest service: the recommendation/draft is already persisted by the time this can fire, so a memory-append failure never fails the turn or triggers SQS redelivery — it is a warn-and-count degradation only."
+    },
+    {
+      "name": "DraftApproved",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per communication whose draft is approved via the approveDraft tRPC procedure (design.md §7), immediately before the send handoff to the owning connector."
+    },
+    {
+      "name": "ReplySent",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per communication that reaches answered after a successful provider send confirmation (design.md §7 'sent -> answered activity closure') — the approval loop's terminal success signal."
+    },
+    {
+      "name": "SendFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per approveDraft call whose connector send (e.g. Gmail messages.send) threw. The communication is left at status 'approved' (not 'sent'), never silently marked answered — a retried approveDraft call re-attempts the send."
+    },
+    {
+      "name": "SendDuration",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Milliseconds",
+      "service": "api",
+      "description": "Wall-clock time for one connector send call (approveDraft's send handoff), from just before calling connector.send to its resolution or rejection."
+    },
+    {
+      "name": "CommunicationDismissed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per communication transitioned to dismissed via the dismiss tRPC procedure (design.md §7 'no reply needed') — a terminal state that stops the overdue clock alongside answered."
     }
   ]
 }

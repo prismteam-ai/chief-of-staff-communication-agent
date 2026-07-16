@@ -21,5 +21,7 @@ const ragStack = new RagStack(app, 'RagStack', { env });
 // the ingest side (see ingest-stack.ts / agent-stack.ts) so there is no CloudFormation cycle.
 const ingestStack = new IngestStack(app, 'IngestStack', { env, ragStack });
 new AgentStack(app, 'AgentStack', { env, ingestStack, ragStack });
-new ApiStack(app, 'ApiStack', { env });
+// ApiStack (Task 6) depends on IngestStack for the communications + accounts tables the approval
+// loop reads/writes and the account permission guard's ownership lookup.
+new ApiStack(app, 'ApiStack', { env, ingestStack });
 new AmplifyStack(app, 'AmplifyStack', { env });
