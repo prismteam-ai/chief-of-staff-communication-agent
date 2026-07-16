@@ -61,3 +61,65 @@ export function chunkNormalizedMessage(message: NormalizedMessage): Chunk[] {
     },
   ];
 }
+
+/**
+ * The minimal shape `chunkAsanaTask` needs from an Asana task (Task 7, design.md §4 "Asana tasks/
+ * projects/milestones/comments"). Deliberately a STRUCTURAL subset, not `AsanaTask` from
+ * `@chief-of-staff/connectors` — `packages/rag` stays dependency-light (see this module's/
+ * package's doc comments: RAG owns no connector deps), so the caller (`scripts/sync-asana.ts`,
+ * which already depends on both packages) adapts an `AsanaClient` result into this shape.
+ */
+export interface AsanaTaskChunkInput {
+  gid: string;
+  name: string;
+  notes?: string;
+  completed?: boolean;
+  permalinkUrl?: string;
+  dueOn?: string | null;
+  /** ISO-8601 modification/sync timestamp — becomes the chunk's `ts` metadata. */
+  ts: string;
+  /** The account this Asana project context is scoped to for this demo (permission boundary). */
+  accountId: string;
+}
+
+/**
+ * v1 Asana chunking (design.md §4: "extends the Task 4 corpus with live Asana context (tasks/
+ * projects/milestones/comments indexed)", brief constraint 5: "sync reads ONLY project_gid tasks").
+ * One chunk per task, combining name + notes (which already carries the communication provenance
+ * back-reference — see `AsanaClient.formatProvenanceNote`) — mirrors `chunkNormalizedMessage`'s
+ * whole-body-chunk v1 shape so both source types flow through the exact same index/retrieval path.
+ *
+ * `asanaGid` is set in metadata so `linking.ts`'s cross-channel `filterSearch` can join a
+ * communication's `metadata.asanaGid` back to this chunk (design.md §4 "not embeddings alone").
+ *
+ * A task with no name AND no notes yields no chunk (nothing meaningful to embed) — mirrors
+ * `chunkNormalizedMessage`'s empty-body handling.
+ */
+export function chunkAsanaTask(task: AsanaTaskChunkInput): Chunk[] {
+  const text = [task.name, task.notes].filter((s): s is string => Boolean(s?.trim())).join('\n\n');
+  if (text.trim().length === 0) {
+    return [];
+  }
+
+  const sourceId = `asana#${task.gid}`;
+  const chunkIndex = 0;
+  const chunkId = chunkIdFor(sourceId, chunkIndex, text);
+
+  return [
+    {
+      chunkId,
+      sourceId,
+      chunkIndex,
+      textForEmbedding: text,
+      textForContext: text,
+      metadata: {
+        channel: 'asana',
+        accountId: task.accountId,
+        participants: [],
+        asanaGid: task.gid,
+        ts: task.ts,
+        sourceType: 'asana',
+      },
+    },
+  ];
+}

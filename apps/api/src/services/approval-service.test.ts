@@ -104,6 +104,9 @@ function fakeCommunicationsRepo(
     async recordSent(commId, sentMessageId) {
       state.record = { ...state.record, sentMessageId };
     },
+    async linkAsanaTask(commId, taskGid, permalink) {
+      state.record = { ...state.record, asanaTaskGid: taskGid, asanaTaskPermalink: permalink };
+    },
   };
 }
 

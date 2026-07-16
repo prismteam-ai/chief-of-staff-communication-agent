@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { chunkIdFor, chunkNormalizedMessage } from './chunk.js';
+import { chunkIdFor, chunkNormalizedMessage, chunkAsanaTask } from './chunk.js';
+import type { AsanaTaskChunkInput } from './chunk.js';
 import type { NormalizedMessage } from '@chief-of-staff/shared';
 
 function message(overrides: Partial<NormalizedMessage> = {}): NormalizedMessage {
@@ -89,5 +90,61 @@ describe('chunkNormalizedMessage', () => {
   it('produces an empty chunk list for an empty body rather than an empty-vector chunk', () => {
     const empty = message({ body: '   ' });
     expect(chunkNormalizedMessage(empty)).toHaveLength(0);
+  });
+});
+
+function asanaTask(overrides: Partial<AsanaTaskChunkInput> = {}): AsanaTaskChunkInput {
+  return {
+    gid: 'task-42',
+    name: 'Follow up: Meridian contract review',
+    notes:
+      '--- Chief of Staff Communication Agent ---\ncommId: gmail#msg-1\nchannel: gmail\nthread: thread-1',
+    completed: false,
+    permalinkUrl: 'https://app.asana.com/0/1216652353711401/task-42',
+    dueOn: '2026-07-20',
+    ts: '2026-07-16T20:00:00.000Z',
+    accountId: 'acct_alex',
+    ...overrides,
+  };
+}
+
+describe('chunkAsanaTask', () => {
+  it('produces one whole-task chunk (v1 chunking) combining name + notes', () => {
+    const chunks = chunkAsanaTask(asanaTask());
+    expect(chunks).toHaveLength(1);
+    const chunk = chunks[0]!;
+    expect(chunk.textForEmbedding).toContain('Meridian contract review');
+    expect(chunk.textForEmbedding).toContain('commId: gmail#msg-1');
+    expect(chunk.metadata.sourceType).toBe('asana');
+    expect(chunk.metadata.channel).toBe('asana');
+    expect(chunk.metadata.accountId).toBe('acct_alex');
+  });
+
+  it('derives a deterministic chunk id namespaced under asana# and the task gid', () => {
+    const chunk = chunkAsanaTask(asanaTask())[0]!;
+    expect(chunk.sourceId).toBe('asana#task-42');
+    expect(chunk.chunkId).toBe(chunkIdFor('asana#task-42', 0, chunk.textForEmbedding));
+  });
+
+  it('carries the task gid into metadata.asanaGid for cross-channel linking', () => {
+    const chunk = chunkAsanaTask(asanaTask())[0]!;
+    expect(chunk.metadata.asanaGid).toBe('task-42');
+  });
+
+  it('produces one chunk from name alone when notes is empty', () => {
+    const chunks = chunkAsanaTask(asanaTask({ notes: '' }));
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]!.textForEmbedding).toBe('Follow up: Meridian contract review');
+  });
+
+  it('produces an empty chunk list when both name and notes are empty', () => {
+    expect(chunkAsanaTask(asanaTask({ name: '', notes: '' }))).toHaveLength(0);
+  });
+
+  it('changes the chunk id when the task is renamed or notes are updated (re-sync produces a fresh id)', () => {
+    const original = chunkAsanaTask(asanaTask())[0]!;
+    const renamed = chunkAsanaTask(asanaTask({ name: 'Renamed follow-up' }))[0]!;
+    expect(renamed.chunkId).not.toBe(original.chunkId);
+    expect(renamed.sourceId).toBe(original.sourceId);
   });
 });

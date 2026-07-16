@@ -10,6 +10,7 @@ import type {
   Draft,
   NormalizedMessage,
   Recommendation,
+  SuggestedAsanaAction,
   TransitionRecord,
 } from '@chief-of-staff/shared';
 
@@ -44,6 +45,21 @@ export interface ApiCommunicationRecord extends NormalizedMessage {
    * not discarded.
    */
   suppliedContext?: string[];
+  /**
+   * The agent's proposed Asana action for this communication (Task 7 constraint 4: "PROPOSES not
+   * executes"), persisted by `run-agent-turn.ts` when the `manageAsana` tool was called this turn.
+   * A suggestion only — never evidence that an Asana write happened. Cleared implicitly once a
+   * human acts on it: `linkAsana`/`createAsanaFollowup` persist `asanaTaskGid` instead.
+   */
+  suggestedAsanaAction?: SuggestedAsanaAction;
+  /**
+   * Set once a human approves the Asana action via `createAsanaFollowup`/`linkAsana` — the real
+   * Asana task gid this communication is linked to (Task 7 constraint 3: "the link is visible from
+   * both sides"). Undefined until a human-approved write actually happens.
+   */
+  asanaTaskGid?: string;
+  /** The linked task's `permalink_url`, cached at link time for the dashboard/UI to show directly. */
+  asanaTaskPermalink?: string;
 }
 
 let cachedClient: DynamoDBDocumentClient | undefined;
@@ -114,6 +130,16 @@ export interface CommunicationsRepo {
 
   /** Persists the provider's send confirmation id — called once the connector confirms delivery. */
   recordSent(commId: string, sentMessageId: string): Promise<void>;
+
+  /**
+   * Persists the human-approved Asana link (Task 7): `asanaTaskGid`/`asanaTaskPermalink` on the
+   * communication record, so "the link is visible from both sides" (brief `Verify`) — the Asana
+   * task carries a back-reference comment (`AsanaClient.linkToCommunication`) and the communication
+   * record carries the gid/permalink. Idempotent by construction: re-linking the same commId to the
+   * same gid just overwrites with the same values (no conditional write needed — this is a plain
+   * attribute set, not a state-machine transition).
+   */
+  linkAsanaTask(commId: string, taskGid: string, permalink: string | undefined): Promise<void>;
 }
 
 export function createCommunicationsRepo(tableName: string): CommunicationsRepo {
@@ -223,6 +249,24 @@ export function createCommunicationsRepo(tableName: string): CommunicationsRepo 
           UpdateExpression: 'SET sentMessageId = :sentMessageId',
           ConditionExpression: 'attribute_exists(commId)',
           ExpressionAttributeValues: { ':sentMessageId': sentMessageId },
+        }),
+      );
+    },
+
+    async linkAsanaTask(commId, taskGid, permalink) {
+      const setClauses = ['asanaTaskGid = :gid'];
+      const values: Record<string, unknown> = { ':gid': taskGid };
+      if (permalink) {
+        setClauses.push('asanaTaskPermalink = :permalink');
+        values[':permalink'] = permalink;
+      }
+      await client().send(
+        new UpdateCommand({
+          TableName: tableName,
+          Key: { commId },
+          UpdateExpression: `SET ${setClauses.join(', ')}`,
+          ConditionExpression: 'attribute_exists(commId)',
+          ExpressionAttributeValues: values,
         }),
       );
     },

@@ -1,9 +1,12 @@
 import type { ChannelType } from '@chief-of-staff/shared';
 import type { Connector } from '@chief-of-staff/connectors';
+import { AsanaClient } from '@chief-of-staff/connectors/asana';
 import { router } from '../trpc.js';
 import { healthRouter } from './health.js';
 import { createCommunicationsRouter } from './communications.js';
+import { createAsanaRouter } from './asana.js';
 import { ApprovalService } from '../services/approval-service.js';
+import { AsanaService } from '../services/asana-service.js';
 import { createCommunicationsRepo } from '../repos/communications-repo.js';
 import { createAccountsRepo } from '../repos/accounts-repo.js';
 import { createRealGmailConnector } from '../gmail-send.js';
@@ -18,6 +21,7 @@ const env = loadApiRuntimeEnv();
 // connector is built lazily/cached so a cold start with no communications table configured (e.g.
 // unit tests importing this module indirectly) never throws at import time.
 let cachedApprovalService: ApprovalService | undefined;
+let cachedAsanaService: AsanaService | undefined;
 
 function connectorFor(channelType: ChannelType): Connector | undefined {
   // Gmail is the only sendable channel wired today (design.md's Live tier — channel-access-tiers.md);
@@ -47,9 +51,26 @@ function approvalService(): ApprovalService {
   return cachedApprovalService;
 }
 
+function asanaService(): AsanaService {
+  if (!cachedAsanaService) {
+    if (!env.communicationsTableName || !env.accountsTableName) {
+      throw new Error('COMMUNICATIONS_TABLE_NAME and ACCOUNTS_TABLE_NAME must be set');
+    }
+    cachedAsanaService = new AsanaService({
+      asanaClient: new AsanaClient(),
+      communicationsRepo: createCommunicationsRepo(env.communicationsTableName),
+      accountsRepo: createAccountsRepo(env.accountsTableName),
+      log: logger,
+      metricsClient: metrics,
+    });
+  }
+  return cachedAsanaService;
+}
+
 export const appRouter = router({
   health: healthRouter,
   communications: createCommunicationsRouter(() => approvalService()),
+  asana: createAsanaRouter(() => asanaService()),
 });
 
 export type AppRouter = typeof appRouter;

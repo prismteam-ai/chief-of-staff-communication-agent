@@ -109,6 +109,9 @@ function inMemoryCommunicationsRepo(
     async recordSent(commId, sentMessageId) {
       record = { ...record, sentMessageId };
     },
+    async linkAsanaTask(commId, taskGid, permalink) {
+      record = { ...record, asanaTaskGid: taskGid, asanaTaskPermalink: permalink };
+    },
   };
 }
 
