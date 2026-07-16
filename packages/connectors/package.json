@@ -17,6 +17,10 @@
     "./gmail": {
       "types": "./dist/gmail/index.d.ts",
       "default": "./dist/gmail/index.js"
+    },
+    "./asana": {
+      "types": "./dist/asana/index.d.ts",
+      "default": "./dist/asana/index.js"
     }
   },
   "scripts": {
@@ -28,7 +32,8 @@
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.1088.0",
     "@chief-of-staff/shared": "workspace:*",
-    "googleapis": "^173.0.0"
+    "googleapis": "^173.0.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@chief-of-staff/tsconfig": "workspace:*",
