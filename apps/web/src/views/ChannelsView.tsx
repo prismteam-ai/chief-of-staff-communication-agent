@@ -27,7 +27,8 @@ const CHANNEL_LABELS: Record<ChannelType, string> = {
 };
 
 const CONNECT_INSTRUCTIONS: Partial<Record<ChannelType, string>> = {
-  gmail: 'Run `just gmail-auth` from the project root — a one-time OAuth consent screen opens, ' +
+  gmail:
+    'Run `just gmail-auth` from the project root — a one-time OAuth consent screen opens, ' +
     'and the connected mailbox appears here automatically once it completes.',
 };
 

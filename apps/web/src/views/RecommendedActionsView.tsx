@@ -30,15 +30,21 @@ export function RecommendedActionsView(props: RecommendedActionsViewProps) {
 
   const filteredSorted = useMemo(() => {
     const list = (communications ?? []).filter(
-      (c) => c.recommendation && (actionFilter === 'all' || c.recommendation.actionType === actionFilter),
+      (c) =>
+        c.recommendation &&
+        (actionFilter === 'all' || c.recommendation.actionType === actionFilter),
     );
     const sorted = [...list];
     switch (sortKey) {
       case 'confidence-desc':
-        sorted.sort((a, b) => (b.recommendation?.confidence ?? 0) - (a.recommendation?.confidence ?? 0));
+        sorted.sort(
+          (a, b) => (b.recommendation?.confidence ?? 0) - (a.recommendation?.confidence ?? 0),
+        );
         break;
       case 'confidence-asc':
-        sorted.sort((a, b) => (a.recommendation?.confidence ?? 0) - (b.recommendation?.confidence ?? 0));
+        sorted.sort(
+          (a, b) => (a.recommendation?.confidence ?? 0) - (b.recommendation?.confidence ?? 0),
+        );
         break;
       case 'oldest':
         sorted.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
@@ -109,7 +115,9 @@ export function RecommendedActionsView(props: RecommendedActionsViewProps) {
               background: '#fff',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}
+            >
               <strong>{counterpart(c)}</strong>
               <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
                 {c.channelType} · {new Date(c.ts).toLocaleString()}

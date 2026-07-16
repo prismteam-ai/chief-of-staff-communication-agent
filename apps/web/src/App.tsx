@@ -199,7 +199,9 @@ export function App() {
       setDrafts((prev) => prev?.map((c) => (c.commId === commId ? updated : c)));
       // A resolved draft (approved/dismissed/etc.) no longer belongs in the awaiting-approval list.
       setDrafts((prev) =>
-        prev?.filter((c) => c.commId !== commId || ['drafted', 'awaiting_approval'].includes(updated.status)),
+        prev?.filter(
+          (c) => c.commId !== commId || ['drafted', 'awaiting_approval'].includes(updated.status),
+        ),
       );
     } catch (error) {
       const message = error instanceof TrpcError ? error.message : String(error);
@@ -225,8 +227,8 @@ export function App() {
     >
       <h1>Chief of Staff — Dashboard</h1>
       <p style={{ color: '#4b5563' }}>
-        Communication volume, recommended actions, and approvals for one connected account at a
-        time — every view below is scoped server-side to the signed-in user&apos;s own accounts.
+        Communication volume, recommended actions, and approvals for one connected account at a time
+        — every view below is scoped server-side to the signed-in user&apos;s own accounts.
       </p>
 
       <fieldset style={{ marginBottom: '1.5rem', border: '1px solid #d1d5db', borderRadius: 8 }}>
@@ -334,11 +336,15 @@ export function App() {
           error={draftsError}
           busyCommId={busyCommId}
           actionErrors={actionErrors}
-          onApprove={(commId) => void runAction(commId, () => client!.approveDraft({ commId, userId }))}
+          onApprove={(commId) =>
+            void runAction(commId, () => client!.approveDraft({ commId, userId }))
+          }
           onEdit={(commId, newBody) =>
             void runAction(commId, () => client!.editDraft({ commId, userId, newBody }))
           }
-          onReject={(commId) => void runAction(commId, () => client!.rejectDraft({ commId, userId }))}
+          onReject={(commId) =>
+            void runAction(commId, () => client!.rejectDraft({ commId, userId }))
+          }
           onDismiss={(commId) => void runAction(commId, () => client!.dismiss({ commId, userId }))}
           onSupplyContext={(commId, text) =>
             void runAction(commId, () => client!.supplyContext({ commId, userId, text }))
@@ -382,12 +388,18 @@ export function App() {
               communication={c}
               busy={busyCommId === c.commId}
               error={actionErrors[c.commId] || undefined}
-              onApprove={(commId) => void runAction(commId, () => client!.approveDraft({ commId, userId }))}
+              onApprove={(commId) =>
+                void runAction(commId, () => client!.approveDraft({ commId, userId }))
+              }
               onEdit={(commId, newBody) =>
                 void runAction(commId, () => client!.editDraft({ commId, userId, newBody }))
               }
-              onReject={(commId) => void runAction(commId, () => client!.rejectDraft({ commId, userId }))}
-              onDismiss={(commId) => void runAction(commId, () => client!.dismiss({ commId, userId }))}
+              onReject={(commId) =>
+                void runAction(commId, () => client!.rejectDraft({ commId, userId }))
+              }
+              onDismiss={(commId) =>
+                void runAction(commId, () => client!.dismiss({ commId, userId }))
+              }
               onSupplyContext={(commId, text) =>
                 void runAction(commId, () => client!.supplyContext({ commId, userId, text }))
               }
