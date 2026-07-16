@@ -18,11 +18,11 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@chief-of-staff/shared": "workspace:*"
+    "@chief-of-staff/shared": "workspace:*",
+    "vitest": "^2.1.8"
   },
   "devDependencies": {
     "@chief-of-staff/tsconfig": "workspace:*",
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "typescript": "^5.7.2"
   }
 }
