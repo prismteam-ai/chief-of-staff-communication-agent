@@ -18,6 +18,10 @@
       "types": "./dist/gmail/index.d.ts",
       "default": "./dist/gmail/index.js"
     },
+    "./whatsapp": {
+      "types": "./dist/whatsapp/index.d.ts",
+      "default": "./dist/whatsapp/index.js"
+    },
     "./asana": {
       "types": "./dist/asana/index.d.ts",
       "default": "./dist/asana/index.js"
