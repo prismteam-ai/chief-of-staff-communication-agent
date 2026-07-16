@@ -2,6 +2,7 @@ import type { ChannelType } from '@chief-of-staff/shared';
 import type { Connector } from '@chief-of-staff/connectors';
 import { AsanaClient } from '@chief-of-staff/connectors/asana';
 import { createStyleProfileRepo } from '@chief-of-staff/agent-handler/style';
+import type { RetrievalIndex } from '@chief-of-staff/rag';
 import {
   createSignedOpenSearchClient,
   OpenSearchRetrievalIndex,
@@ -12,13 +13,16 @@ import { createCommunicationsRouter } from './communications.js';
 import { createAsanaRouter } from './asana.js';
 import { createMetricsRouter } from './metrics.js';
 import { createAccountsRouter } from './accounts.js';
+import { createMcpRouter } from './mcp.js';
 import { ApprovalService } from '../services/approval-service.js';
 import { AsanaService } from '../services/asana-service.js';
 import { MetricsService } from '../services/metrics-service.js';
+import { McpAuthService } from '../services/mcp-auth-service.js';
 import { createStyleFeedbackHook } from '../services/style-feedback.js';
 import type { StyleFeedbackHook } from '../services/style-feedback.js';
 import { createCommunicationsRepo } from '../repos/communications-repo.js';
 import { createAccountsRepo, type AccountsRepo } from '../repos/accounts-repo.js';
+import { createMcpTokensRepo } from '../repos/mcp-tokens-repo.js';
 import { createRealGmailConnector } from '../gmail-send.js';
 import { createRealWhatsAppConnector } from '../whatsapp-send.js';
 import { createAgentTrigger, noopAgentTrigger } from '../agent-trigger.js';
@@ -35,6 +39,7 @@ let cachedApprovalService: ApprovalService | undefined;
 let cachedAsanaService: AsanaService | undefined;
 let cachedMetricsService: MetricsService | undefined;
 let cachedAccountsRepo: AccountsRepo | undefined;
+let cachedMcpAuthService: McpAuthService | undefined;
 
 function connectorFor(channelType: ChannelType): Connector | undefined {
   // Gmail (Live tier) and WhatsApp (Sandbox tier — Task 9) are the sendable channels wired today
@@ -122,12 +127,44 @@ function accountsRepo(): AccountsRepo {
   return cachedAccountsRepo;
 }
 
+function mcpAuthService(): McpAuthService {
+  if (!cachedMcpAuthService) {
+    if (!env.mcpTokensTableName) {
+      throw new Error('MCP_TOKENS_TABLE_NAME must be set');
+    }
+    cachedMcpAuthService = new McpAuthService({
+      tokensRepo: createMcpTokensRepo(env.mcpTokensTableName),
+      log: logger,
+      metricsClient: metrics,
+    });
+  }
+  return cachedMcpAuthService;
+}
+
+/** Task 11: `undefined` (not wired) unless `RAG_DOMAIN_ENDPOINT` is set — `routers/mcp.ts`'s
+ * `retrieveContext` then returns a clear `PRECONDITION_FAILED` rather than crashing, same posture
+ * as `styleFeedbackHook()` above. Built fresh per call (not cached) — cheap client construction,
+ * same choice `styleFeedbackHook()` makes. */
+function retrievalIndex(): RetrievalIndex | undefined {
+  if (!env.ragDomainEndpoint) return undefined;
+  return new OpenSearchRetrievalIndex(
+    createSignedOpenSearchClient({ endpoint: env.ragDomainEndpoint, region: env.region }),
+  );
+}
+
 export const appRouter = router({
   health: healthRouter,
   communications: createCommunicationsRouter(() => approvalService()),
   asana: createAsanaRouter(() => asanaService()),
   metrics: createMetricsRouter(() => metricsService()),
   accounts: createAccountsRouter(() => accountsRepo()),
+  mcp: createMcpRouter({
+    authService: mcpAuthService,
+    approvalService,
+    asanaService,
+    accountsRepo,
+    retrievalIndex,
+  }),
 });
 
 export type AppRouter = typeof appRouter;

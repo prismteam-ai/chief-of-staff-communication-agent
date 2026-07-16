@@ -94,6 +94,8 @@ export class ApiStack extends TaggedStack {
               ACCOUNTS_TABLE_NAME: props.ingestStack.accountsTableName,
               // Task 10 feedback loop: bumps the style profile's sourceCount on a successful send.
               STYLE_PROFILES_TABLE_NAME: props.ingestStack.styleProfilesTableName,
+              // Task 11: per-user MCP token issuance/verification (routers/mcp.ts).
+              MCP_TOKENS_TABLE_NAME: props.ingestStack.mcpTokensTableName,
             }
           : {}),
         // Task 10 feedback loop: indexes the sent reply as a new sent_style exemplar. Unset when
@@ -140,6 +142,15 @@ export class ApiStack extends TaggedStack {
         new iam.PolicyStatement({
           actions: ['dynamodb:GetItem', 'dynamodb:PutItem'],
           resources: [props.ingestStack.styleProfilesTableArn],
+        }),
+      );
+      // Task 11: MCP token issuance (PutItem, conditional on no existing hash), verification
+      // (GetItem), and best-effort lastUsedAt bookkeeping (UpdateItem) — `McpTokensRepo`'s three
+      // operations, same single-table access shape as the style-profiles grant above.
+      handler.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem'],
+          resources: [props.ingestStack.mcpTokensTableArn],
         }),
       );
     }
@@ -396,6 +407,10 @@ export class ApiStack extends TaggedStack {
         // here — see whatsapp-webhook-handler.ts's doc comment for why).
         'WhatsAppIngested',
         'WhatsAppSent',
+        // Task 11: MCP token issuance + every successful MCP-authenticated tool invocation join the
+        // processed axis — the tRPC-level equivalent of the other channel-specific counters above.
+        'McpTokenIssued',
+        'McpToolInvoked',
       ],
       failedMetricNames: [
         'RequestFailed',
@@ -406,6 +421,10 @@ export class ApiStack extends TaggedStack {
         'WhatsAppIngestFailed',
         'WhatsAppSendFailed',
         'WhatsAppSignatureRejected',
+        // Task 11: rejected MCP bearer tokens (forged, revoked, unknown) — the security-relevant
+        // denial counter, same "denial belongs on the failed axis" precedent as
+        // AsanaScopeViolationRejected above.
+        'McpAuthFailed',
       ],
     });
 

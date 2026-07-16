@@ -60,6 +60,8 @@ export class IngestStack extends TaggedStack {
   public readonly dedupeTableArn: string;
   public readonly styleProfilesTableName: string;
   public readonly styleProfilesTableArn: string;
+  public readonly mcpTokensTableName: string;
+  public readonly mcpTokensTableArn: string;
   public readonly rawArtifactBucketName: string;
   public readonly rawArtifactBucketArn: string;
   public readonly ingestQueueUrl: string;
@@ -80,6 +82,8 @@ export class IngestStack extends TaggedStack {
     this.dedupeTableArn = tables.dedupeTable.tableArn;
     this.styleProfilesTableName = tables.styleProfilesTable.tableName;
     this.styleProfilesTableArn = tables.styleProfilesTable.tableArn;
+    this.mcpTokensTableName = tables.mcpTokensTable.tableName;
+    this.mcpTokensTableArn = tables.mcpTokensTable.tableArn;
     this.rawArtifactBucketName = tables.rawArtifactBucket.bucketName;
     this.rawArtifactBucketArn = tables.rawArtifactBucket.bucketArn;
 
@@ -87,6 +91,7 @@ export class IngestStack extends TaggedStack {
     new cdk.CfnOutput(this, 'AccountsTableName', { value: this.accountsTableName });
     new cdk.CfnOutput(this, 'DedupeTableName', { value: this.dedupeTableName });
     new cdk.CfnOutput(this, 'StyleProfilesTableName', { value: this.styleProfilesTableName });
+    new cdk.CfnOutput(this, 'McpTokensTableName', { value: this.mcpTokensTableName });
     new cdk.CfnOutput(this, 'RawArtifactBucketName', { value: this.rawArtifactBucketName });
 
     // --- SQS: ingest queue + DLQ + the full alarm rule -------------------------------------

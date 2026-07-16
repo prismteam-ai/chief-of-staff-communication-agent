@@ -28,6 +28,10 @@ export class DataTables extends Construct {
   /** PK `userId` — the learned per-user style profile (design.md §6). */
   public readonly styleProfilesTable: dynamodb.Table;
 
+  /** PK `tokenHash` (SHA-256 of the plaintext token, never the token itself) — per-user MCP tokens
+   * the Cursor MCP server authenticates with (Task 11, design.md §8). */
+  public readonly mcpTokensTable: dynamodb.Table;
+
   /** Raw provider payloads and attachments (design.md §4 "S3 for raw artifacts and attachments"). */
   public readonly rawArtifactBucket: s3.Bucket;
 
@@ -72,6 +76,14 @@ export class DataTables extends Construct {
     this.styleProfilesTable = new dynamodb.Table(this, 'StyleProfilesTable', {
       tableName: `${prefix}-style-profiles`,
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: false },
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    this.mcpTokensTable = new dynamodb.Table(this, 'McpTokensTable', {
+      tableName: `${prefix}-mcp-tokens`,
+      partitionKey: { name: 'tokenHash', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: false },
       removalPolicy: cdk.RemovalPolicy.DESTROY,

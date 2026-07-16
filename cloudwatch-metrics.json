@@ -279,6 +279,27 @@
       "unit": "Count",
       "service": "api",
       "description": "Emitted once per Twilio Messages API send call that threw (Task 9) — the channel-dimensioned counterpart to the generic SendFailed metric. The communication is left at status 'approved', never silently marked answered; a retried approveDraft re-attempts the send (same idempotent-claim pattern as Gmail)."
+    },
+    {
+      "name": "McpTokenIssued",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per successful `issueMcpToken` call (Task 11, design.md §8) — the dashboard minting a new per-user bearer token for the Cursor MCP server. Only the token's SHA-256 hash is ever persisted; this metric carries no token material."
+    },
+    {
+      "name": "McpToolInvoked",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per MCP-authenticated tRPC call that passed the bearer-token gate (Task 11) — every `routers/mcp.ts` procedure behind the `authed` middleware (retrieveContext, recommendAction, draftReply, approveDraft, supplyContext, manageAsanaCreate, manageAsanaLink)."
+    },
+    {
+      "name": "McpAuthFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per MCP call whose bearer token was missing, unknown, forged, or revoked (Task 11) — the security-relevant denial counter proving a forged/other-user token never resolves to a userId; graphed on the failed axis alongside AsanaScopeViolationRejected."
     }
   ]
 }

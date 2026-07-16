@@ -28,6 +28,10 @@ export interface ApiRuntimeEnv {
    * console/sandbox config exactly (scheme+host+path), since it is part of the signed data
    * (`verifyTwilioSignature`). Empty in local/test contexts that never verify signatures for real. */
   readonly whatsappWebhookUrl: string;
+  /** Task 11: per-user MCP token table (`tokenHash` PK) — `routers/mcp.ts`'s token issuance/
+   * verification. Empty -> `routers/index.ts`'s `mcpAuthService()` throws a clear error at first
+   * request, same posture as the other required-table checks in this file. */
+  readonly mcpTokensTableName: string;
 }
 
 export function loadApiRuntimeEnv(source: NodeJS.ProcessEnv = process.env): ApiRuntimeEnv {
@@ -40,5 +44,6 @@ export function loadApiRuntimeEnv(source: NodeJS.ProcessEnv = process.env): ApiR
     ragDomainEndpoint: source.RAG_DOMAIN_ENDPOINT?.trim() ?? '',
     dedupeTableName: source.DEDUPE_TABLE_NAME?.trim() ?? '',
     whatsappWebhookUrl: source.WHATSAPP_WEBHOOK_URL?.trim() ?? '',
+    mcpTokensTableName: source.MCP_TOKENS_TABLE_NAME?.trim() ?? '',
   };
 }
