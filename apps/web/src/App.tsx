@@ -12,6 +12,7 @@ import { MetricsView } from './views/MetricsView.js';
 import { RecommendedActionsView } from './views/RecommendedActionsView.js';
 import { DraftsAwaitingApprovalView } from './views/DraftsAwaitingApprovalView.js';
 import { ChannelsView } from './views/ChannelsView.js';
+import { LoginView } from './views/LoginView.js';
 
 /**
  * The full dashboard (Task 8, design.md §8): metrics / recommended-actions / drafts-awaiting-
@@ -19,27 +20,19 @@ import { ChannelsView } from './views/ChannelsView.js';
  * discarded — brief: "EXTEND into full dashboard, don't discard"). A simple tab nav switches
  * between them; each view fetches its own account-scoped data through `trpc-client.ts`.
  *
- * Auth (Task 8 brief constraint 3): still no real session auth — `accountId`/`userId` remain plain
- * inputs (a demo-user selector below), persisted to localStorage for convenience. The permission
- * boundary is NOT this UI's job: every tRPC procedure (communications, metrics, accounts) calls
- * `assertAccountAccess` against the accounts table server-side, so typing a different `userId`/
- * `accountId` here only ever succeeds if the API's own ownership lookup agrees — proven by the
- * account-scoping tests in `apps/api/src/services/metrics-service.test.ts` and the router
- * integration tests. Two named demo-user presets are offered as a convenience; see
- * `docs/setup.md`/the task report for the second demo user's provisioning status.
+ * Auth (Task 8.5 — closes the Task 8 v0 gap): the dashboard used to send a plain, client-supplied
+ * `userId` on every call — nothing stopped a stranger from typing `userId: "demo-alex"` and acting
+ * as that user, even though every procedure's own `assertAccountAccess` check was real. There is no
+ * demo-user selector anymore: a real login screen (`LoginView`) collects a username/password,
+ * calls `auth.login`, and the server verifies the credential BEFORE minting a session token — the
+ * SAME token machinery Task 11 built for the MCP server (`McpAuthService`). The token is persisted
+ * to localStorage and sent as `Authorization: Bearer <token>` on every subsequent call
+ * (`trpc-client.ts`'s `getToken`); no procedure input carries `userId` anymore, so there is nothing
+ * left for a client to forge. A 401 (missing/invalid/forged/expired token) drops the session and
+ * shows the login screen again.
  */
 
 const DEFAULT_API_URL = (import.meta.env.VITE_API_URL ?? '').trim();
-
-interface DemoUserPreset {
-  label: string;
-  userId: string;
-  accountId: string;
-}
-
-const DEMO_USER_PRESETS: DemoUserPreset[] = [
-  { label: 'demo-alex (Gmail)', userId: 'demo-alex', accountId: 'acct-gmail-demoalex775' },
-];
 
 const STATUS_FILTERS: { label: string; value: CommunicationState | 'all' }[] = [
   { label: 'All', value: 'all' },
@@ -61,6 +54,10 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]['key'];
 
+const DEFAULT_ACCOUNT_ID = 'acct-gmail-demoalex775';
+const SESSION_TOKEN_KEY = 'cos.sessionToken';
+const SESSION_USER_ID_KEY = 'cos.sessionUserId';
+
 function usePersistedState(key: string, initial: string): [string, (v: string) => void] {
   const [value, setValue] = useState(() => localStorage.getItem(key) ?? initial);
   useEffect(() => {
@@ -71,15 +68,64 @@ function usePersistedState(key: string, initial: string): [string, (v: string) =
 
 export function App() {
   const [apiUrl, setApiUrl] = usePersistedState('cos.apiUrl', DEFAULT_API_URL);
-  const [accountId, setAccountId] = usePersistedState(
-    'cos.accountId',
-    DEMO_USER_PRESETS[0]!.accountId,
+  const [accountId, setAccountId] = usePersistedState('cos.accountId', DEFAULT_ACCOUNT_ID);
+
+  // --- Session (Task 8.5): a session token replaces the old demo-user selector entirely. ---
+  const [sessionToken, setSessionToken] = useState<string | undefined>(
+    () => localStorage.getItem(SESSION_TOKEN_KEY) ?? undefined,
   );
-  const [userId, setUserId] = usePersistedState('cos.userId', DEMO_USER_PRESETS[0]!.userId);
+  const [sessionUserId, setSessionUserId] = useState<string | undefined>(
+    () => localStorage.getItem(SESSION_USER_ID_KEY) ?? undefined,
+  );
+  const [loginError, setLoginError] = useState<string | undefined>();
+  const [loginBusy, setLoginBusy] = useState(false);
+
   const [activeTab, setActiveTab] = useState<TabKey>('metrics');
   const [statusFilter, setStatusFilter] = useState<CommunicationState | 'all'>('all');
 
-  const client = useMemo(() => (apiUrl ? createApiClient(apiUrl) : undefined), [apiUrl]);
+  const client = useMemo(
+    () => (apiUrl ? createApiClient(apiUrl, () => sessionToken) : undefined),
+    [apiUrl, sessionToken],
+  );
+
+  function clearSession() {
+    setSessionToken(undefined);
+    setSessionUserId(undefined);
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+    localStorage.removeItem(SESSION_USER_ID_KEY);
+  }
+
+  /** Every data-loading callback below funnels its error through this — a 401 means the token is
+   * missing/invalid/forged/expired, so the session is dropped and the login screen reappears
+   * (brief constraint 3: "On 401/invalid token -> show login again"), rather than showing a raw
+   * error message next to a dashboard the user can no longer actually use. */
+  function handleLoadError(error: unknown): string | undefined {
+    if (error instanceof TrpcError) {
+      if (error.isUnauthorized) {
+        clearSession();
+        return undefined;
+      }
+      return error.message;
+    }
+    return String(error);
+  }
+
+  async function handleLogin(username: string, password: string) {
+    if (!client) return;
+    setLoginBusy(true);
+    setLoginError(undefined);
+    try {
+      const result = await client.login({ username, password });
+      setSessionToken(result.token);
+      setSessionUserId(result.userId);
+      localStorage.setItem(SESSION_TOKEN_KEY, result.token);
+      localStorage.setItem(SESSION_USER_ID_KEY, result.userId);
+    } catch (error) {
+      setLoginError(error instanceof TrpcError ? error.message : String(error));
+    } finally {
+      setLoginBusy(false);
+    }
+  }
 
   // --- Approval queue (Task 6, unchanged behavior) ---
   const [communications, setCommunications] = useState<CommunicationDto[]>([]);
@@ -111,74 +157,73 @@ export function App() {
   const [actionErrors, setActionErrors] = useState<Record<string, string>>({});
 
   const refreshQueue = useCallback(async () => {
-    if (!client) return;
+    if (!client || !sessionToken) return;
     setQueueLoading(true);
     setQueueError(undefined);
     try {
       const result = await client.listCommunications({
         accountId,
-        userId,
         status: statusFilter === 'all' ? undefined : statusFilter,
       });
       setCommunications(result);
     } catch (error) {
-      setQueueError(error instanceof TrpcError ? error.message : String(error));
+      setQueueError(handleLoadError(error));
     } finally {
       setQueueLoading(false);
     }
-  }, [client, accountId, userId, statusFilter]);
+  }, [client, sessionToken, accountId, statusFilter]);
 
   const refreshMetrics = useCallback(async () => {
-    if (!client) return;
+    if (!client || !sessionToken) return;
     setMetricsLoading(true);
     setMetricsError(undefined);
     try {
-      setMetrics(await client.getDashboardMetrics({ accountId, userId }));
+      setMetrics(await client.getDashboardMetrics({ accountId }));
     } catch (error) {
-      setMetricsError(error instanceof TrpcError ? error.message : String(error));
+      setMetricsError(handleLoadError(error));
     } finally {
       setMetricsLoading(false);
     }
-  }, [client, accountId, userId]);
+  }, [client, sessionToken, accountId]);
 
   const refreshRecommended = useCallback(async () => {
-    if (!client) return;
+    if (!client || !sessionToken) return;
     setRecommendedLoading(true);
     setRecommendedError(undefined);
     try {
-      setRecommended(await client.listRecommendedActions({ accountId, userId }));
+      setRecommended(await client.listRecommendedActions({ accountId }));
     } catch (error) {
-      setRecommendedError(error instanceof TrpcError ? error.message : String(error));
+      setRecommendedError(handleLoadError(error));
     } finally {
       setRecommendedLoading(false);
     }
-  }, [client, accountId, userId]);
+  }, [client, sessionToken, accountId]);
 
   const refreshDrafts = useCallback(async () => {
-    if (!client) return;
+    if (!client || !sessionToken) return;
     setDraftsLoading(true);
     setDraftsError(undefined);
     try {
-      setDrafts(await client.listDraftsAwaitingApproval({ accountId, userId }));
+      setDrafts(await client.listDraftsAwaitingApproval({ accountId }));
     } catch (error) {
-      setDraftsError(error instanceof TrpcError ? error.message : String(error));
+      setDraftsError(handleLoadError(error));
     } finally {
       setDraftsLoading(false);
     }
-  }, [client, accountId, userId]);
+  }, [client, sessionToken, accountId]);
 
   const refreshAccounts = useCallback(async () => {
-    if (!client) return;
+    if (!client || !sessionToken) return;
     setAccountsLoading(true);
     setAccountsError(undefined);
     try {
-      setAccounts(await client.listConnectedAccounts({ userId }));
+      setAccounts(await client.listConnectedAccounts());
     } catch (error) {
-      setAccountsError(error instanceof TrpcError ? error.message : String(error));
+      setAccountsError(handleLoadError(error));
     } finally {
       setAccountsLoading(false);
     }
-  }, [client, userId]);
+  }, [client, sessionToken]);
 
   // Load the active tab's data whenever it becomes active or the connection/filter changes.
   useEffect(() => {
@@ -204,6 +249,10 @@ export function App() {
         ),
       );
     } catch (error) {
+      if (error instanceof TrpcError && error.isUnauthorized) {
+        clearSession();
+        return;
+      }
       const message = error instanceof TrpcError ? error.message : String(error);
       setActionErrors((prev) => ({ ...prev, [commId]: message }));
     } finally {
@@ -211,10 +260,7 @@ export function App() {
     }
   }
 
-  function applyDemoUser(preset: DemoUserPreset) {
-    setUserId(preset.userId);
-    setAccountId(preset.accountId);
-  }
+  const isLoggedIn = Boolean(sessionToken && sessionUserId);
 
   return (
     <main
@@ -228,7 +274,8 @@ export function App() {
       <h1>Chief of Staff — Dashboard</h1>
       <p style={{ color: '#4b5563' }}>
         Communication volume, recommended actions, and approvals for one connected account at a time
-        — every view below is scoped server-side to the signed-in user&apos;s own accounts.
+        — every view below is scoped server-side to the signed-in user&apos;s own accounts, resolved
+        from your session token, never from anything typed into this page.
       </p>
 
       <fieldset style={{ marginBottom: '1.5rem', border: '1px solid #d1d5db', borderRadius: 8 }}>
@@ -243,28 +290,16 @@ export function App() {
               style={{ width: '100%' }}
             />
           </label>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <label>
-              Demo user{' '}
-              <select
-                data-testid="demo-user-select"
-                value={userId}
-                onChange={(e) => {
-                  const preset = DEMO_USER_PRESETS.find((p) => p.userId === e.target.value);
-                  if (preset) applyDemoUser(preset);
-                }}
-              >
-                {DEMO_USER_PRESETS.map((p) => (
-                  <option key={p.userId} value={p.userId}>
-                    {p.label}
-                  </option>
-                ))}
-                {!DEMO_USER_PRESETS.some((p) => p.userId === userId) && (
-                  <option value={userId}>{userId} (custom)</option>
-                )}
-              </select>
-            </label>
-          </div>
+          {isLoggedIn && (
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span data-testid="session-user">
+                Signed in as <strong>{sessionUserId}</strong>
+              </span>
+              <button type="button" data-testid="logout-button" onClick={() => clearSession()}>
+                Log out
+              </button>
+            </div>
+          )}
           <label>
             Account id
             <input
@@ -273,139 +308,129 @@ export function App() {
               style={{ width: '100%' }}
             />
           </label>
-          <label>
-            User id
-            <input
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              style={{ width: '100%' }}
-            />
-          </label>
         </div>
       </fieldset>
 
       {!apiUrl && <p style={{ color: '#b91c1c' }}>Set the API URL above to load the dashboard.</p>}
 
-      <nav
-        role="tablist"
-        style={{
-          display: 'flex',
-          gap: '0.25rem',
-          borderBottom: '1px solid #d1d5db',
-          marginBottom: '1.5rem',
-          flexWrap: 'wrap',
-        }}
-      >
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            role="tab"
-            aria-selected={activeTab === tab.key}
-            data-testid={`tab-${tab.key}`}
-            onClick={() => setActiveTab(tab.key)}
+      {apiUrl && !isLoggedIn && (
+        <LoginView onLogin={handleLogin} busy={loginBusy} error={loginError} />
+      )}
+
+      {apiUrl && isLoggedIn && (
+        <>
+          <nav
+            role="tablist"
             style={{
-              padding: '0.5rem 0.9rem',
-              border: 'none',
-              borderBottom: activeTab === tab.key ? '2px solid #4338ca' : '2px solid transparent',
-              background: 'none',
-              fontWeight: activeTab === tab.key ? 700 : 400,
-              cursor: 'pointer',
+              display: 'flex',
+              gap: '0.25rem',
+              borderBottom: '1px solid #d1d5db',
+              marginBottom: '1.5rem',
+              flexWrap: 'wrap',
             }}
           >
-            {tab.label}
-          </button>
-        ))}
-      </nav>
-
-      {apiUrl && activeTab === 'metrics' && (
-        <MetricsView metrics={metrics} loading={metricsLoading} error={metricsError} />
-      )}
-
-      {apiUrl && activeTab === 'recommended' && (
-        <RecommendedActionsView
-          communications={recommended}
-          loading={recommendedLoading}
-          error={recommendedError}
-        />
-      )}
-
-      {apiUrl && activeTab === 'drafts' && (
-        <DraftsAwaitingApprovalView
-          communications={drafts}
-          loading={draftsLoading}
-          error={draftsError}
-          busyCommId={busyCommId}
-          actionErrors={actionErrors}
-          onApprove={(commId) =>
-            void runAction(commId, () => client!.approveDraft({ commId, userId }))
-          }
-          onEdit={(commId, newBody) =>
-            void runAction(commId, () => client!.editDraft({ commId, userId, newBody }))
-          }
-          onReject={(commId) =>
-            void runAction(commId, () => client!.rejectDraft({ commId, userId }))
-          }
-          onDismiss={(commId) => void runAction(commId, () => client!.dismiss({ commId, userId }))}
-          onSupplyContext={(commId, text) =>
-            void runAction(commId, () => client!.supplyContext({ commId, userId, text }))
-          }
-        />
-      )}
-
-      {apiUrl && activeTab === 'channels' && (
-        <ChannelsView accounts={accounts} loading={accountsLoading} error={accountsError} />
-      )}
-
-      {apiUrl && activeTab === 'queue' && (
-        <section data-testid="approval-queue-view">
-          <div style={{ marginBottom: '1rem' }}>
-            <label>
-              Status filter{' '}
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as CommunicationState | 'all')}
+            {TABS.map((tab) => (
+              <button
+                key={tab.key}
+                role="tab"
+                aria-selected={activeTab === tab.key}
+                data-testid={`tab-${tab.key}`}
+                onClick={() => setActiveTab(tab.key)}
+                style={{
+                  padding: '0.5rem 0.9rem',
+                  border: 'none',
+                  borderBottom: activeTab === tab.key ? '2px solid #4338ca' : '2px solid transparent',
+                  background: 'none',
+                  fontWeight: activeTab === tab.key ? 700 : 400,
+                  cursor: 'pointer',
+                }}
               >
-                {STATUS_FILTERS.map((f) => (
-                  <option key={f.value} value={f.value}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </label>{' '}
-            <button onClick={() => void refreshQueue()} disabled={queueLoading}>
-              {queueLoading ? 'Loading…' : 'Refresh'}
-            </button>
-          </div>
+                {tab.label}
+              </button>
+            ))}
+          </nav>
 
-          {queueError && <p style={{ color: '#b91c1c' }}>Failed to load: {queueError}</p>}
-          {!queueLoading && !queueError && communications.length === 0 && (
-            <p style={{ color: '#6b7280' }}>No communications match this filter.</p>
+          {activeTab === 'metrics' && (
+            <MetricsView metrics={metrics} loading={metricsLoading} error={metricsError} />
           )}
 
-          {communications.map((c) => (
-            <CommunicationCard
-              key={c.commId}
-              communication={c}
-              busy={busyCommId === c.commId}
-              error={actionErrors[c.commId] || undefined}
-              onApprove={(commId) =>
-                void runAction(commId, () => client!.approveDraft({ commId, userId }))
-              }
+          {activeTab === 'recommended' && (
+            <RecommendedActionsView
+              communications={recommended}
+              loading={recommendedLoading}
+              error={recommendedError}
+            />
+          )}
+
+          {activeTab === 'drafts' && (
+            <DraftsAwaitingApprovalView
+              communications={drafts}
+              loading={draftsLoading}
+              error={draftsError}
+              busyCommId={busyCommId}
+              actionErrors={actionErrors}
+              onApprove={(commId) => void runAction(commId, () => client!.approveDraft({ commId }))}
               onEdit={(commId, newBody) =>
-                void runAction(commId, () => client!.editDraft({ commId, userId, newBody }))
+                void runAction(commId, () => client!.editDraft({ commId, newBody }))
               }
-              onReject={(commId) =>
-                void runAction(commId, () => client!.rejectDraft({ commId, userId }))
-              }
-              onDismiss={(commId) =>
-                void runAction(commId, () => client!.dismiss({ commId, userId }))
-              }
+              onReject={(commId) => void runAction(commId, () => client!.rejectDraft({ commId }))}
+              onDismiss={(commId) => void runAction(commId, () => client!.dismiss({ commId }))}
               onSupplyContext={(commId, text) =>
-                void runAction(commId, () => client!.supplyContext({ commId, userId, text }))
+                void runAction(commId, () => client!.supplyContext({ commId, text }))
               }
             />
-          ))}
-        </section>
+          )}
+
+          {activeTab === 'channels' && (
+            <ChannelsView accounts={accounts} loading={accountsLoading} error={accountsError} />
+          )}
+
+          {activeTab === 'queue' && (
+            <section data-testid="approval-queue-view">
+              <div style={{ marginBottom: '1rem' }}>
+                <label>
+                  Status filter{' '}
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as CommunicationState | 'all')}
+                  >
+                    {STATUS_FILTERS.map((f) => (
+                      <option key={f.value} value={f.value}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>{' '}
+                <button onClick={() => void refreshQueue()} disabled={queueLoading}>
+                  {queueLoading ? 'Loading…' : 'Refresh'}
+                </button>
+              </div>
+
+              {queueError && <p style={{ color: '#b91c1c' }}>Failed to load: {queueError}</p>}
+              {!queueLoading && !queueError && communications.length === 0 && (
+                <p style={{ color: '#6b7280' }}>No communications match this filter.</p>
+              )}
+
+              {communications.map((c) => (
+                <CommunicationCard
+                  key={c.commId}
+                  communication={c}
+                  busy={busyCommId === c.commId}
+                  error={actionErrors[c.commId] || undefined}
+                  onApprove={(commId) => void runAction(commId, () => client!.approveDraft({ commId }))}
+                  onEdit={(commId, newBody) =>
+                    void runAction(commId, () => client!.editDraft({ commId, newBody }))
+                  }
+                  onReject={(commId) => void runAction(commId, () => client!.rejectDraft({ commId }))}
+                  onDismiss={(commId) => void runAction(commId, () => client!.dismiss({ commId }))}
+                  onSupplyContext={(commId, text) =>
+                    void runAction(commId, () => client!.supplyContext({ commId, text }))
+                  }
+                />
+              ))}
+            </section>
+          )}
+        </>
       )}
     </main>
   );

@@ -4,13 +4,20 @@ import type { Page } from '@playwright/test';
  * Deterministic fixture data + a `page.route` mock for the tRPC HTTP contract (Task 8 design
  * tests). Design tests must render the SAME three views the live dashboard ships with — metrics,
  * recommended actions, drafts-awaiting-approval — without depending on AWS, so every
- * `metrics.*`/`communications.*`/`accounts.*` GET/POST is intercepted here and answered with fixed
- * fixture data matching the real tRPC envelope shape (`{result:{data:...}}`) `trpc-client.ts`
- * expects.
+ * `auth.*`/`metrics.*`/`communications.*`/`accounts.*` GET/POST is intercepted here and answered
+ * with fixed fixture data matching the real tRPC envelope shape (`{result:{data:...}}`)
+ * `trpc-client.ts` expects.
+ *
+ * Task 8.5: the dashboard now requires a session token before it renders any view — `gotoDashboard`
+ * pre-seeds `cos.sessionToken`/`cos.sessionUserId` in localStorage (the SAME keys `App.tsx` reads),
+ * skipping the interactive login step every design test would otherwise have to repeat. This is a
+ * design-fixture convenience only; the LIVE proof of the real `auth.login` round trip is a separate,
+ * unmocked check (see `test/browser/deployed-dashboard.spec.ts`).
  */
 
 const FIXTURE_ACCOUNT_ID = 'acct-gmail-demoalex775';
 const FIXTURE_USER_ID = 'demo-alex';
+const FIXTURE_SESSION_TOKEN = 'cos_mcp_fixturefixturefixturefixturefixturefixturefixturefixture01';
 
 export const FIXTURE_METRICS = {
   totalVolume: 12,
@@ -89,6 +96,9 @@ function envelope(data: unknown) {
 /** Installs mock routes for every tRPC procedure the dashboard calls, keyed by procedure name in
  * the request URL/path — works for both GET (`?input=`) queries and POST mutations. */
 export async function mockDashboardApi(page: Page): Promise<void> {
+  await page.route('**/auth.login*', async (route) => {
+    await route.fulfill({ json: envelope({ token: FIXTURE_SESSION_TOKEN, userId: FIXTURE_USER_ID }) });
+  });
   await page.route('**/metrics.getDashboardMetrics*', async (route) => {
     await route.fulfill({ json: envelope(FIXTURE_METRICS) });
   });
@@ -108,17 +118,24 @@ export async function mockDashboardApi(page: Page): Promise<void> {
 
 export const FIXTURE_API_URL = 'https://mock-api.test';
 
-/** Loads the dashboard with mocked routes installed and the API URL preset via localStorage,
- * skipping the "type in an API URL" step every design test would otherwise repeat. */
+/** Loads the dashboard with mocked routes installed, the API URL preset, and an already-valid
+ * session token/userId pre-seeded via localStorage (Task 8.5) — skipping both the "type in an API
+ * URL" step and the interactive login step every design test would otherwise repeat. */
 export async function gotoDashboard(page: Page): Promise<void> {
   await mockDashboardApi(page);
   await page.addInitScript(
-    (init: { apiUrl: string; accountId: string; userId: string }) => {
+    (init: { apiUrl: string; accountId: string; sessionToken: string; userId: string }) => {
       window.localStorage.setItem('cos.apiUrl', init.apiUrl);
       window.localStorage.setItem('cos.accountId', init.accountId);
-      window.localStorage.setItem('cos.userId', init.userId);
+      window.localStorage.setItem('cos.sessionToken', init.sessionToken);
+      window.localStorage.setItem('cos.sessionUserId', init.userId);
     },
-    { apiUrl: FIXTURE_API_URL, accountId: FIXTURE_ACCOUNT_ID, userId: FIXTURE_USER_ID },
+    {
+      apiUrl: FIXTURE_API_URL,
+      accountId: FIXTURE_ACCOUNT_ID,
+      sessionToken: FIXTURE_SESSION_TOKEN,
+      userId: FIXTURE_USER_ID,
+    },
   );
   await page.goto('/');
 }

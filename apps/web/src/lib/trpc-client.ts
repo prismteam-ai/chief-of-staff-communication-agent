@@ -15,6 +15,12 @@ import type {
  * `@trpc/client` + React Query setup is Task 8's dashboard scope; this task's UI only needs to be
  * "functionally usable by a stranger end-to-end" (brief constraint 4), so a dependency-light typed
  * fetch wrapper is the proportionate choice here.
+ *
+ * Auth (Task 8.5): `createApiClient` takes a `getToken` callback instead of the caller threading
+ * `userId` through every method — every request now sends `Authorization: Bearer <token>` (when a
+ * token is available) and NO procedure input carries `userId` anymore. The server resolves
+ * `userId` from the verified token; a client can no longer act as an arbitrary user by typing a
+ * different `userId` into the input, because there is no `userId` input left to type.
  */
 
 export interface Participant {
@@ -69,10 +75,19 @@ export interface ConnectedAccountDto {
   createdAt: string;
 }
 
+export interface LoginResult {
+  token: string;
+  userId: string;
+}
+
 export class TrpcError extends Error {
   constructor(
     message: string,
     public readonly procedure: string,
+    /** `true` when the server responded UNAUTHORIZED (missing/invalid/forged bearer token) — the
+     * caller (`App.tsx`) uses this to drop back to the login screen rather than showing a generic
+     * error, satisfying "On 401/invalid token -> show login again." */
+    public readonly isUnauthorized: boolean = false,
   ) {
     super(message);
     this.name = 'TrpcError';
@@ -83,22 +98,37 @@ interface TrpcSuccessEnvelope<T> {
   result: { data: T };
 }
 interface TrpcErrorEnvelope {
-  error: { message: string; code?: string };
+  error: { message: string; code?: string; data?: { httpStatus?: number } };
 }
 
 function isErrorEnvelope(body: unknown): body is TrpcErrorEnvelope {
   return typeof body === 'object' && body !== null && 'error' in body;
 }
 
-export function createApiClient(baseUrl: string) {
-  async function query<T>(procedure: string, input: unknown): Promise<T> {
-    const url = `${baseUrl.replace(/\/$/, '')}/${procedure}?input=${encodeURIComponent(JSON.stringify(input))}`;
-    const response = await fetch(url, { method: 'GET' });
+/** `getToken` is read fresh on every call (not captured once) so a token obtained after the
+ * client was constructed — or cleared on logout — is always the one actually sent. */
+export function createApiClient(baseUrl: string, getToken: () => string | undefined = () => undefined) {
+  function authHeaders(): Record<string, string> {
+    const token = getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  function throwIfError(response: Response, body: unknown, procedure: string): void {
+    if (response.ok && !isErrorEnvelope(body)) return;
+    const message = isErrorEnvelope(body) ? body.error.message : `HTTP ${response.status}`;
+    const code = isErrorEnvelope(body) ? body.error.code : undefined;
+    const isUnauthorized = response.status === 401 || code === 'UNAUTHORIZED';
+    throw new TrpcError(message, procedure, isUnauthorized);
+  }
+
+  async function query<T>(procedure: string, input?: unknown): Promise<T> {
+    const url =
+      input === undefined
+        ? `${baseUrl.replace(/\/$/, '')}/${procedure}`
+        : `${baseUrl.replace(/\/$/, '')}/${procedure}?input=${encodeURIComponent(JSON.stringify(input))}`;
+    const response = await fetch(url, { method: 'GET', headers: { ...authHeaders() } });
     const body: unknown = await response.json();
-    if (!response.ok || isErrorEnvelope(body)) {
-      const message = isErrorEnvelope(body) ? body.error.message : `HTTP ${response.status}`;
-      throw new TrpcError(message, procedure);
-    }
+    throwIfError(response, body, procedure);
     return (body as TrpcSuccessEnvelope<T>).result.data;
   }
 
@@ -106,45 +136,41 @@ export function createApiClient(baseUrl: string) {
     const url = `${baseUrl.replace(/\/$/, '')}/${procedure}`;
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(input),
     });
     const body: unknown = await response.json();
-    if (!response.ok || isErrorEnvelope(body)) {
-      const message = isErrorEnvelope(body) ? body.error.message : `HTTP ${response.status}`;
-      throw new TrpcError(message, procedure);
-    }
+    throwIfError(response, body, procedure);
     return (body as TrpcSuccessEnvelope<T>).result.data;
   }
 
   return {
-    listCommunications: (input: {
-      accountId: string;
-      userId: string;
-      status?: CommunicationState;
-    }) => query<CommunicationDto[]>('communications.listCommunications', input),
-    getCommunication: (input: { commId: string; userId: string }) =>
+    // --- Auth (Task 8.5): the ONE procedure that never sends a bearer token — there isn't one yet. ---
+    login: (input: { username: string; password: string }) =>
+      mutate<LoginResult>('auth.login', input),
+
+    listCommunications: (input: { accountId: string; status?: CommunicationState }) =>
+      query<CommunicationDto[]>('communications.listCommunications', input),
+    getCommunication: (input: { commId: string }) =>
       query<CommunicationDto>('communications.getCommunication', input),
-    approveDraft: (input: { commId: string; userId: string }) =>
+    approveDraft: (input: { commId: string }) =>
       mutate<CommunicationDto>('communications.approveDraft', input),
-    editDraft: (input: { commId: string; userId: string; newBody: string }) =>
+    editDraft: (input: { commId: string; newBody: string }) =>
       mutate<CommunicationDto>('communications.editDraft', input),
-    rejectDraft: (input: { commId: string; userId: string }) =>
+    rejectDraft: (input: { commId: string }) =>
       mutate<CommunicationDto>('communications.rejectDraft', input),
-    dismiss: (input: { commId: string; userId: string }) =>
-      mutate<CommunicationDto>('communications.dismiss', input),
-    supplyContext: (input: { commId: string; userId: string; text: string }) =>
+    dismiss: (input: { commId: string }) => mutate<CommunicationDto>('communications.dismiss', input),
+    supplyContext: (input: { commId: string; text: string }) =>
       mutate<CommunicationDto>('communications.supplyContext', input),
 
     // --- Task 8 dashboard views: server-side aggregation/reads, account-scoped (design.md §8) ---
-    getDashboardMetrics: (input: { accountId: string; userId: string }) =>
+    getDashboardMetrics: (input: { accountId: string }) =>
       query<DashboardMetrics>('metrics.getDashboardMetrics', input),
-    listRecommendedActions: (input: { accountId: string; userId: string }) =>
+    listRecommendedActions: (input: { accountId: string }) =>
       query<CommunicationDto[]>('metrics.listRecommendedActions', input),
-    listDraftsAwaitingApproval: (input: { accountId: string; userId: string }) =>
+    listDraftsAwaitingApproval: (input: { accountId: string }) =>
       query<CommunicationDto[]>('metrics.listDraftsAwaitingApproval', input),
-    listConnectedAccounts: (input: { userId: string }) =>
-      query<ConnectedAccountDto[]>('accounts.listConnectedAccounts', input),
+    listConnectedAccounts: () => query<ConnectedAccountDto[]>('accounts.listConnectedAccounts'),
   };
 }
 
