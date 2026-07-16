@@ -194,6 +194,70 @@ describe('buildStyleProfile', () => {
     expect(result.exemplarsIndexed).toBe(30); // ALL replies still indexed as exemplars, only extraction is sampled
   });
 
+  it('final-review fix: a rebuild never regresses sourceCount below a prior feedback-driven bump', async () => {
+    const { extractor } = fakeExtractor();
+    const { repo, store } = fakeRepo();
+    const retrievalIndex = new InMemoryRetrievalIndex();
+
+    // First build: sourceCount = 2 (the fixture corpus size).
+    await buildStyleProfile(
+      { userId: 'user-alex', accountId: 'acct-alex', sentReplies: fixtureSentReplies },
+      { extractor, styleProfileRepo: repo, retrievalIndex, log, metricsClient, embed: noopEmbed },
+    );
+    expect(store.get('user-alex')?.sourceCount).toBe(2);
+
+    // The style feedback loop bumps sourceCount for a channel this rebuild's Gmail-only corpus
+    // fetch never sees (e.g. an approved WhatsApp reply) — sourceCount is now AHEAD of the corpus.
+    await repo.bumpSourceCount('user-alex');
+    await repo.bumpSourceCount('user-alex');
+    expect(store.get('user-alex')?.sourceCount).toBe(4);
+
+    // Re-running build-style-profile with the SAME (still 2-item) Gmail corpus must NOT clobber
+    // the feedback-driven count back down to 2 — the fix under test.
+    await buildStyleProfile(
+      { userId: 'user-alex', accountId: 'acct-alex', sentReplies: fixtureSentReplies },
+      { extractor, styleProfileRepo: repo, retrievalIndex, log, metricsClient, embed: noopEmbed },
+    );
+    expect(store.get('user-alex')?.sourceCount).toBe(4);
+  });
+
+  it('final-review fix: a rebuild whose corpus genuinely grew past the feedback-bumped count wins with the larger value', async () => {
+    const { extractor } = fakeExtractor();
+    const { repo, store } = fakeRepo();
+    const retrievalIndex = new InMemoryRetrievalIndex();
+
+    await buildStyleProfile(
+      { userId: 'user-alex', accountId: 'acct-alex', sentReplies: fixtureSentReplies },
+      { extractor, styleProfileRepo: repo, retrievalIndex, log, metricsClient, embed: noopEmbed },
+    );
+    await repo.bumpSourceCount('user-alex'); // sourceCount = 3
+
+    const grownCorpus = [
+      ...fixtureSentReplies,
+      {
+        sourceId: 'seed-3',
+        body: 'Hi — noted, thanks!\n\nBest,\nAlex',
+        ts: '2026-07-04T10:00:00.000Z',
+      },
+      {
+        sourceId: 'seed-4',
+        body: 'Confirmed on my end.\n\nBest,\nAlex',
+        ts: '2026-07-05T10:00:00.000Z',
+      },
+      {
+        sourceId: 'seed-5',
+        body: 'Sounds great, see you then.\n\nBest,\nAlex',
+        ts: '2026-07-06T10:00:00.000Z',
+      },
+    ];
+    await buildStyleProfile(
+      { userId: 'user-alex', accountId: 'acct-alex', sentReplies: grownCorpus },
+      { extractor, styleProfileRepo: repo, retrievalIndex, log, metricsClient, embed: noopEmbed },
+    );
+
+    expect(store.get('user-alex')?.sourceCount).toBe(5); // corpus size (5) > feedback count (3)
+  });
+
   it('throws when given no sent replies rather than persisting an empty profile', async () => {
     const { extractor } = fakeExtractor();
     const { repo } = fakeRepo();

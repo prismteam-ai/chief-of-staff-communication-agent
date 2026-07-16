@@ -108,10 +108,23 @@ export async function buildStyleProfile(
     .map((r) => ({ body: r.body, ts: r.ts }));
   const styleCard = await extractor.extract(samples);
 
+  // Final-review fix: `sourceCount` must never regress on a rebuild. `sentReplies.length` is only
+  // THIS rebuild's corpus snapshot (`scripts/build-style-profile.ts` pulls up to
+  // `SENT_HISTORY_MAX` Gmail SENT messages) — but the feedback loop
+  // (`apps/api/src/services/style-feedback.ts#recordSentReply`, called for every channel's
+  // approved/edited-then-sent reply, not just Gmail) bumps `sourceCount` by 1 independently of
+  // this rebuild. Overwriting with the raw corpus size would silently erase any feedback-driven
+  // growth accumulated since the profile was last built (e.g. a WhatsApp send this rebuild's
+  // Gmail-only fetch never sees). Taking the max preserves whichever signal is larger — the
+  // corpus genuinely grew, or feedback already pushed the count higher — without inflating the
+  // count on a back-to-back rebuild of the same unchanged corpus.
+  const existingProfile = await styleProfileRepo.get(userId);
+  const sourceCount = Math.max(sentReplies.length, existingProfile?.sourceCount ?? 0);
+
   const record: StyleProfileRecord = {
     userId,
     styleCard,
-    sourceCount: sentReplies.length,
+    sourceCount,
     updatedAt: now().toISOString(),
   };
   await styleProfileRepo.put(record);
