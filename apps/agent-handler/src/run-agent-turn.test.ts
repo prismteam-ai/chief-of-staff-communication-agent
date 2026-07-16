@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { InMemoryRetrievalIndex } from '@chief-of-staff/rag';
-import { canTransition, type NormalizedMessage } from '@chief-of-staff/shared';
+import { InMemoryRetrievalIndex, chunkSentReply } from '@chief-of-staff/rag';
+import {
+  canTransition,
+  type NormalizedMessage,
+  type StyleCard,
+  type StyleProfileRecord,
+} from '@chief-of-staff/shared';
 import { runAgentTurn } from './run-agent-turn.js';
 import type { AgentRunner, ClassifyInput, DraftInput } from './agent/agent.js';
+import type { AgentAccountsRepo } from './accounts-repo.js';
+import type { StyleProfileRepo } from './style/style-profile-repo.js';
 import type {
   AgentCommunicationRecord,
   AgentCommunicationsRepo,
@@ -10,6 +17,7 @@ import type {
 } from './communications-repo.js';
 import { NoopConversationEventStore } from './memory/conversation-event-store.js';
 import type { RecommendationOutput } from './tools/recommend-action.js';
+import { GENERIC_STYLE_CARD } from './tools/style-profile.js';
 import type { DraftOutput } from './tools/draft-reply.js';
 
 // Silent logger/metrics stubs so tests never touch Powertools output.
@@ -391,5 +399,117 @@ describe('runAgentTurn — awaiting_reprocess re-run (Task 6 review fix: supplyC
     for (const t of outcome.transitions) {
       expect(canTransition(t.from, t.to)).toBe(true);
     }
+  });
+});
+
+const FIXED_CARD: StyleCard = {
+  tone: 'warm, direct, no filler',
+  lengthBand: 'brief',
+  signOff: 'Best,\nAlex',
+  formality: 'professional but not stiff',
+  greeting: 'Hi <first name>,',
+};
+
+function fakeAccountsRepo(map: Record<string, string>): AgentAccountsRepo {
+  return { async getOwner(accountId) { return map[accountId]; } };
+}
+
+function fakeStyleProfileRepo(record?: StyleProfileRecord): StyleProfileRepo {
+  return {
+    async get(userId) {
+      return record?.userId === userId ? record : undefined;
+    },
+    async put() {},
+    async bumpSourceCount() {
+      return false;
+    },
+  };
+}
+
+describe('runAgentTurn — style seam (Task 10): the draft prompt carries the user-specific voice', () => {
+  it('passes the GENERIC style card to the draft step when accountsRepo/styleProfileRepo are not wired', async () => {
+    const { repo } = fakeRepo(baseRecord());
+    let capturedStyle = '';
+    const runner: AgentRunner = {
+      classify: async () => ({ actionType: 'reply_needed', confidence: 0.9, rationale: 'r' }),
+      draft: async (input: DraftInput) => {
+        capturedStyle = input.styleInstructions;
+        return { body: 'draft body', confidence: 0.8 };
+      },
+    };
+
+    await runAgentTurn(
+      { commId: 'gmail#ext-1', accountId: 'acct-1' },
+      { ...commonDeps, agentRunner: runner, communicationsRepo: repo },
+    );
+
+    expect(capturedStyle).toBe(GENERIC_STYLE_CARD);
+  });
+
+  it('resolves accountId -> userId and injects the learned style card + exemplars into the draft prompt', async () => {
+    const { repo } = fakeRepo(baseRecord({ accountId: 'acct-1' }));
+    const accountsRepo = fakeAccountsRepo({ 'acct-1': 'user-alex' });
+    const styleProfileRepo = fakeStyleProfileRepo({
+      userId: 'user-alex',
+      styleCard: FIXED_CARD,
+      sourceCount: 10,
+      updatedAt: '2026-07-01T00:00:00.000Z',
+    });
+    const retrievalIndex = new InMemoryRetrievalIndex();
+    await retrievalIndex.indexChunks(
+      chunkSentReply({
+        sourceId: 'seed-1',
+        body: 'Hi Priya,\n\nHappy to sign as is.\n\nBest,\nAlex',
+        ts: '2026-07-01T00:00:00.000Z',
+        accountId: 'acct-1',
+      }).map((c) => ({ ...c, embedding: [1, 0, 0] })),
+    );
+
+    let capturedStyle = '';
+    const runner: AgentRunner = {
+      classify: async () => ({ actionType: 'reply_needed', confidence: 0.9, rationale: 'r' }),
+      draft: async (input: DraftInput) => {
+        capturedStyle = input.styleInstructions;
+        return { body: 'draft body', confidence: 0.8 };
+      },
+    };
+
+    await runAgentTurn(
+      { commId: 'gmail#ext-1', accountId: 'acct-1' },
+      {
+        ...commonDeps,
+        agentRunner: runner,
+        communicationsRepo: repo,
+        retrievalIndex,
+        accountsRepo,
+        styleProfileRepo,
+        styleEmbed: async () => [1, 0, 0],
+      },
+    );
+
+    expect(capturedStyle).not.toBe(GENERIC_STYLE_CARD);
+    expect(capturedStyle).toContain('warm, direct, no filler');
+    expect(capturedStyle).toContain('Best,\nAlex');
+  });
+
+  it('falls back to generic style when accountsRepo has no owner for this accountId', async () => {
+    const { repo } = fakeRepo(baseRecord({ accountId: 'acct-unknown' }));
+    const accountsRepo = fakeAccountsRepo({}); // no owner mapping
+    const styleProfileRepo = fakeStyleProfileRepo();
+    let capturedStyle = '';
+    const runner: AgentRunner = {
+      classify: async () => ({ actionType: 'reply_needed', confidence: 0.9, rationale: 'r' }),
+      draft: async (input: DraftInput) => {
+        capturedStyle = input.styleInstructions;
+        return { body: 'draft body', confidence: 0.8 };
+      },
+    };
+
+    await runAgentTurn(
+      { commId: 'gmail#ext-1', accountId: 'acct-unknown' },
+      { ...commonDeps, agentRunner: runner, communicationsRepo: repo, accountsRepo, styleProfileRepo },
+    );
+
+    expect(capturedStyle).toBe(GENERIC_STYLE_CARD);
   });
 });

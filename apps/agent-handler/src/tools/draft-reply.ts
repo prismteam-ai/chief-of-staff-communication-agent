@@ -1,7 +1,12 @@
 import { tool, type Tool } from 'ai';
 import { z } from 'zod';
 import { DraftSchema, type Draft } from '@chief-of-staff/shared';
-import { getStyleProfile, GENERIC_STYLE_CARD, type StyleProfile } from './style-profile.js';
+import {
+  getStyleProfile,
+  GENERIC_STYLE_CARD,
+  type GetStyleProfileDeps,
+  type StyleProfile,
+} from './style-profile.js';
 
 /**
  * `draftReply` (design.md §5 tool list). Produces a context-and-style-aware reply draft. Like
@@ -10,9 +15,10 @@ import { getStyleProfile, GENERIC_STYLE_CARD, type StyleProfile } from './style-
  * the shared `Draft` (adding `commId`/`accountId` in code). The `tool()` form is the shared typed
  * contract for the API/MCP server; its `execute` shapes + validates only.
  *
- * Style is generic v0 until Task 10 (see `style-profile.ts`): `getStyleProfile` returns `null`
- * today, so `styleInstructions` falls back to `GENERIC_STYLE_CARD`. Task 10 makes the profile real
- * with no change to this module's shape.
+ * Style is real as of Task 10 (see `style-profile.ts`): `getStyleProfile` looks up the user's
+ * learned style card + retrieves embedded exemplars of their own past sent replies; absent a
+ * profile (no `userId`, or `build-style-profile` never run for this user) it falls back to
+ * `GENERIC_STYLE_CARD`, exactly as Task 5 left it.
  */
 
 /**
@@ -42,8 +48,11 @@ export interface DraftReplyContext {
  * (`getStyleProfile`) so the fallback path is real, not hardcoded around: a real profile's style
  * card + exemplars are appended when present; otherwise the generic v0 card is used alone.
  */
-export function buildStyleInstructions(userId: string | undefined): string {
-  const profile: StyleProfile | null = getStyleProfile(userId);
+export async function buildStyleInstructions(
+  userId: string | undefined,
+  deps: GetStyleProfileDeps,
+): Promise<string> {
+  const profile: StyleProfile | null = await getStyleProfile(userId, deps);
   if (!profile) {
     return GENERIC_STYLE_CARD;
   }

@@ -10,6 +10,8 @@ import { chatModel } from './agent/model.js';
 import { createLangSmithFacade } from './observability/langsmith.js';
 import { ToolLoopAgentRunner } from './agent/agent.js';
 import { createAgentCommunicationsRepo } from './communications-repo.js';
+import { createAgentAccountsRepo } from './accounts-repo.js';
+import { createStyleProfileRepo } from './style/style-profile-repo.js';
 import { createConversationEventStore } from './memory/conversation-event-store.js';
 import { createRetrievalIndex } from './retrieval-index.js';
 import { runAgentTurn } from './run-agent-turn.js';
@@ -41,6 +43,16 @@ const AgentMessageSchema = z.object({
 const communicationsRepo = createAgentCommunicationsRepo(env.communicationsTableName);
 const conversationStore = createConversationEventStore(env);
 const retrievalIndex = createRetrievalIndex(env);
+// Task 10 style seam: both are undefined-table-name-tolerant DynamoDB wrappers (same "empty table
+// name -> the first real call throws, caught per-turn" degrade every other repo here already
+// accepts) — omitted entirely from `runAgentTurn`'s deps only when unset, so an environment that
+// has not yet deployed the style-profiles/accounts tables still runs the pre-Task-10 generic path.
+const accountsRepo = env.accountsTableName
+  ? createAgentAccountsRepo(env.accountsTableName)
+  : undefined;
+const styleProfileRepo = env.styleProfilesTableName
+  ? createStyleProfileRepo(env.styleProfilesTableName)
+  : undefined;
 
 function requireEnv(): void {
   if (!env.communicationsTableName) {
@@ -78,6 +90,8 @@ async function baseHandler(event: SQSEvent): Promise<SQSBatchResponse> {
         conversationStore,
         log: logger,
         metricsClient: metrics,
+        accountsRepo,
+        styleProfileRepo,
       });
 
       // A failed turn is reported so ONLY that record redelivers (eventually to the agent DLQ),

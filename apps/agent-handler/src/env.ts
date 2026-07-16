@@ -8,6 +8,10 @@ export interface RuntimeEnv {
   readonly region: string;
   readonly bedrockModelId: string;
   readonly communicationsTableName: string;
+  /** Style-profiles table (Task 2 `DataTables`, Task 10 read path — `getStyleProfile`). */
+  readonly styleProfilesTableName: string;
+  /** Accounts table (Task 2/6) — Task 10's `accountId -> userId` hop for the style-profiles key. */
+  readonly accountsTableName: string;
   readonly ragDomainEndpoint: string;
   /** AgentCore Memory id. Unset → the Noop event store is used (never a hard failure). */
   readonly agentcoreMemoryId: string;
@@ -37,6 +41,8 @@ export function loadRuntimeEnv(source: NodeJS.ProcessEnv = process.env): Runtime
     region: source.AWS_REGION?.trim() || 'us-east-2',
     bedrockModelId: source.BEDROCK_MODEL_ID?.trim() || DEFAULT_BEDROCK_MODEL_ID,
     communicationsTableName: source.COMMUNICATIONS_TABLE_NAME?.trim() ?? '',
+    styleProfilesTableName: source.STYLE_PROFILES_TABLE_NAME?.trim() ?? '',
+    accountsTableName: source.ACCOUNTS_TABLE_NAME?.trim() ?? '',
     ragDomainEndpoint: source.RAG_DOMAIN_ENDPOINT?.trim() ?? '',
     agentcoreMemoryId: source.AGENTCORE_MEMORY_ID?.trim() ?? '',
     chatHistoryEventLimit: Number.isFinite(parsedLimit)

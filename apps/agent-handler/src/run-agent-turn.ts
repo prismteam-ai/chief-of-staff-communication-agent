@@ -14,6 +14,8 @@ import { shapeRecommendation } from './tools/recommend-action.js';
 import { shapeDraft, buildStyleInstructions } from './tools/draft-reply.js';
 import { createManageAsanaTool } from './tools/manage-asana.js';
 import type { AgentCommunicationRecord, AgentCommunicationsRepo } from './communications-repo.js';
+import type { AgentAccountsRepo } from './accounts-repo.js';
+import type { StyleProfileRepo } from './style/style-profile-repo.js';
 import type {
   ConversationEvent,
   ConversationEventStore,
@@ -75,6 +77,19 @@ export interface RunAgentTurnDeps {
   now?: () => Date;
   /** Injectable wall-clock for the duration metric; defaults to `Date.now`. */
   clock?: () => number;
+  /**
+   * Task 10 style seam deps: resolves `accountId -> userId` (the style-profiles table's key), then
+   * looks up that user's style card + retrieves their embedded sent-reply exemplars. Optional so
+   * every EXISTING test/call site that predates Task 10 keeps compiling unchanged; when omitted the
+   * draft step falls back to the pre-Task-10 behavior (`buildStyleInstructions` with no accounts/
+   * style-profile deps resolves `userId` as `undefined`, which is the documented `GENERIC_STYLE_CARD`
+   * fallback path).
+   */
+  accountsRepo?: AgentAccountsRepo;
+  styleProfileRepo?: StyleProfileRepo;
+  /** Injectable embedder for style-exemplar retrieval so tests never call Bedrock; defaults to the
+   * real Cohere Embed v4 helper inside `getStyleProfile` when omitted. */
+  styleEmbed?: (text: string) => Promise<number[]>;
 }
 
 /** The sender is the participant with role `from` — the AgentCore Memory actor (design.md §5). */
@@ -105,6 +120,9 @@ export async function runAgentTurn(
     metricsClient,
     now = () => new Date(),
     clock = () => Date.now(),
+    accountsRepo,
+    styleProfileRepo,
+    styleEmbed,
   } = deps;
   const { commId, accountId } = input;
   const startedAt = clock();
@@ -205,13 +223,27 @@ export async function runAgentTurn(
     // draft step — the model decides whether follow-up tracking applies. It ONLY proposes (see
     // tools/manage-asana.ts's module doc: no network dependency, cannot perform a write), so binding
     // it here adds no write capability to the agent turn.
+    //
+    // Style (Task 10, design.md §6): `accountId -> userId` is resolved through `accountsRepo` (the
+    // style-profiles table's key), then the style card + embedded sent-reply exemplars for that
+    // user are looked up and injected. Both deps are OPTIONAL on `RunAgentTurnDeps` — when either
+    // is unwired, `userId` resolves to `undefined` and `buildStyleInstructions` falls back to
+    // `GENERIC_STYLE_CARD`, the exact pre-Task-10 behavior.
+    const userId = accountsRepo ? await accountsRepo.getOwner(accountId) : undefined;
+    const styleInstructions = await buildStyleInstructions(userId, {
+      styleProfileRepo,
+      retrievalIndex,
+      accountId,
+      messageText: record.body,
+      embed: styleEmbed,
+    });
     const draftOutput = await agentRunner.draft({
       sessionId,
       messageText: record.body,
       history: historyText,
       retrieveContextTool,
       actionType: recommendation.actionType,
-      styleInstructions: buildStyleInstructions(undefined),
+      styleInstructions,
       manageAsanaTool: createManageAsanaTool(),
     });
     const draft: Draft = shapeDraft({ commId, accountId }, draftOutput);
