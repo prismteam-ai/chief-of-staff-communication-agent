@@ -101,9 +101,12 @@ function encodeMimeMessage(headers: Record<string, string>, body: string): strin
 }
 
 interface SentProbe {
-  /** The id `messages.send` returns — this is the SENT-mailbox copy's id, NOT what the poller/
-   *  processor will ever see land in the INBOX (Gmail self-send creates two separate Message rows
-   *  sharing one threadId: a SENT copy and an INBOX copy, each with its own immutable `id`). */
+  /** The id `messages.send` returns. For a self-addressed send, Gmail's actual behavior varies by
+   *  account/settings — empirically confirmed against the demo account (`just verify-ingest`,
+   *  2026-07-16): Gmail delivered this as the SAME message id gaining the `INBOX` label alongside
+   *  its existing `SENT` label (`labelIds: ['SENT', 'INBOX']`), not a second message row. Other
+   *  accounts/setups have been observed to create a distinct INBOX-copy id sharing the thread
+   *  instead, so this script polls for both shapes rather than assuming one. */
   sentId: string;
   threadId: string;
 }
@@ -125,11 +128,19 @@ async function sendSelfAddressedProbe(gmail: gmail_v1.Gmail, address: string): P
 }
 
 /**
- * The poller/processor pipeline ingests whatever lands in the account's INBOX — for a
- * self-addressed send that is a *different* Gmail message id than the one `messages.send`
- * returned (same thread, distinct id, per Gmail's self-send semantics: SENT copy + INBOX copy).
- * Polls `users.threads.get` on the returned threadId until a message id other than `sentId`
- * appears, which is the inbox copy the ingest pipeline will actually process.
+ * The poller/processor pipeline ingests whatever Gmail message carries the `INBOX` label — for a
+ * self-addressed send, which concrete message id that turns out to be is empirically
+ * account-dependent (confirmed 2026-07-16 against the connected demo account, see the `SentProbe`
+ * comment above), so this polls `users.threads.get` on the returned threadId and accepts either:
+ *
+ *   (a) same-id case: the `sentId` message itself gains an `INBOX` label (`labelIds` now contains
+ *       both `SENT` and `INBOX`) — this is what the demo account actually does;
+ *   (b) new-id case: a distinct message id appears on the same thread carrying the `INBOX` label
+ *       (the two-separate-Message-rows behavior some Gmail accounts/setups exhibit instead).
+ *
+ * Checking `labelIds` (not just "some other id showed up") is what makes case (a) detectable at
+ * all — without it, a same-id self-send would look identical to "still waiting" on every poll and
+ * the script would spin until the deadline even though ingestion had already succeeded.
  */
 async function pollForInboxCopyId(
   gmail: gmail_v1.Gmail,
@@ -139,11 +150,26 @@ async function pollForInboxCopyId(
 ): Promise<string> {
   while (Date.now() < deadline) {
     const thread = await gmail.users.threads.get({ userId: 'me', id: threadId });
-    const inboxMessage = (thread.data.messages ?? []).find((m) => m.id && m.id !== sentId);
-    if (inboxMessage?.id) {
-      console.log(`[verify-ingest] Inbox copy found, Gmail message id = ${inboxMessage.id}`);
-      return inboxMessage.id;
+    const messages = thread.data.messages ?? [];
+
+    const sentMessageWithInboxLabel = messages.find(
+      (m) => m.id === sentId && (m.labelIds ?? []).includes('INBOX'),
+    );
+    if (sentMessageWithInboxLabel?.id) {
+      console.log(
+        `[verify-ingest] Inbox copy found — same id as the sent message (Gmail added the INBOX label to ${sentMessageWithInboxLabel.id}).`,
+      );
+      return sentMessageWithInboxLabel.id;
     }
+
+    const distinctInboxMessage = messages.find(
+      (m) => m.id && m.id !== sentId && (m.labelIds ?? []).includes('INBOX'),
+    );
+    if (distinctInboxMessage?.id) {
+      console.log(`[verify-ingest] Inbox copy found, distinct Gmail message id = ${distinctInboxMessage.id}`);
+      return distinctInboxMessage.id;
+    }
+
     console.log(
       `[verify-ingest] Waiting for the inbox copy to appear on thread ${threadId} (self-send delivery lag)...`,
     );

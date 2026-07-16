@@ -20,7 +20,19 @@ export function commIdFor(channelType: string, externalId: string): string {
 
 let cachedClient: DynamoDBDocumentClient | undefined;
 function client(): DynamoDBDocumentClient {
-  cachedClient ??= DynamoDBDocumentClient.from(new DynamoDBClient({}));
+  // `removeUndefinedValues: true` is required here (unlike accounts-repo.ts/dedupe-repo.ts, whose
+  // items never carry an optional field that can be `undefined`): a `NormalizedMessage`'s
+  // `Participant.displayName` is `undefined` — key present, not omitted — whenever the sender/
+  // recipient header has no display name (e.g. Gmail's `packages/connectors/src/gmail/normalize.ts`
+  // on a bare "user@example.com" header, which every seed-demo fixture message and every
+  // verify-ingest self-send probe hits). The SDK's default marshaller silently drops a top-level
+  // `undefined` but *throws* `"Pass options.removeUndefinedValues=true..."` on one nested inside an
+  // array/map (the `participants` array here) — without this option, `putIngested` threw for every
+  // such message, after the dedupe claim had already been made, so the message was lost from the
+  // communications table (though its dedupe key stayed claimed and would never reprocess).
+  cachedClient ??= DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+    marshallOptions: { removeUndefinedValues: true },
+  });
   return cachedClient;
 }
 
