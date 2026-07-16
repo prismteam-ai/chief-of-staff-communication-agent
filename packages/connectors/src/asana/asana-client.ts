@@ -10,7 +10,15 @@ import { z } from 'zod';
  * write and the sync read to exactly one project: `project_gid` from the secret ("CoS Communication
  * Agent"). `createTask` always includes `projects: [project_gid]`; `listCommunicationAgentTasks`
  * queries `GET /projects/{project_gid}/tasks` and NEVER a workspace-wide endpoint. There is no
- * method on this client that can read or write outside that one project.
+ * method on this client that can read or write outside that one project. There is also no method
+ * that reads the workspace's project list (`GET /workspaces/{workspace_gid}/projects`) — the
+ * dashboard/UI never needs to browse projects, so that endpoint is simply not called anywhere.
+ *
+ * `taskGid` is caller-supplied on `linkToCommunication` (and, transitively, `updateTask`/
+ * `addComment`/`getTask` when called directly with an arbitrary gid) — a task ID from ANY project in
+ * the workspace, not just `project_gid`. `linkToCommunication` therefore asserts task membership in
+ * `project_gid` (via `getTask`'s `projects` field) BEFORE it writes a comment, and throws
+ * `ScopeViolationError` — never touching the task — if the assertion fails.
  *
  * ## Secret shape and caching
  * `cos/asana` = `{ pat, workspace_gid, project_gid }` (Secrets Manager). Cached the same way
@@ -92,12 +100,6 @@ export const AsanaTaskSchema = z.object({
 });
 export type AsanaTask = z.infer<typeof AsanaTaskSchema>;
 
-export const AsanaProjectSchema = z.object({
-  gid: z.string(),
-  name: z.string(),
-});
-export type AsanaProject = z.infer<typeof AsanaProjectSchema>;
-
 export const AsanaStorySchema = z.object({
   gid: z.string(),
   text: z.string().optional(),
@@ -151,6 +153,20 @@ export class AsanaApiError extends Error {
   ) {
     super(`Asana API request to "${path}" failed with status ${status}`);
     this.name = 'AsanaApiError';
+  }
+}
+
+/** Thrown by `linkToCommunication` (and any other caller-supplied-gid path) when the target task
+ * does not belong to the client's scoped `project_gid` (privacy scoping, non-negotiable — Task 7
+ * brief). Never carries the task's name/notes — only gids — since the whole point is that this
+ * client must not have read/written anything about a task outside its project. */
+export class ScopeViolationError extends Error {
+  constructor(
+    public readonly taskGid: string,
+    public readonly projectGid: string,
+  ) {
+    super(`Asana task "${taskGid}" is not a member of the configured project "${projectGid}"`);
+    this.name = 'ScopeViolationError';
   }
 }
 
@@ -381,28 +397,28 @@ export class AsanaClient {
     );
   }
 
-  /** Read-only listing of the workspace's projects (used by the `listAsanaProjects` tRPC procedure
-   * for UI/setup purposes) — a read, never a write target; writes always go through `createTask`'s
-   * fixed `project_gid`. */
-  async listProjects(): Promise<AsanaProject[]> {
-    const secret = await this.loadSecret();
-    return this.requestJson(
-      'GET',
-      `/workspaces/${secret.workspace_gid}/projects?opt_fields=name`,
-      z.array(AsanaProjectSchema),
-    );
-  }
-
   /**
    * Links a communication to an existing Asana task: appends a provenance/back-reference comment
    * to the task (Task 7 brief constraint 3: "back-reference note in the task") so the Asana side is
    * self-explanatory about which communication it originated from. Returns the resulting task (for
    * the caller to persist `permalink_url`/`gid` on the communication record).
+   *
+   * `taskGid` is caller-supplied and may name ANY task in the workspace, not just one in
+   * `project_gid` — so BEFORE writing anything, this fetches the task and asserts it is a member of
+   * `project_gid` (privacy scoping, non-negotiable — Task 7 brief). A task outside the configured
+   * project throws `ScopeViolationError` and is never commented on or re-fetched-and-returned.
    */
   async linkToCommunication(
     taskGid: string,
     provenance: CommunicationProvenance,
   ): Promise<AsanaTask> {
+    const projectGid = await this.projectGid();
+    const task = await this.getTask(taskGid);
+    const isMember = (task.projects ?? []).some((project) => project.gid === projectGid);
+    if (!isMember) {
+      throw new ScopeViolationError(taskGid, projectGid);
+    }
+
     await this.addComment(taskGid, formatProvenanceNote(provenance));
     return this.getTask(taskGid);
   }

@@ -4,6 +4,7 @@ import { mockClient } from 'aws-sdk-client-mock';
 import {
   AsanaClient,
   AsanaApiError,
+  ScopeViolationError,
   loadAsanaSecret,
   resetAsanaSecretCacheForTests,
   formatProvenanceNote,
@@ -138,6 +139,30 @@ describe('AsanaClient — scoping (project_gid confinement)', () => {
     expect(fetchImpl.mock.calls[1]![0] as string).toContain('/projects/proj-1/tasks');
   });
 
+  it('has no method that reads the workspace-wide projects or tasks endpoints', () => {
+    // Privacy scoping (Task 7 brief, Critical finding 1): `listProjects` (GET
+    // /workspaces/{gid}/projects) must not exist on the client at all — the dashboard/UI never
+    // needs to browse the user's other Asana projects, only the one configured `project_gid`.
+    expect((client as unknown as { listProjects?: unknown }).listProjects).toBeUndefined();
+  });
+
+  it('the client source has no reference to a workspace-wide projects or tasks endpoint path', async () => {
+    // Belt-and-suspenders static check alongside the runtime assertions above: grep this module's
+    // own source for the workspace-scoped endpoints and assert none remain outside doc comments
+    // that explicitly say the endpoint is NOT called.
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const url = await import('node:url');
+    const here = path.dirname(url.fileURLToPath(import.meta.url));
+    const source = await fs.readFile(path.join(here, 'asana-client.ts'), 'utf8');
+
+    const codeLines = source
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('*') && !line.trim().startsWith('//'));
+    const codeOnly = codeLines.join('\n');
+    expect(codeOnly).not.toContain('/workspaces/');
+  });
+
   it('never logs or exposes the PAT in a thrown error message', async () => {
     fetchImpl.mockResolvedValueOnce(jsonResponse(401, { errors: [{ message: 'Not Authorized' }] }));
 
@@ -263,15 +288,26 @@ describe('AsanaClient — task lifecycle + linking', () => {
     expect(url).toBe(`${ASANA_API_BASE_URL}/tasks/task-1/stories`);
   });
 
-  it('linkToCommunication posts a provenance comment then returns the refreshed task', async () => {
+  it('linkToCommunication checks project membership, posts a provenance comment, then returns the refreshed task', async () => {
     const fetchImpl = vi
       .fn()
+      // 1) membership check: getTask returns the task WITH proj-1 in `projects`
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          gid: 'task-1',
+          name: 'Follow up',
+          projects: [{ gid: 'proj-1', name: 'CoS Communication Agent' }],
+        }),
+      )
+      // 2) the provenance comment
       .mockResolvedValueOnce(jsonResponse(201, { gid: 'story-1', text: 'note' }))
+      // 3) the refreshed task returned to the caller
       .mockResolvedValueOnce(
         jsonResponse(200, {
           gid: 'task-1',
           name: 'Follow up',
           permalink_url: 'https://app.asana.com/0/proj-1/task-1',
+          projects: [{ gid: 'proj-1', name: 'CoS Communication Agent' }],
         }),
       );
     const client = new AsanaClient({
@@ -290,11 +326,64 @@ describe('AsanaClient — task lifecycle + linking', () => {
     });
 
     expect(task.permalink_url).toContain('task-1');
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    const [, commentInit] = fetchImpl.mock.calls[0]!;
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    const [membershipUrl, membershipInit] = fetchImpl.mock.calls[0]!;
+    expect(membershipUrl as string).toContain('/tasks/task-1');
+    expect((membershipInit as RequestInit).method).toBe('GET');
+    const [, commentInit] = fetchImpl.mock.calls[1]!;
     const commentBody = JSON.parse((commentInit as RequestInit).body as string);
     expect(commentBody.data.text).toContain('gmail#abc');
     expect(commentBody.data.text).toContain('Alex');
+  });
+
+  it('linkToCommunication rejects a task outside project_gid with ScopeViolationError, never posting a comment', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(
+      jsonResponse(200, {
+        gid: 'other-task-1',
+        name: 'Someone else’s task',
+        projects: [{ gid: 'other-proj-9', name: 'A different project' }],
+      }),
+    );
+    const client = new AsanaClient({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      loadSecret: async () => FAKE_SECRET,
+      sleep: async () => {},
+    });
+
+    await expect(
+      client.linkToCommunication('other-task-1', {
+        commId: 'gmail#abc',
+        channel: 'gmail',
+        threadKey: 'thread-1',
+        ts: '2026-07-16T00:00:00.000Z',
+      }),
+    ).rejects.toThrow(ScopeViolationError);
+
+    // Only the membership-check GET happened — no comment POST, no second getTask.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [, init] = fetchImpl.mock.calls[0]!;
+    expect((init as RequestInit).method).toBe('GET');
+  });
+
+  it('linkToCommunication rejects a task with no projects at all (fail closed)', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, { gid: 'orphan-task-1', name: 'No project task' }));
+    const client = new AsanaClient({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      loadSecret: async () => FAKE_SECRET,
+      sleep: async () => {},
+    });
+
+    await expect(
+      client.linkToCommunication('orphan-task-1', {
+        commId: 'gmail#abc',
+        channel: 'gmail',
+        threadKey: 'thread-1',
+        ts: '2026-07-16T00:00:00.000Z',
+      }),
+    ).rejects.toThrow(ScopeViolationError);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it('formatProvenanceNote never includes a full message body field', () => {
