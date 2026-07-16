@@ -23,7 +23,15 @@ import {
  * applied in code by `routeByConfidence` in `run-agent-turn.ts` (Task 5 constraint 3).
  */
 
-/** The model-produced part of a recommendation — ids are added in code, not asked of the model. */
+/**
+ * The model-produced part of a recommendation — ids are added in code, not asked of the model.
+ *
+ * NOTE: `confidence` is a plain `z.number()` here, NOT `.min(0).max(1)`. Bedrock's structured-output
+ * JSON schema rejects `minimum`/`maximum` on a `number` type (`output_config.format.schema: For
+ * 'number' type, properties maximum, minimum are not supported`). The `[0,1]` bound is still
+ * enforced — in code, by `shapeRecommendation` re-parsing through the shared `RecommendationSchema`
+ * (which DOES bound it) — so an out-of-range model value is rejected there, not silently accepted.
+ */
 export const RecommendationOutputSchema = z.object({
   actionType: ActionTypeSchema.describe(
     'The single best action category for this communication: reply_needed, fyi_no_reply, ' +
@@ -31,9 +39,7 @@ export const RecommendationOutputSchema = z.object({
   ),
   confidence: z
     .number()
-    .min(0)
-    .max(1)
-    .describe('How confident you are in this classification, from 0 to 1.'),
+    .describe('How confident you are in this classification, from 0 to 1 (a value in [0,1]).'),
   rationale: z
     .string()
     .describe('One concise sentence justifying the classification. No message body verbatim.'),

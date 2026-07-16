@@ -15,14 +15,18 @@ import { getStyleProfile, GENERIC_STYLE_CARD, type StyleProfile } from './style-
  * with no change to this module's shape.
  */
 
-/** The model-produced part of a draft — ids added in code, not asked of the model. */
+/**
+ * The model-produced part of a draft — ids added in code, not asked of the model.
+ *
+ * `confidence` is a plain `z.number()` (no `.min/.max`) for the same Bedrock structured-output
+ * reason as `RecommendationOutputSchema`; the `[0,1]` bound is enforced in code by `shapeDraft`
+ * re-parsing through the shared `DraftSchema`.
+ */
 export const DraftOutputSchema = z.object({
   body: z.string().describe('The full reply body text. Plain business prose, ready to send.'),
   confidence: z
     .number()
-    .min(0)
-    .max(1)
-    .describe('How confident you are this draft is appropriate to send, from 0 to 1.'),
+    .describe('How confident you are this draft is appropriate to send, from 0 to 1 (in [0,1]).'),
 });
 export type DraftOutput = z.infer<typeof DraftOutputSchema>;
 
