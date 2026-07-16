@@ -20,6 +20,14 @@ export interface ApiRuntimeEnv {
    * `feedBackStyleExemplarIsolated` doc comment: a no-op, not an error, when unwired). */
   readonly styleProfilesTableName: string;
   readonly ragDomainEndpoint: string;
+  /** Task 9 WhatsApp inbound webhook: the shared dedupe table (`IngestStack`'s DedupeTable) and the
+   * agent queue trigger. Empty -> `whatsapp-webhook-handler.ts`'s `requireEnv` throws a clear error
+   * at first request rather than the Lambda silently no-op'ing. */
+  readonly dedupeTableName: string;
+  /** The exact public URL Twilio is configured to POST inbound webhooks to — MUST match the Twilio
+   * console/sandbox config exactly (scheme+host+path), since it is part of the signed data
+   * (`verifyTwilioSignature`). Empty in local/test contexts that never verify signatures for real. */
+  readonly whatsappWebhookUrl: string;
 }
 
 export function loadApiRuntimeEnv(source: NodeJS.ProcessEnv = process.env): ApiRuntimeEnv {
@@ -30,5 +38,7 @@ export function loadApiRuntimeEnv(source: NodeJS.ProcessEnv = process.env): ApiR
     agentQueueUrl: source.AGENT_QUEUE_URL?.trim() ?? '',
     styleProfilesTableName: source.STYLE_PROFILES_TABLE_NAME?.trim() ?? '',
     ragDomainEndpoint: source.RAG_DOMAIN_ENDPOINT?.trim() ?? '',
+    dedupeTableName: source.DEDUPE_TABLE_NAME?.trim() ?? '',
+    whatsappWebhookUrl: source.WHATSAPP_WEBHOOK_URL?.trim() ?? '',
   };
 }

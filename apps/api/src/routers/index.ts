@@ -20,6 +20,7 @@ import type { StyleFeedbackHook } from '../services/style-feedback.js';
 import { createCommunicationsRepo } from '../repos/communications-repo.js';
 import { createAccountsRepo, type AccountsRepo } from '../repos/accounts-repo.js';
 import { createRealGmailConnector } from '../gmail-send.js';
+import { createRealWhatsAppConnector } from '../whatsapp-send.js';
 import { createAgentTrigger, noopAgentTrigger } from '../agent-trigger.js';
 import { loadApiRuntimeEnv } from '../env.js';
 import { logger, metrics } from '../context.js';
@@ -36,10 +37,11 @@ let cachedMetricsService: MetricsService | undefined;
 let cachedAccountsRepo: AccountsRepo | undefined;
 
 function connectorFor(channelType: ChannelType): Connector | undefined {
-  // Gmail is the only sendable channel wired today (design.md's Live tier — channel-access-tiers.md);
-  // other channels return undefined, which `ApprovalService.approveDraft` turns into a clear
-  // IllegalActionError rather than a crash.
+  // Gmail (Live tier) and WhatsApp (Sandbox tier — Task 9) are the sendable channels wired today
+  // (channel-access-tiers.md); other channels return undefined, which `ApprovalService.approveDraft`
+  // turns into a clear IllegalActionError rather than a crash.
   if (channelType === 'gmail') return createRealGmailConnector();
+  if (channelType === 'whatsapp') return createRealWhatsAppConnector();
   return undefined;
 }
 
