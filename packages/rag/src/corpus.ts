@@ -24,7 +24,13 @@ import { CHANNEL_TYPES } from '@chief-of-staff/shared';
  * at draft time, filtered to the drafting user's own account) and must never be conflated with the
  * general cross-channel retrieval `retrieveContext` performs.
  */
-export const SOURCE_TYPES = ['communication', 'asana', 'org_doc', 'preference', 'sent_style'] as const;
+export const SOURCE_TYPES = [
+  'communication',
+  'asana',
+  'org_doc',
+  'preference',
+  'sent_style',
+] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
 
 export const ChunkMetadataSchema = z.object({

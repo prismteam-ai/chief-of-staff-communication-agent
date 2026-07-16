@@ -36,9 +36,7 @@ export interface StyleProfileRepo {
 export function createStyleProfileRepo(tableName: string): StyleProfileRepo {
   return {
     async get(userId) {
-      const result = await client().send(
-        new GetCommand({ TableName: tableName, Key: { userId } }),
-      );
+      const result = await client().send(new GetCommand({ TableName: tableName, Key: { userId } }));
       if (!result.Item) return undefined;
       return StyleProfileRecordSchema.parse(result.Item);
     },
@@ -49,9 +47,7 @@ export function createStyleProfileRepo(tableName: string): StyleProfileRepo {
     },
 
     async bumpSourceCount(userId) {
-      const result = await client().send(
-        new GetCommand({ TableName: tableName, Key: { userId } }),
-      );
+      const result = await client().send(new GetCommand({ TableName: tableName, Key: { userId } }));
       if (!result.Item) return false;
       const existing = StyleProfileRecordSchema.parse(result.Item);
       const updated: StyleProfileRecord = {

@@ -28,16 +28,14 @@ export interface StyleCardExtractor {
 }
 
 const EXTRACTION_SYSTEM = [
-  'You are analyzing a sample of one person\'s own SENT email replies to learn their writing',
+  "You are analyzing a sample of one person's own SENT email replies to learn their writing",
   'voice. Summarize the consistent patterns across the whole sample — do not describe any single',
-  "message. Never quote or repeat a full message body back; describe the PATTERN only (e.g. tone,",
+  'message. Never quote or repeat a full message body back; describe the PATTERN only (e.g. tone,',
   'typical length, how replies open and close, formality level).',
 ].join(' ');
 
 function buildPrompt(samples: SentReplySample[]): string {
-  const numbered = samples
-    .map((s, i) => `--- Sent reply ${i + 1} ---\n${s.body}`)
-    .join('\n\n');
+  const numbered = samples.map((s, i) => `--- Sent reply ${i + 1} ---\n${s.body}`).join('\n\n');
   return (
     `Here are ${samples.length} of this person's own sent email replies, oldest pattern signal ` +
     `first:\n\n${numbered}\n\n` +

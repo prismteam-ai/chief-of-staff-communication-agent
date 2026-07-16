@@ -257,12 +257,17 @@ export class ApiStack extends TaggedStack {
         'AsanaSyncCompleted',
         'AsanaSyncTasksSynced',
         'AsanaSyncChunksIndexed',
+        // Task 10 feedback loop (design.md §6): one more exemplar indexed per successful
+        // post-send hook call — same metric name as the agent service's build-time emission,
+        // distinguished by namespace (see cloudwatch-metrics.json's two StyleExemplarAdded entries).
+        'StyleExemplarAdded',
       ],
       failedMetricNames: [
         'RequestFailed',
         'SendFailed',
         'AsanaApiFailed',
         'AsanaScopeViolationRejected',
+        'StyleFeedbackFailed',
       ],
     });
 

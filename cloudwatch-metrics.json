@@ -83,6 +83,48 @@
       "description": "Emitted once per communication for which the agent Lambda produced a style-aware reply draft (only on the at/above-confidence-threshold path; the below-threshold needs_context path produces no draft)."
     },
     {
+      "name": "StyleDraftProduced",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Count",
+      "service": "agent",
+      "description": "Emitted once per DraftProduced whose prompt carried a real learned style profile (design.md §6) rather than the generic v0 executive-assistant voice — i.e. accountId resolved to a userId with a style card already built via just build-style-profile. Never fires for a user with no profile yet; distinguishes a style-matched draft from a generic one at a glance."
+    },
+    {
+      "name": "StyleProfileBuilt",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Count",
+      "service": "agent",
+      "description": "Emitted once per successful just build-style-profile run (Task 10, design.md §6): a style card (tone, length band, sign-off, formality, greeting) was extracted from a sample of the user's sent replies via one Bedrock generateObject call and persisted to the style-profiles table. Published from both the agent Lambda's buildStyleProfile orchestration (apps/agent-handler/src/style/build-style-profile.ts) and, since that script is not a Lambda, via a direct PutMetricDataCommand from scripts/build-style-profile.ts under this same namespace."
+    },
+    {
+      "name": "StyleExemplarAdded",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Count",
+      "service": "agent",
+      "description": "Emitted per sent-reply exemplar indexed into the account-scoped RAG index as a sent_style chunk during just build-style-profile (Task 10, design.md §6 'embedded exemplars') — the (re)build of the sent-history corpus."
+    },
+    {
+      "name": "StyleExemplarAdded",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per approveDraft call whose Task 10 feedback-loop hook successfully indexed the final (approved or edited) sent body as a new sent_style exemplar (design.md §6, alakazam prior-decision-reuse pattern) — the SAME metric name as the agent service's build-time emission (see ChiefOfStaffAgent's StyleExemplarAdded entry), distinguished by namespace, since both represent 'one more retrievable style exemplar indexed' just from two different triggers."
+    },
+    {
+      "name": "StyleProfileBuildDuration",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Milliseconds",
+      "service": "agent",
+      "description": "Wall-clock time for one buildStyleProfile run: extracting the style card and chunking/embedding/indexing every sampled sent reply as an exemplar."
+    },
+    {
+      "name": "StyleFeedbackFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per approveDraft call whose post-send Task 10 feedback-loop hook (indexing the sent reply as a new style exemplar) threw. Isolated like SendFailed's counterparts on the ingest/agent services: the send is already durably confirmed (status answered) by the time this can fire, so a feedback-loop failure never fails the approval — it is a warn-and-count degradation only."
+    },
+    {
       "name": "AgentTurnFailed",
       "namespace": "ChiefOfStaffAgent",
       "unit": "Count",

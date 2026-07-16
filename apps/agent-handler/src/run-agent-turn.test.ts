@@ -411,7 +411,11 @@ const FIXED_CARD: StyleCard = {
 };
 
 function fakeAccountsRepo(map: Record<string, string>): AgentAccountsRepo {
-  return { async getOwner(accountId) { return map[accountId]; } };
+  return {
+    async getOwner(accountId) {
+      return map[accountId];
+    },
+  };
 }
 
 function fakeStyleProfileRepo(record?: StyleProfileRecord): StyleProfileRepo {
@@ -438,12 +442,15 @@ describe('runAgentTurn — style seam (Task 10): the draft prompt carries the us
       },
     };
 
+    metricsClient.addMetric.mockClear();
     await runAgentTurn(
       { commId: 'gmail#ext-1', accountId: 'acct-1' },
       { ...commonDeps, agentRunner: runner, communicationsRepo: repo },
     );
 
     expect(capturedStyle).toBe(GENERIC_STYLE_CARD);
+    const metricNames = metricsClient.addMetric.mock.calls.map((call) => call[0]);
+    expect(metricNames).not.toContain('StyleDraftProduced');
   });
 
   it('resolves accountId -> userId and injects the learned style card + exemplars into the draft prompt', async () => {
@@ -474,6 +481,7 @@ describe('runAgentTurn — style seam (Task 10): the draft prompt carries the us
       },
     };
 
+    metricsClient.addMetric.mockClear();
     await runAgentTurn(
       { commId: 'gmail#ext-1', accountId: 'acct-1' },
       {
@@ -490,6 +498,8 @@ describe('runAgentTurn — style seam (Task 10): the draft prompt carries the us
     expect(capturedStyle).not.toBe(GENERIC_STYLE_CARD);
     expect(capturedStyle).toContain('warm, direct, no filler');
     expect(capturedStyle).toContain('Best,\nAlex');
+    const metricNames = metricsClient.addMetric.mock.calls.map((call) => call[0]);
+    expect(metricNames).toContain('StyleDraftProduced');
   });
 
   it('falls back to generic style when accountsRepo has no owner for this accountId', async () => {
@@ -507,7 +517,13 @@ describe('runAgentTurn — style seam (Task 10): the draft prompt carries the us
 
     await runAgentTurn(
       { commId: 'gmail#ext-1', accountId: 'acct-unknown' },
-      { ...commonDeps, agentRunner: runner, communicationsRepo: repo, accountsRepo, styleProfileRepo },
+      {
+        ...commonDeps,
+        agentRunner: runner,
+        communicationsRepo: repo,
+        accountsRepo,
+        styleProfileRepo,
+      },
     );
 
     expect(capturedStyle).toBe(GENERIC_STYLE_CARD);

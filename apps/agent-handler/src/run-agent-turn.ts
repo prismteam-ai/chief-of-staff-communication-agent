@@ -12,6 +12,7 @@ import type { AgentRunner } from './agent/agent.js';
 import { createRetrieveContextTool } from './tools/retrieve-context.js';
 import { shapeRecommendation } from './tools/recommend-action.js';
 import { shapeDraft, buildStyleInstructions } from './tools/draft-reply.js';
+import { GENERIC_STYLE_CARD } from './tools/style-profile.js';
 import { createManageAsanaTool } from './tools/manage-asana.js';
 import type { AgentCommunicationRecord, AgentCommunicationsRepo } from './communications-repo.js';
 import type { AgentAccountsRepo } from './accounts-repo.js';
@@ -248,6 +249,12 @@ export async function runAgentTurn(
     });
     const draft: Draft = shapeDraft({ commId, accountId }, draftOutput);
     metricsClient.addMetric('DraftProduced', MetricUnit.Count, 1);
+    // Task 10: distinguishes a style-matched draft (a real learned profile was applied) from the
+    // generic v0 voice, without logging the style card/draft text itself (brief constraint 5: "NO
+    // PII logs" — this is a pure count, no body content).
+    if (styleInstructions !== GENERIC_STYLE_CARD) {
+      metricsClient.addMetric('StyleDraftProduced', MetricUnit.Count, 1);
+    }
     if (draftOutput.suggestedAsanaAction) {
       metricsClient.addMetric('AsanaActionSuggested', MetricUnit.Count, 1);
     }

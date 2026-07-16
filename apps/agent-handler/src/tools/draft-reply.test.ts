@@ -50,9 +50,9 @@ describe('buildStyleInstructions — exercises the style seam (Task 10 fills it 
 
   it('falls back to the generic v0 style card when no profile exists for the user', async () => {
     const styleProfileRepo = fakeStyleProfileRepo(undefined);
-    await expect(
-      buildStyleInstructions('user-1', { styleProfileRepo }),
-    ).resolves.toBe(GENERIC_STYLE_CARD);
+    await expect(buildStyleInstructions('user-1', { styleProfileRepo })).resolves.toBe(
+      GENERIC_STYLE_CARD,
+    );
   });
 
   it('falls back to the generic v0 style card when style deps are not wired at all (pre-Task-10 call sites)', async () => {

@@ -289,7 +289,17 @@ export class AgentStack extends TaggedStack {
     const { dashboard } = new MetricsDashboard(this, 'AgentMetricsDashboard', {
       dashboardName: `${PROJECT_NAME}-agent`,
       namespace: METRICS_NAMESPACE,
-      processedMetricNames: ['RecommendationProduced', 'DraftProduced'],
+      // Task 10: StyleProfileBuilt (just build-style-profile runs) and StyleExemplarAdded (sent
+      // replies indexed as exemplars) join the processed axis; StyleDraftProduced sub-counts
+      // DraftProduced (a style-matched draft, not the generic v0 voice) — all pure counts, no
+      // draft/style-card content (brief constraint 5).
+      processedMetricNames: [
+        'RecommendationProduced',
+        'DraftProduced',
+        'StyleDraftProduced',
+        'StyleProfileBuilt',
+        'StyleExemplarAdded',
+      ],
       failedMetricNames: ['AgentTurnFailed', 'MemoryAppendFailed'],
       durationMetricName: 'AgentTurnDuration',
       titlePrefix: 'Agent',
