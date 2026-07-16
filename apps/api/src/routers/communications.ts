@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { COMMUNICATION_STATES } from '@chief-of-staff/shared';
 import { publicProcedure, router } from '../trpc.js';
 import type { Context } from '../context.js';
+import { authedMiddleware } from '../services/authed-middleware.js';
+import type { McpAuthService } from '../services/mcp-auth-service.js';
 import { ApprovalService } from '../services/approval-service.js';
 
 /**
@@ -9,60 +11,83 @@ import { ApprovalService } from '../services/approval-service.js';
  * `getCommunication`, `approveDraft`, `editDraft`, `rejectDraft`, `dismiss`, `supplyContext`. A thin
  * adapter — every procedure just validates its zod input then calls the framework-free
  * `ApprovalService`, which owns the account guard, the state-machine transitions, and the send
- * handoff. `userId` is a required input on every procedure (design.md §10 constraint 4: "a simple
- * accountId-scoped access is fine for now" — real per-user session auth is Task 8's hardening; the
- * account-ownership check itself, server-side against the accounts table, is NOT deferred and runs
- * on every call regardless of how `userId` was obtained).
+ * handoff.
+ *
+ * `userId` is NOT a client input on any procedure here (Task 8.5 closed that gap — it used to be a
+ * plain, unauthenticated input, so a client could just type someone else's `userId` and the
+ * server-side `assertAccountAccess` check would faithfully enforce a boundary around a fabricated
+ * identity). Every procedure now sits behind `authedMiddleware`, the SAME bearer-token gate
+ * `routers/mcp.ts` uses, and reads `userId` from the verified token
+ * (`ctx.authedUserId`) — never from the request body.
  */
 
 const CommunicationStateSchema = z.enum(COMMUNICATION_STATES);
 
-export function createCommunicationsRouter(getService: (ctx: Context) => ApprovalService) {
+export function createCommunicationsRouter(
+  getService: (ctx: Context) => ApprovalService,
+  getAuthService: () => McpAuthService,
+) {
+  const authed = publicProcedure.use(
+    authedMiddleware(getAuthService, 'DashboardRequestAuthenticated'),
+  );
+  const authedUserId = (ctx: unknown) => (ctx as Context & { authedUserId: string }).authedUserId;
+
   return router({
-    listCommunications: publicProcedure
+    listCommunications: authed
       .input(
         z.object({
           accountId: z.string().min(1),
-          userId: z.string().min(1),
           status: CommunicationStateSchema.optional(),
         }),
       )
-      .query(({ ctx, input }) => getService(ctx).listCommunications(input)),
+      .query(({ ctx, input }) =>
+        getService(ctx).listCommunications({ ...input, userId: authedUserId(ctx) }),
+      ),
 
-    getCommunication: publicProcedure
-      .input(z.object({ commId: z.string().min(1), userId: z.string().min(1) }))
-      .query(({ ctx, input }) => getService(ctx).getCommunication(input)),
+    getCommunication: authed
+      .input(z.object({ commId: z.string().min(1) }))
+      .query(({ ctx, input }) =>
+        getService(ctx).getCommunication({ ...input, userId: authedUserId(ctx) }),
+      ),
 
-    approveDraft: publicProcedure
-      .input(z.object({ commId: z.string().min(1), userId: z.string().min(1) }))
-      .mutation(({ ctx, input }) => getService(ctx).approveDraft(input)),
+    approveDraft: authed
+      .input(z.object({ commId: z.string().min(1) }))
+      .mutation(({ ctx, input }) =>
+        getService(ctx).approveDraft({ ...input, userId: authedUserId(ctx) }),
+      ),
 
-    editDraft: publicProcedure
+    editDraft: authed
       .input(
         z.object({
           commId: z.string().min(1),
-          userId: z.string().min(1),
           newBody: z.string().min(1),
         }),
       )
-      .mutation(({ ctx, input }) => getService(ctx).editDraft(input)),
+      .mutation(({ ctx, input }) =>
+        getService(ctx).editDraft({ ...input, userId: authedUserId(ctx) }),
+      ),
 
-    rejectDraft: publicProcedure
-      .input(z.object({ commId: z.string().min(1), userId: z.string().min(1) }))
-      .mutation(({ ctx, input }) => getService(ctx).rejectDraft(input)),
+    rejectDraft: authed
+      .input(z.object({ commId: z.string().min(1) }))
+      .mutation(({ ctx, input }) =>
+        getService(ctx).rejectDraft({ ...input, userId: authedUserId(ctx) }),
+      ),
 
-    dismiss: publicProcedure
-      .input(z.object({ commId: z.string().min(1), userId: z.string().min(1) }))
-      .mutation(({ ctx, input }) => getService(ctx).dismiss(input)),
+    dismiss: authed
+      .input(z.object({ commId: z.string().min(1) }))
+      .mutation(({ ctx, input }) =>
+        getService(ctx).dismiss({ ...input, userId: authedUserId(ctx) }),
+      ),
 
-    supplyContext: publicProcedure
+    supplyContext: authed
       .input(
         z.object({
           commId: z.string().min(1),
-          userId: z.string().min(1),
           text: z.string().min(1),
         }),
       )
-      .mutation(({ ctx, input }) => getService(ctx).supplyContext(input)),
+      .mutation(({ ctx, input }) =>
+        getService(ctx).supplyContext({ ...input, userId: authedUserId(ctx) }),
+      ),
   });
 }

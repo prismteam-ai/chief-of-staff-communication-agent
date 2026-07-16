@@ -1,6 +1,7 @@
-import { z } from 'zod';
 import { publicProcedure, router } from '../trpc.js';
 import type { Context } from '../context.js';
+import { authedMiddleware } from '../services/authed-middleware.js';
+import type { McpAuthService } from '../services/mcp-auth-service.js';
 import type { AccountsRepo } from '../repos/accounts-repo.js';
 
 /**
@@ -9,6 +10,10 @@ import type { AccountsRepo } from '../repos/accounts-repo.js';
  * class needed since `listByUser` already IS the account-scoped query (it filters by the CALLER'S
  * OWN `userId`, not a caller-supplied `accountId` that would need an ownership lookup against a
  * different record — there is nothing to authorize beyond "list my own rows").
+ *
+ * `userId` is NOT a client input (Task 8.5): `listConnectedAccounts` sits behind
+ * `authedMiddleware` and lists the TOKEN-resolved user's own accounts (`ctx.authedUserId`) — a
+ * client can no longer list another user's connected channels merely by supplying their `userId`.
  *
  * `credentialSecretArn` is stripped before the DTO leaves this router — it is an ARN reference
  * (design.md §10: "no secret in code, logs, or the client bundle"), never the credential itself,
@@ -22,18 +27,24 @@ export interface ConnectedAccountDto {
   createdAt: string;
 }
 
-export function createAccountsRouter(getRepo: (ctx: Context) => AccountsRepo) {
+export function createAccountsRouter(
+  getRepo: (ctx: Context) => AccountsRepo,
+  getAuthService: () => McpAuthService,
+) {
+  const authed = publicProcedure.use(
+    authedMiddleware(getAuthService, 'DashboardRequestAuthenticated'),
+  );
+
   return router({
-    listConnectedAccounts: publicProcedure
-      .input(z.object({ userId: z.string().min(1) }))
-      .query(async ({ ctx, input }): Promise<ConnectedAccountDto[]> => {
-        const accounts = await getRepo(ctx).listByUser(input.userId);
-        return accounts.map((a) => ({
-          accountId: a.accountId,
-          channelType: a.channelType,
-          displayName: a.displayName,
-          createdAt: a.createdAt,
-        }));
-      }),
+    listConnectedAccounts: authed.query(async ({ ctx }): Promise<ConnectedAccountDto[]> => {
+      const userId = (ctx as Context & { authedUserId: string }).authedUserId;
+      const accounts = await getRepo(ctx).listByUser(userId);
+      return accounts.map((a) => ({
+        accountId: a.accountId,
+        channelType: a.channelType,
+        displayName: a.displayName,
+        createdAt: a.createdAt,
+      }));
+    }),
   });
 }

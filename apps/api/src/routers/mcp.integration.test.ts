@@ -243,7 +243,7 @@ function buildRouterHarness(opts?: { sendCalls?: unknown[]; asanaCreateCalls?: u
 }
 
 function ctxWithToken(token?: string): Context {
-  return { mcpBearerToken: token } as unknown as Context;
+  return { bearerToken: token } as unknown as Context;
 }
 
 describe('mcp router — issueMcpToken', () => {

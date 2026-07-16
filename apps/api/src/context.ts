@@ -31,10 +31,14 @@ export const createContext = ({
   logger,
   tracer,
   metrics,
-  /** Bearer token from the MCP server's `Authorization` header (Task 11), or `undefined` for a
-   * request with none (the dashboard's own browser calls, which are unauthenticated per design.md
-   * §10 constraint 4's documented v0 posture). `routers/mcp.ts` is the only router that requires it. */
-  mcpBearerToken: extractBearerToken(event.headers),
+  /** Bearer token from the `Authorization` header — `undefined` for a request with none. Shared by
+   * BOTH the MCP server (Task 11) and the dashboard's own browser calls (Task 8.5: the dashboard
+   * used to trust a client-supplied `userId` with no token at all; it now authenticates the exact
+   * same way MCP does — see `services/dashboard-authed-middleware.ts`). One extraction, one
+   * `McpAuthService.verify` call, two router surfaces (`routers/mcp.ts`, every dashboard-facing
+   * router) that both require it and both resolve `userId` from the verified token, never from
+   * client input. */
+  bearerToken: extractBearerToken(event.headers),
 });
 
 export type Context = Awaited<ReturnType<typeof createContext>>;

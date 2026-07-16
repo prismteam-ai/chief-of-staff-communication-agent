@@ -1,32 +1,33 @@
 import { z } from 'zod';
-import { MetricUnit } from '@aws-lambda-powertools/metrics';
 import {
   IssueMcpTokenInputSchema,
   IssueMcpTokenResultSchema,
-  McpTokenInvalidError,
   assertAccountAccess,
   type AccountOwnershipMap,
 } from '@chief-of-staff/shared';
 import { TRPCError } from '@trpc/server';
 import type { RetrievalIndex } from '@chief-of-staff/rag';
 import { embedText, EMBED_INPUT_TYPE } from '@chief-of-staff/rag';
-import { publicProcedure, router, middleware } from '../trpc.js';
+import { publicProcedure, router } from '../trpc.js';
 import type { Context } from '../context.js';
 import { McpAuthService } from '../services/mcp-auth-service.js';
+import { authedMiddleware } from '../services/authed-middleware.js';
 import { ApprovalService } from '../services/approval-service.js';
 import { AsanaService } from '../services/asana-service.js';
 import type { AccountsRepo } from '../repos/accounts-repo.js';
-import { metrics } from '../context.js';
 
 /**
  * The MCP-facing tRPC router (Task 11, design.md §8): the ONE surface the Cursor MCP server calls
  * over HTTPS. Every procedure here (except `issueMcpToken`, the dashboard-facing mint operation)
- * requires a verified `Authorization: Bearer <token>` header — `ctx.mcpBearerToken` — and resolves
+ * requires a verified `Authorization: Bearer <token>` header — `ctx.bearerToken` — and resolves
  * `userId` FROM the token, never from client input (brief constraint 3: "NEVER trust a
  * client-supplied userId when a token is present"). This is what makes a forged or another user's
  * token unable to widen access: every downstream service call (`ApprovalService`, `AsanaService`,
  * retrieval) still runs through the SAME `assertAccountAccess` guard every other path in this repo
- * uses, keyed off the token-resolved `userId`.
+ * uses, keyed off the token-resolved `userId`. The gate itself (`authedMiddleware`,
+ * `services/authed-middleware.ts`) is shared with the dashboard's own tRPC routers as of Task 8.5 —
+ * same verification, same token table, same "never trust client-supplied userId" rule, two
+ * callers.
  *
  * `retrieveContext` is a genuinely new read (there was no tRPC procedure for it before Task 11) —
  * everything else (`recommendAction`, `draftReply`) is exposed as a READ over the already-produced
@@ -41,31 +42,6 @@ import { metrics } from '../context.js';
  * `ApprovalService`/`AsanaService` methods the dashboard's tRPC procedures call — one business-logic
  * implementation, two authenticated entry points.
  */
-
-const mcpAuthedMiddleware = (getAuthService: () => McpAuthService) =>
-  middleware(async ({ ctx, next }) => {
-    if (!ctx.mcpBearerToken) {
-      throw new TRPCError({
-        code: 'UNAUTHORIZED',
-        message: 'Missing Authorization: Bearer <token> header.',
-      });
-    }
-    let userId: string;
-    try {
-      userId = await getAuthService().verify(ctx.mcpBearerToken);
-    } catch (error) {
-      if (error instanceof McpTokenInvalidError) {
-        throw new TRPCError({ code: 'UNAUTHORIZED', message: error.message });
-      }
-      throw error;
-    }
-    // One MCP-authenticated tool call successfully passed the bearer-token gate — cloudwatch-
-    // metrics.json / api-stack.ts dashboard (brief constraint 5: "metrics McpToolInvoked/
-    // McpTokenIssued/McpAuthFailed"). Counted here (not per-procedure) so every current and future
-    // procedure behind `authed` is covered by construction.
-    metrics.addMetric('McpToolInvoked', MetricUnit.Count, 1);
-    return next({ ctx: { ...ctx, mcpUserId: userId } });
-  });
 
 function ownershipMapFor(accountId: string, ownerUserId: string | undefined): AccountOwnershipMap {
   return ownerUserId ? { [accountId]: ownerUserId } : {};
@@ -86,7 +62,7 @@ export interface McpRouterDeps {
 }
 
 export function createMcpRouter(deps: McpRouterDeps) {
-  const authed = publicProcedure.use(mcpAuthedMiddleware(deps.authService));
+  const authed = publicProcedure.use(authedMiddleware(deps.authService, 'McpToolInvoked'));
   const embed = deps.embed ?? ((text: string) => embedText(text, EMBED_INPUT_TYPE.query));
 
   return router({
@@ -120,7 +96,7 @@ export function createMcpRouter(deps: McpRouterDeps) {
         }
         const ownerUserId = await deps.accountsRepo().getOwner(input.accountId);
         assertAccountAccess(
-          (ctx as Context & { mcpUserId: string }).mcpUserId,
+          (ctx as Context & { authedUserId: string }).authedUserId,
           input.accountId,
           ownershipMapFor(input.accountId, ownerUserId),
         );
@@ -150,7 +126,7 @@ export function createMcpRouter(deps: McpRouterDeps) {
       .query(async ({ ctx, input }) => {
         const record = await deps.approvalService().getCommunication({
           commId: input.commId,
-          userId: (ctx as Context & { mcpUserId: string }).mcpUserId,
+          userId: (ctx as Context & { authedUserId: string }).authedUserId,
         });
         return {
           commId: record.commId,
@@ -165,7 +141,7 @@ export function createMcpRouter(deps: McpRouterDeps) {
       .query(async ({ ctx, input }) => {
         const record = await deps.approvalService().getCommunication({
           commId: input.commId,
-          userId: (ctx as Context & { mcpUserId: string }).mcpUserId,
+          userId: (ctx as Context & { authedUserId: string }).authedUserId,
         });
         return { commId: record.commId, status: record.status, draft: record.draft ?? null };
       }),
@@ -181,7 +157,7 @@ export function createMcpRouter(deps: McpRouterDeps) {
     approveDraft: authed.input(z.object({ commId: z.string().min(1) })).mutation(({ ctx, input }) =>
       deps.approvalService().approveDraft({
         commId: input.commId,
-        userId: (ctx as Context & { mcpUserId: string }).mcpUserId,
+        userId: (ctx as Context & { authedUserId: string }).authedUserId,
       }),
     ),
 
@@ -191,7 +167,7 @@ export function createMcpRouter(deps: McpRouterDeps) {
         deps.approvalService().supplyContext({
           commId: input.commId,
           text: input.text,
-          userId: (ctx as Context & { mcpUserId: string }).mcpUserId,
+          userId: (ctx as Context & { authedUserId: string }).authedUserId,
         }),
       ),
 
@@ -210,7 +186,7 @@ export function createMcpRouter(deps: McpRouterDeps) {
       .mutation(({ ctx, input }) =>
         deps.asanaService().createAsanaFollowup({
           ...input,
-          userId: (ctx as Context & { mcpUserId: string }).mcpUserId,
+          userId: (ctx as Context & { authedUserId: string }).authedUserId,
         }),
       ),
 
@@ -219,7 +195,7 @@ export function createMcpRouter(deps: McpRouterDeps) {
       .mutation(({ ctx, input }) =>
         deps.asanaService().linkAsana({
           ...input,
-          userId: (ctx as Context & { mcpUserId: string }).mcpUserId,
+          userId: (ctx as Context & { authedUserId: string }).authedUserId,
         }),
       ),
   });

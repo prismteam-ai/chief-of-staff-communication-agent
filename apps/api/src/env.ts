@@ -32,6 +32,14 @@ export interface ApiRuntimeEnv {
    * verification. Empty -> `routers/index.ts`'s `mcpAuthService()` throws a clear error at first
    * request, same posture as the other required-table checks in this file. */
   readonly mcpTokensTableName: string;
+  /** Task 8.5: Secrets Manager id holding the demo dashboard login credential(s) — a JSON array of
+   * `{ username, passwordHash, userId }` (see `dashboard-login-service.ts#DashboardCredential`;
+   * `passwordHash` is the SHA-256 digest of the plaintext demo password, never the password
+   * itself). Empty -> `routers/index.ts`'s `dashboardLoginService()` loads zero credentials, so
+   * every `login` call fails closed with `DashboardLoginInvalidError` rather than crashing — same
+   * "degrade to a clear, closed failure" posture the other optional-dependency checks in this file
+   * use. Defaults to `cos/dashboard-login`, overridable for local/test contexts. */
+  readonly dashboardLoginSecretId: string;
 }
 
 export function loadApiRuntimeEnv(source: NodeJS.ProcessEnv = process.env): ApiRuntimeEnv {
@@ -45,5 +53,6 @@ export function loadApiRuntimeEnv(source: NodeJS.ProcessEnv = process.env): ApiR
     dedupeTableName: source.DEDUPE_TABLE_NAME?.trim() ?? '',
     whatsappWebhookUrl: source.WHATSAPP_WEBHOOK_URL?.trim() ?? '',
     mcpTokensTableName: source.MCP_TOKENS_TABLE_NAME?.trim() ?? '',
+    dashboardLoginSecretId: source.DASHBOARD_LOGIN_SECRET_ID?.trim() || 'cos/dashboard-login',
   };
 }

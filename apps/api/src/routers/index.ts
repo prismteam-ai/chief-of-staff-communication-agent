@@ -14,10 +14,12 @@ import { createAsanaRouter } from './asana.js';
 import { createMetricsRouter } from './metrics.js';
 import { createAccountsRouter } from './accounts.js';
 import { createMcpRouter } from './mcp.js';
+import { createAuthRouter } from './auth.js';
 import { ApprovalService } from '../services/approval-service.js';
 import { AsanaService } from '../services/asana-service.js';
 import { MetricsService } from '../services/metrics-service.js';
 import { McpAuthService } from '../services/mcp-auth-service.js';
+import { DashboardLoginService } from '../services/dashboard-login-service.js';
 import { createStyleFeedbackHook } from '../services/style-feedback.js';
 import type { StyleFeedbackHook } from '../services/style-feedback.js';
 import { createCommunicationsRepo } from '../repos/communications-repo.js';
@@ -27,6 +29,7 @@ import { createRealGmailConnector } from '../gmail-send.js';
 import { createRealWhatsAppConnector } from '../whatsapp-send.js';
 import { createAgentTrigger, noopAgentTrigger } from '../agent-trigger.js';
 import { loadApiRuntimeEnv } from '../env.js';
+import { loadDashboardCredentials } from '../dashboard-credentials.js';
 import { logger, metrics } from '../context.js';
 
 const env = loadApiRuntimeEnv();
@@ -141,6 +144,20 @@ function mcpAuthService(): McpAuthService {
   return cachedMcpAuthService;
 }
 
+/** Task 8.5: `login`'s credential gate — reuses `mcpAuthService()` for token minting (see that
+ * class's doc comment: one token table, two issuance entry points) and loads the demo credential
+ * list from Secrets Manager via `loadCredentials` (that helper itself memoizes/caches — see
+ * `dashboard-credentials.ts` — so calling it fresh per request is cheap on a warm container, same
+ * choice `retrievalIndex()` above makes for its own cheap-to-construct dependency). */
+function dashboardLoginService(): DashboardLoginService {
+  return new DashboardLoginService({
+    authService: mcpAuthService(),
+    loadCredentials: () => loadDashboardCredentials(env.dashboardLoginSecretId),
+    log: logger,
+    metricsClient: metrics,
+  });
+}
+
 /** Task 11: `undefined` (not wired) unless `RAG_DOMAIN_ENDPOINT` is set — `routers/mcp.ts`'s
  * `retrieveContext` then returns a clear `PRECONDITION_FAILED` rather than crashing, same posture
  * as `styleFeedbackHook()` above. Built fresh per call (not cached) — cheap client construction,
@@ -154,10 +171,11 @@ function retrievalIndex(): RetrievalIndex | undefined {
 
 export const appRouter = router({
   health: healthRouter,
-  communications: createCommunicationsRouter(() => approvalService()),
-  asana: createAsanaRouter(() => asanaService()),
-  metrics: createMetricsRouter(() => metricsService()),
-  accounts: createAccountsRouter(() => accountsRepo()),
+  auth: createAuthRouter(() => dashboardLoginService()),
+  communications: createCommunicationsRouter(() => approvalService(), mcpAuthService),
+  asana: createAsanaRouter(() => asanaService(), mcpAuthService),
+  metrics: createMetricsRouter(() => metricsService(), mcpAuthService),
+  accounts: createAccountsRouter(() => accountsRepo(), mcpAuthService),
   mcp: createMcpRouter({
     authService: mcpAuthService,
     approvalService,

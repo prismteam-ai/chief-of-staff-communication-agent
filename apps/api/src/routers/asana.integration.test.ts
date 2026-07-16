@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { TRPCError } from '@trpc/server';
 import {
   ScopeViolationError,
   type AsanaClient,
@@ -9,12 +10,15 @@ import type { AccountsRepo } from '../repos/accounts-repo.js';
 import { createAsanaRouter } from './asana.js';
 import { AsanaService } from '../services/asana-service.js';
 import type { Context } from '../context.js';
+import { fakeAuthService, issueBearerToken, FORGED_TOKEN } from '../test-support/fake-auth-service.js';
 
 /**
  * Integration test (mirrors `communications.integration.test.ts`'s pattern for Task 6): drives the
  * ACTUAL tRPC router surface (`createAsanaRouter`) via `createCaller`, not just the `AsanaService`
  * unit — proves the router → service → (fake) Asana client wiring end to end, and that the
  * account-permission guard is enforced at the router boundary the dashboard/MCP will actually call.
+ *
+ * Task 8.5: `userId` is no longer a client input — every call authenticates via a bearer token.
  */
 
 const ACCOUNT_ID = 'acct-gmail-demoalex775';
@@ -141,6 +145,10 @@ function scopeViolatingAsanaClient(): Pick<
   };
 }
 
+function ctxWithToken(token?: string): Context {
+  return { bearerToken: token } as unknown as Context;
+}
+
 describe('asana router integration — createAsanaFollowup / linkAsana', () => {
   it('drives createAsanaFollowup through the router, persisting the gid on the communication record', async () => {
     const repo = inMemoryCommunicationsRepo(fixtureRecord());
@@ -152,12 +160,12 @@ describe('asana router integration — createAsanaFollowup / linkAsana', () => {
       metricsClient: { addMetric: vi.fn() },
     });
 
-    const router = createAsanaRouter(() => service);
-    const ctx = {} as Context;
+    const authService = fakeAuthService();
+    const router = createAsanaRouter(() => service, () => authService);
+    const token = await issueBearerToken(authService, USER_ID);
 
-    const result = await router.createCaller(ctx).createAsanaFollowup({
+    const result = await router.createCaller(ctxWithToken(token)).createAsanaFollowup({
       commId: COMM_ID,
-      userId: USER_ID,
       title: 'Follow up on reorg intros',
     });
 
@@ -175,12 +183,13 @@ describe('asana router integration — createAsanaFollowup / linkAsana', () => {
       metricsClient: { addMetric: vi.fn() },
     });
 
-    const router = createAsanaRouter(() => service);
-    const ctx = {} as Context;
+    const authService = fakeAuthService();
+    const router = createAsanaRouter(() => service, () => authService);
+    const token = await issueBearerToken(authService, USER_ID);
 
     const result = await router
-      .createCaller(ctx)
-      .linkAsana({ commId: COMM_ID, userId: USER_ID, taskGid: 'task-existing-42' });
+      .createCaller(ctxWithToken(token))
+      .linkAsana({ commId: COMM_ID, taskGid: 'task-existing-42' });
 
     expect(result.asanaTaskGid).toBe('task-existing-42');
     expect(repo.current().asanaTaskPermalink).toContain('task-existing-42');
@@ -196,16 +205,19 @@ describe('asana router integration — createAsanaFollowup / linkAsana', () => {
       metricsClient: { addMetric: vi.fn() },
     });
 
-    const router = createAsanaRouter(() => service);
-    const ctx = {} as Context;
+    const authService = fakeAuthService();
+    const router = createAsanaRouter(() => service, () => authService);
+    // SECURITY (Task 8.5 brief constraint 7): OTHER_USER_ID's own real, valid token cannot act on
+    // an account it does not own — cross-user denial driven end to end through the router.
+    const token = await issueBearerToken(authService, OTHER_USER_ID);
 
     // tRPC wraps the thrown domain error in a TRPCError — assert on the propagated message (the
     // same pattern the account guard's own unit tests assert the underlying error type directly;
     // this integration test proves the router boundary doesn't swallow or mask the denial).
     await expect(
       router
-        .createCaller(ctx)
-        .createAsanaFollowup({ commId: COMM_ID, userId: OTHER_USER_ID, title: 'Follow up' }),
+        .createCaller(ctxWithToken(token))
+        .createAsanaFollowup({ commId: COMM_ID, title: 'Follow up' }),
     ).rejects.toThrow(/does not have access to account/);
     expect(repo.current().asanaTaskGid).toBeUndefined();
   });
@@ -220,14 +232,59 @@ describe('asana router integration — createAsanaFollowup / linkAsana', () => {
       metricsClient: { addMetric: vi.fn() },
     });
 
-    const router = createAsanaRouter(() => service);
-    const ctx = {} as Context;
+    const authService = fakeAuthService();
+    const router = createAsanaRouter(() => service, () => authService);
+    const token = await issueBearerToken(authService, USER_ID);
 
     await expect(
       router
-        .createCaller(ctx)
-        .linkAsana({ commId: COMM_ID, userId: USER_ID, taskGid: 'other-project-task-1' }),
+        .createCaller(ctxWithToken(token))
+        .linkAsana({ commId: COMM_ID, taskGid: 'other-project-task-1' }),
     ).rejects.toThrow(/not a member of the configured project/);
+    expect(repo.current().asanaTaskGid).toBeUndefined();
+  });
+
+  it('SECURITY: rejects a call with no Authorization header (401)', async () => {
+    const repo = inMemoryCommunicationsRepo(fixtureRecord());
+    const service = new AsanaService({
+      asanaClient: fakeAsanaClient() as unknown as AsanaClient,
+      communicationsRepo: repo,
+      accountsRepo: inMemoryAccountsRepo(),
+      log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      metricsClient: { addMetric: vi.fn() },
+    });
+
+    const authService = fakeAuthService();
+    const router = createAsanaRouter(() => service, () => authService);
+
+    await expect(
+      router.createCaller(ctxWithToken(undefined)).createAsanaFollowup({
+        commId: COMM_ID,
+        title: 'Should not be created',
+      }),
+    ).rejects.toThrow(TRPCError);
+    expect(repo.current().asanaTaskGid).toBeUndefined();
+  });
+
+  it('SECURITY: rejects a forged/unknown bearer token (401)', async () => {
+    const repo = inMemoryCommunicationsRepo(fixtureRecord());
+    const service = new AsanaService({
+      asanaClient: fakeAsanaClient() as unknown as AsanaClient,
+      communicationsRepo: repo,
+      accountsRepo: inMemoryAccountsRepo(),
+      log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      metricsClient: { addMetric: vi.fn() },
+    });
+
+    const authService = fakeAuthService();
+    const router = createAsanaRouter(() => service, () => authService);
+
+    await expect(
+      router.createCaller(ctxWithToken(FORGED_TOKEN)).createAsanaFollowup({
+        commId: COMM_ID,
+        title: 'Should not be created',
+      }),
+    ).rejects.toThrow(TRPCError);
     expect(repo.current().asanaTaskGid).toBeUndefined();
   });
 });

@@ -1,15 +1,21 @@
 import { describe, expect, it } from 'vitest';
+import { TRPCError } from '@trpc/server';
 import type { ApiCommunicationRecord, CommunicationsRepo } from '../repos/communications-repo.js';
 import type { AccountsRepo } from '../repos/accounts-repo.js';
 import { createMetricsRouter } from './metrics.js';
 import { MetricsService } from '../services/metrics-service.js';
 import type { Context } from '../context.js';
+import { fakeAuthService, issueBearerToken, FORGED_TOKEN } from '../test-support/fake-auth-service.js';
 
 /**
  * Integration test (Task 8 brief constraint 10, mirroring `communications.integration.test.ts`):
  * drives the ACTUAL tRPC router surface (`createMetricsRouter`) — not just the `MetricsService`
  * unit — via `createCaller`, proving the router -> service -> repo wiring enforces the account
  * guard end to end, not just inside the service class.
+ *
+ * Task 8.5: `userId` is no longer a client input — every call authenticates via a bearer token
+ * (`ctxWithToken`), and `userId` in the assertions below is now IMPLIED by which token was issued,
+ * never supplied directly.
  */
 
 const ACCOUNT_A = 'acct-gmail-demoalex775';
@@ -77,6 +83,10 @@ function accountsRepo(): AccountsRepo {
   };
 }
 
+function ctxWithToken(token?: string): Context {
+  return { bearerToken: token } as unknown as Context;
+}
+
 describe('metrics router integration', () => {
   it('getDashboardMetrics returns account-scoped aggregates through the router', async () => {
     const records = [
@@ -88,10 +98,12 @@ describe('metrics router integration', () => {
       communicationsRepo: inMemoryRepo(records),
       accountsRepo: accountsRepo(),
     });
-    const router = createMetricsRouter(() => service);
-    const caller = router.createCaller({} as Context);
+    const authService = fakeAuthService();
+    const router = createMetricsRouter(() => service, () => authService);
+    const token = await issueBearerToken(authService, USER_A);
+    const caller = router.createCaller(ctxWithToken(token));
 
-    const metrics = await caller.getDashboardMetrics({ accountId: ACCOUNT_A, userId: USER_A });
+    const metrics = await caller.getDashboardMetrics({ accountId: ACCOUNT_A });
     expect(metrics.totalVolume).toBe(2);
   });
 
@@ -101,18 +113,16 @@ describe('metrics router integration', () => {
       communicationsRepo: inMemoryRepo(records),
       accountsRepo: accountsRepo(),
     });
-    const router = createMetricsRouter(() => service);
-    const caller = router.createCaller({} as Context);
+    const authService = fakeAuthService();
+    const router = createMetricsRouter(() => service, () => authService);
+    // SECURITY (Task 8.5 brief constraint 7): USER_B's own valid token cannot read ACCOUNT_A's
+    // metrics — cross-user denial driven end to end through the router.
+    const token = await issueBearerToken(authService, USER_B);
+    const caller = router.createCaller(ctxWithToken(token));
 
-    await expect(
-      caller.getDashboardMetrics({ accountId: ACCOUNT_A, userId: USER_B }),
-    ).rejects.toThrow();
-    await expect(
-      caller.listRecommendedActions({ accountId: ACCOUNT_A, userId: USER_B }),
-    ).rejects.toThrow();
-    await expect(
-      caller.listDraftsAwaitingApproval({ accountId: ACCOUNT_A, userId: USER_B }),
-    ).rejects.toThrow();
+    await expect(caller.getDashboardMetrics({ accountId: ACCOUNT_A })).rejects.toThrow();
+    await expect(caller.listRecommendedActions({ accountId: ACCOUNT_A })).rejects.toThrow();
+    await expect(caller.listDraftsAwaitingApproval({ accountId: ACCOUNT_A })).rejects.toThrow();
   });
 
   it('listDraftsAwaitingApproval and listRecommendedActions return account-scoped records through the router', async () => {
@@ -141,19 +151,39 @@ describe('metrics router integration', () => {
       communicationsRepo: inMemoryRepo(records),
       accountsRepo: accountsRepo(),
     });
-    const router = createMetricsRouter(() => service);
-    const caller = router.createCaller({} as Context);
+    const authService = fakeAuthService();
+    const router = createMetricsRouter(() => service, () => authService);
+    const token = await issueBearerToken(authService, USER_A);
+    const caller = router.createCaller(ctxWithToken(token));
 
-    const drafts = await caller.listDraftsAwaitingApproval({
-      accountId: ACCOUNT_A,
-      userId: USER_A,
-    });
+    const drafts = await caller.listDraftsAwaitingApproval({ accountId: ACCOUNT_A });
     expect(drafts.map((d) => d.commId)).toEqual(['a-draft']);
 
-    const recommended = await caller.listRecommendedActions({
-      accountId: ACCOUNT_A,
-      userId: USER_A,
-    });
+    const recommended = await caller.listRecommendedActions({ accountId: ACCOUNT_A });
     expect(recommended.map((r) => r.commId)).toEqual(['a-draft']);
+  });
+
+  it('SECURITY: rejects a call with no Authorization header (401)', async () => {
+    const service = new MetricsService({
+      communicationsRepo: inMemoryRepo([]),
+      accountsRepo: accountsRepo(),
+    });
+    const authService = fakeAuthService();
+    const router = createMetricsRouter(() => service, () => authService);
+    const caller = router.createCaller(ctxWithToken(undefined));
+
+    await expect(caller.getDashboardMetrics({ accountId: ACCOUNT_A })).rejects.toThrow(TRPCError);
+  });
+
+  it('SECURITY: rejects a forged/unknown bearer token (401)', async () => {
+    const service = new MetricsService({
+      communicationsRepo: inMemoryRepo([]),
+      accountsRepo: accountsRepo(),
+    });
+    const authService = fakeAuthService();
+    const router = createMetricsRouter(() => service, () => authService);
+    const caller = router.createCaller(ctxWithToken(FORGED_TOKEN));
+
+    await expect(caller.getDashboardMetrics({ accountId: ACCOUNT_A })).rejects.toThrow(TRPCError);
   });
 });
