@@ -65,5 +65,25 @@
       "mustNotContainChunkIds": ["gmail#msg-invoice-1#0#cccccccccccc"],
       "note": "Explicit project metadata filter (cross-channel linking, README L28) narrows a generic query to one workstream."
     }
+  ],
+  "findRelatedQueries": [
+    {
+      "id": "find-related-by-topic-cross-channel",
+      "accountId": "acct_alex",
+      "query": { "topic": "meridian-contract" },
+      "topK": 5,
+      "expectedTopChunkIds": ["gmail#msg-meridian-1#0#aaaaaaaaaaaa", "sms#sms-meridian-2#0#bbbbbbbbbbbb"],
+      "mustNotContainChunkIds": ["gmail#msg-other-acct-1#0#ffffffffffff"],
+      "note": "findRelated({ topic }) via filterSearch (no knn clause) against real OpenSearch — cross-channel (gmail+sms) same-topic linking, cross-account isolation held even though acct_other shares the exact topic name."
+    },
+    {
+      "id": "find-related-by-participant-cross-channel",
+      "accountId": "acct_alex",
+      "query": { "participant": "sam@vendor.io" },
+      "topK": 5,
+      "expectedTopChunkIds": ["gmail#msg-meridian-1#0#aaaaaaaaaaaa", "sms#sms-meridian-2#0#bbbbbbbbbbbb"],
+      "mustNotContainChunkIds": [],
+      "note": "findRelated({ participant }) via filterSearch against real OpenSearch — cross-channel (gmail+sms) linking on a shared participant identity, no vector similarity involved."
+    }
   ]
 }

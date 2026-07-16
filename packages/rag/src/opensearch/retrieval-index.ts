@@ -77,6 +77,36 @@ export class OpenSearchRetrievalIndex implements RetrievalIndex {
     const hits = response.body.hits?.hits ?? [];
     return hits.map((hit: OpenSearchHit) => fromHit(hit));
   }
+
+  /**
+   * Filter-only lookup — `bool.filter` on `metadata.account_id` plus any `SearchFilters`, with NO
+   * `knn` clause and no query vector anywhere in the request body (see `RetrievalIndex.filterSearch`
+   * doc: cross-channel linking, `linking.ts`, must never construct a zero-vector `knn` query against
+   * a real HNSW/Lucene kNN index — that is undefined behavior in cosine similarity space).
+   */
+  async filterSearch(options: SearchOptions): Promise<SearchHit[]> {
+    const { accountId, topK, filters } = options;
+
+    const filterClauses: Record<string, unknown>[] = [{ term: { 'metadata.account_id': accountId } }];
+    for (const clause of toFilterClauses(filters)) {
+      filterClauses.push(clause);
+    }
+
+    const response = await this.client.search({
+      index: CHUNKS_INDEX_NAME,
+      body: {
+        size: topK,
+        query: {
+          bool: {
+            filter: filterClauses,
+          },
+        },
+      },
+    });
+
+    const hits = response.body.hits?.hits ?? [];
+    return hits.map((hit: OpenSearchHit) => fromHit(hit));
+  }
 }
 
 interface OpenSearchHit {

@@ -39,7 +39,7 @@ describe('findRelated', () => {
       chunk({ chunkId: 'unrelated', accountId: 'acct_A', embedding: [0, 0, 1], metadata: { channel: 'gmail', accountId: 'acct_A', participants: [], ts: '2026-07-10T00:00:00.000Z', sourceType: 'communication', topic: 'other-topic' } }),
     ]);
 
-    const related = await findRelated(index, 'acct_A', { topic: 'meridian-contract' }, { queryEmbeddingDimension: 3 });
+    const related = await findRelated(index, 'acct_A', { topic: 'meridian-contract' });
 
     expect(related.map((r) => r.chunkId).sort()).toEqual(['gmail-1', 'sms-1']);
   });
@@ -52,7 +52,7 @@ describe('findRelated', () => {
       chunk({ chunkId: 'other-participant', accountId: 'acct_A', metadata: { channel: 'gmail', accountId: 'acct_A', participants: ['dana@brand-a.com'], ts: '2026-07-10T00:00:00.000Z', sourceType: 'communication' } }),
     ]);
 
-    const related = await findRelated(index, 'acct_A', { participant: 'sam@vendor.io' }, { queryEmbeddingDimension: 3 });
+    const related = await findRelated(index, 'acct_A', { participant: 'sam@vendor.io' });
 
     expect(related.map((r) => r.chunkId).sort()).toEqual(['asana-1', 'msg-1']);
   });
@@ -65,7 +65,7 @@ describe('findRelated', () => {
       chunk({ chunkId: 'p1', accountId: 'acct_A', metadata: { channel: 'preference', accountId: 'acct_A', participants: [], ts: '2026-07-10T00:00:00.000Z', sourceType: 'preference' } }),
     ]);
 
-    const related = await findRelated(index, 'acct_A', { project: 'Q3 Launch' }, { queryEmbeddingDimension: 3 });
+    const related = await findRelated(index, 'acct_A', { project: 'Q3 Launch' });
 
     expect(related.map((r) => r.chunkId).sort()).toEqual(['a1', 'c1']);
   });
@@ -79,7 +79,7 @@ describe('findRelated', () => {
       chunk({ chunkId: 'y-0', accountId: 'acct_A' }), // different sourceId (src-y-0)
     ]);
 
-    const related = await findRelated(index, 'acct_A', { sourceId: 'src-x-0' }, { queryEmbeddingDimension: 3 });
+    const related = await findRelated(index, 'acct_A', { sourceId: 'src-x-0' });
 
     expect(related.map((r) => r.chunkId).sort()).toEqual(['x-0', 'x-1']);
   });
@@ -91,14 +91,14 @@ describe('findRelated', () => {
       chunk({ chunkId: 'b-chunk', accountId: 'acct_B', metadata: { channel: 'gmail', accountId: 'acct_B', participants: [], ts: '2026-07-10T00:00:00.000Z', sourceType: 'communication', topic: 'shared-topic-name' } }),
     ]);
 
-    const related = await findRelated(index, 'acct_A', { topic: 'shared-topic-name' }, { queryEmbeddingDimension: 3 });
+    const related = await findRelated(index, 'acct_A', { topic: 'shared-topic-name' });
 
     expect(related.map((r) => r.chunkId)).toEqual(['a-chunk']);
   });
 
   it('rejects a call with no linking dimension at all', async () => {
     const index = new InMemoryRetrievalIndex();
-    await expect(findRelated(index, 'acct_A', {}, { queryEmbeddingDimension: 3 })).rejects.toThrow(
+    await expect(findRelated(index, 'acct_A', {})).rejects.toThrow(
       /at least one linking dimension/,
     );
   });

@@ -45,6 +45,15 @@ export interface SearchHit {
 export interface RetrievalIndex {
   indexChunks(chunks: EmbeddedChunk[]): Promise<void>;
   search(queryEmbedding: number[], queryText: string, options: SearchOptions): Promise<SearchHit[]>;
+  /**
+   * Filter-only lookup: the account filter plus `options.filters`, no vector similarity and no
+   * `knn` clause at all (design.md §4 "not embeddings alone"; used by cross-channel linking,
+   * `linking.ts`). Distinct from `search()` with a zero vector — a zero vector is still fed into
+   * the OpenSearch adapter's `knn` clause, which is undefined behavior in cosine space against a
+   * real HNSW/Lucene kNN index (it only "works" against the in-memory double, which never throws).
+   * This method never builds a `knn` clause at all.
+   */
+  filterSearch(options: SearchOptions): Promise<SearchHit[]>;
 }
 
 /** Cosine similarity of two equal-length vectors; 0 if either is a zero vector. */
@@ -130,6 +139,27 @@ export class InMemoryRetrievalIndex implements RetrievalIndex {
       sourceId: chunk.sourceId,
       textForContext: chunk.textForContext,
       score,
+      metadata: chunk.metadata,
+    }));
+  }
+
+  /**
+   * Filter-only lookup (no similarity scoring at all — see `RetrievalIndex.filterSearch` doc).
+   * Every matching chunk is returned with `score: 0`, ordered as stored; callers that need
+   * ranking apply their own (linking has none — it is presence, not relevance).
+   */
+  async filterSearch(options: SearchOptions): Promise<SearchHit[]> {
+    const { accountId, topK, filters } = options;
+
+    const candidates = [...this.chunks.values()].filter(
+      (c) => c.metadata.accountId === accountId && matchesFilters(c, filters),
+    );
+
+    return candidates.slice(0, topK).map((chunk) => ({
+      chunkId: chunk.chunkId,
+      sourceId: chunk.sourceId,
+      textForContext: chunk.textForContext,
+      score: 0,
       metadata: chunk.metadata,
     }));
   }

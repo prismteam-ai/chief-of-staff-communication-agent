@@ -61,6 +61,7 @@ function realRetrievalIndex(): OpenSearchRetrievalIndex {
 const unwiredRetrievalIndex: RetrievalIndex = {
   indexChunks: () => Promise.reject(new Error('RAG_DOMAIN_ENDPOINT not set — chunk indexing unavailable')),
   search: () => Promise.reject(new Error('RAG_DOMAIN_ENDPOINT not set — chunk indexing unavailable')),
+  filterSearch: () => Promise.reject(new Error('RAG_DOMAIN_ENDPOINT not set — chunk indexing unavailable')),
 };
 
 function retrievalIndex(): RetrievalIndex {

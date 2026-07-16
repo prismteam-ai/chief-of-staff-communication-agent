@@ -20,18 +20,17 @@ export interface FindRelatedQuery {
   asanaGid?: string;
 }
 
-const NEUTRAL_QUERY_TEXT = '';
-
 /**
- * Runs a filter-only lookup against a `RetrievalIndex` (no query embedding — see module doc). At
- * least one of `sourceId`/`participant`/`topic`/`project`/`asanaGid` must be given, or every
- * chunk in the account would match and the "related" framing would be meaningless.
+ * Runs a filter-only lookup against a `RetrievalIndex` via `filterSearch` (no query embedding, no
+ * `knn` clause at all — see module doc and `RetrievalIndex.filterSearch`). At least one of
+ * `sourceId`/`participant`/`topic`/`project`/`asanaGid` must be given, or every chunk in the
+ * account would match and the "related" framing would be meaningless.
  */
 export async function findRelated(
   index: RetrievalIndex,
   accountId: string,
   query: FindRelatedQuery,
-  options: { topK?: number; queryEmbeddingDimension: number } = { queryEmbeddingDimension: 0 },
+  options: { topK?: number } = {},
 ): Promise<SearchHit[]> {
   const { sourceId, participant, topic, project, asanaGid } = query;
   if (!sourceId && !participant && !topic && !project && !asanaGid) {
@@ -39,9 +38,8 @@ export async function findRelated(
   }
 
   const topK = options.topK ?? 50;
-  const zeroVector = new Array<number>(options.queryEmbeddingDimension).fill(0);
 
-  const hits = await index.search(zeroVector, NEUTRAL_QUERY_TEXT, {
+  const hits = await index.filterSearch({
     accountId,
     topK,
     filters: { participant, topic, project, asanaGid },

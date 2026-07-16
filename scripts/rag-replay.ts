@@ -7,7 +7,9 @@
  * Cohere Embed v4 profile (real Bedrock call — this is the SAME embedder both modes use, so a
  * passing local replay is evidence about the query/index code, not a stand-in for the model),
  * indexes into the target OpenSearch (local Docker container or the deployed domain), then embeds
- * and runs every query in `fixtures/rag/golden-queries.json` and asserts:
+ * and runs every query in `fixtures/rag/golden-queries.json`'s `queries` (vector + keyword hybrid
+ * search) and `findRelatedQueries` (filter-only cross-channel linking, no query embedding —
+ * `findRelated`/`RetrievalIndex.filterSearch`) and asserts, for both:
  *   - every `expectedTopChunkIds` entry appears within the query's `topK` results
  *   - no `mustNotContainChunkIds` entry appears at all (the account-isolation assertions)
  *
@@ -26,8 +28,8 @@ import {
   createSignedOpenSearchClient,
   OpenSearchRetrievalIndex,
 } from '@chief-of-staff/rag/opensearch';
-import { embedText, embedTexts, EMBED_INPUT_TYPE } from '@chief-of-staff/rag';
-import type { EmbeddedChunk } from '@chief-of-staff/rag';
+import { embedText, embedTexts, EMBED_INPUT_TYPE, findRelated } from '@chief-of-staff/rag';
+import type { EmbeddedChunk, FindRelatedQuery } from '@chief-of-staff/rag';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REGION = process.env.AWS_REGION ?? 'us-east-2';
@@ -80,6 +82,27 @@ interface GoldenQuery {
 function loadGoldenQueries(): GoldenQuery[] {
   const raw = readFileSync(GOLDEN_QUERIES_PATH, 'utf-8');
   return (JSON.parse(raw) as { queries: GoldenQuery[] }).queries;
+}
+
+/**
+ * `findRelated` golden cases (linking.ts's filter-only path, `RetrievalIndex.filterSearch`) —
+ * replayed against the SAME `OpenSearchRetrievalIndex` the vector golden queries use, proving the
+ * no-knn filter-only query works against a real HNSW/Lucene kNN index, not just the in-memory
+ * double (which never throws on a zero vector and so never proved anything about this path).
+ */
+interface FindRelatedGoldenQuery {
+  id: string;
+  accountId: string;
+  query: FindRelatedQuery;
+  topK: number;
+  expectedTopChunkIds: string[];
+  mustNotContainChunkIds: string[];
+  note?: string;
+}
+
+function loadFindRelatedQueries(): FindRelatedGoldenQuery[] {
+  const raw = readFileSync(GOLDEN_QUERIES_PATH, 'utf-8');
+  return (JSON.parse(raw) as { findRelatedQueries?: FindRelatedGoldenQuery[] }).findRelatedQueries ?? [];
 }
 
 async function getDeployedDomainEndpoint(): Promise<string> {
@@ -152,11 +175,33 @@ async function main() {
     }
   }
 
-  if (failures > 0) {
-    fail(`${failures}/${queries.length} golden queries failed.`);
+  const findRelatedQueries = loadFindRelatedQueries();
+  console.log(`[rag-replay] replaying ${findRelatedQueries.length} findRelated (filter-only) golden queries...`);
+
+  for (const q of findRelatedQueries) {
+    const hits = await findRelated(index, q.accountId, q.query, { topK: q.topK });
+    const hitIds = hits.map((h) => h.chunkId);
+
+    const missingExpected = q.expectedTopChunkIds.filter((id) => !hitIds.includes(id));
+    const leakedForbidden = q.mustNotContainChunkIds.filter((id) => hitIds.includes(id));
+
+    if (missingExpected.length === 0 && leakedForbidden.length === 0) {
+      console.log(`[rag-replay] PASS  ${q.id}  (${hitIds.length} hits: ${hitIds.join(', ')})`);
+    } else {
+      failures++;
+      console.error(`[rag-replay] FAIL  ${q.id}`);
+      if (missingExpected.length > 0) console.error(`  missing expected: ${missingExpected.join(', ')}`);
+      if (leakedForbidden.length > 0) console.error(`  leaked forbidden: ${leakedForbidden.join(', ')}`);
+      console.error(`  got: ${hitIds.join(', ')}`);
+    }
   }
 
-  console.log(`\n[rag-replay] PASS — all ${queries.length} golden queries returned expected results (mode=${mode}).\n`);
+  const totalQueries = queries.length + findRelatedQueries.length;
+  if (failures > 0) {
+    fail(`${failures}/${totalQueries} golden queries failed.`);
+  }
+
+  console.log(`\n[rag-replay] PASS — all ${totalQueries} golden queries returned expected results (mode=${mode}).\n`);
 }
 
 main().catch((error: unknown) => {

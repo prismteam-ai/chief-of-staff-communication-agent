@@ -92,7 +92,7 @@ function makeDeps(overrides: {
   };
 
   const retrievalIndex: RetrievalIndex =
-    overrides.retrievalIndex ?? { indexChunks: vi.fn().mockResolvedValue(undefined), search: vi.fn() };
+    overrides.retrievalIndex ?? { indexChunks: vi.fn().mockResolvedValue(undefined), search: vi.fn(), filterSearch: vi.fn() };
 
   const metricsClient = { addMetric: vi.fn(), addDimension: vi.fn() };
 
@@ -265,6 +265,7 @@ describe('processOneMessage', () => {
       retrievalIndex: {
         indexChunks: vi.fn().mockRejectedValue(new Error('OpenSearch bulk index 503')),
         search: vi.fn(),
+        filterSearch: vi.fn(),
       },
     });
 
@@ -286,6 +287,7 @@ describe('processOneMessage', () => {
       retrievalIndex: {
         indexChunks: vi.fn().mockRejectedValue(new Error('boom')),
         search: vi.fn(),
+        filterSearch: vi.fn(),
       },
     });
 
