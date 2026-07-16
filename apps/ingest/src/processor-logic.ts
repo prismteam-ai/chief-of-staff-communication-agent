@@ -10,6 +10,7 @@ import type { CommunicationsRepo } from './communications-repo.js';
 import type { RawArtifactStore } from './raw-artifact-store.js';
 import { attachmentKey } from './raw-artifact-store.js';
 import { indexMessageChunks } from './rag-index-step.js';
+import type { AgentTrigger } from './agent-trigger.js';
 import type { logger as LoggerType, metrics as MetricsType } from './context.js';
 
 /** Attachment bytes above this size are skipped (logged, not persisted) rather than pulled into
@@ -64,6 +65,7 @@ export async function processOneMessage(
     communicationsRepo: CommunicationsRepo;
     rawArtifactStore: RawArtifactStore;
     retrievalIndex: RetrievalIndex;
+    agentTrigger: AgentTrigger;
     log: Pick<typeof LoggerType, 'info' | 'warn' | 'error'>;
     metricsClient: Pick<typeof MetricsType, 'addMetric' | 'addDimension'>;
   },
@@ -76,6 +78,7 @@ export async function processOneMessage(
     communicationsRepo,
     rawArtifactStore,
     retrievalIndex,
+    agentTrigger,
     log,
     metricsClient,
   } = deps;
@@ -126,6 +129,15 @@ export async function processOneMessage(
     // never flip this call's outcome to 'failed' (which would falsely suggest ingestion itself
     // failed and could cause an unnecessary redelivery of an already-ingested message).
     await indexChunksIsolated(normalized, { retrievalIndex, log, metricsClient });
+
+    // Isolated the same way as RAG indexing (brief constraint 4): the communication is durably
+    // persisted, so a failure to hand it off to the agent must degrade to a warn + AgentTriggerFailed
+    // metric, never flip this outcome to 'failed'. The agent turn itself runs on its own SQS-backed
+    // Lambda with its own retry/DLQ.
+    await triggerAgentIsolated(
+      { commId: record.commId, accountId },
+      { agentTrigger, channelType: normalized.channelType, log, metricsClient },
+    );
 
     return { outcome: 'ingested', commId: record.commId };
   } catch (error) {
@@ -216,6 +228,34 @@ async function indexChunksIsolated(
     });
     metricsClient.addDimension('channel', normalized.channelType);
     metricsClient.addMetric('ChunkIndexFailed', MetricUnit.Count, 1);
+  }
+}
+
+/**
+ * Publishes the `{commId, accountId}` agent trigger, isolated so a publish failure (or an unwired
+ * `AGENT_QUEUE_URL`) never propagates out of `processOneMessage`. Failure is a warn + an
+ * `AgentTriggerFailed` metric only; no message body/participant data in the log (brief constraint 4).
+ */
+async function triggerAgentIsolated(
+  input: { commId: string; accountId: string },
+  deps: {
+    agentTrigger: AgentTrigger;
+    channelType: string;
+    log: Pick<typeof LoggerType, 'info' | 'warn' | 'error'>;
+    metricsClient: Pick<typeof MetricsType, 'addMetric' | 'addDimension'>;
+  },
+): Promise<void> {
+  const { agentTrigger, channelType, log, metricsClient } = deps;
+  try {
+    await agentTrigger.publish(input);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log.warn('Failed to publish agent trigger — message ingest still succeeded', {
+      commId: input.commId,
+      error: message,
+    });
+    metricsClient.addDimension('channel', channelType);
+    metricsClient.addMetric('AgentTriggerFailed', MetricUnit.Count, 1);
   }
 }
 

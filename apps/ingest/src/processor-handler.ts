@@ -11,6 +11,7 @@ import type { RetrievalIndex } from '@chief-of-staff/rag';
 import { createDedupeRepo } from './dedupe-repo.js';
 import { createCommunicationsRepo } from './communications-repo.js';
 import { createRawArtifactStore } from './raw-artifact-store.js';
+import { createAgentTrigger, noopAgentTrigger } from './agent-trigger.js';
 import { createGmailClientForAccount } from './gmail-client.js';
 import {
   makeFetchGmailAttachment,
@@ -28,6 +29,10 @@ const RAW_ARTIFACT_BUCKET_NAME = process.env.RAW_ARTIFACT_BUCKET_NAME ?? '';
 // `indexChunksIsolated` warning + `ChunkIndexFailed` per message rather than blocking ingestion,
 // consistent with the "embed/index failure must not fail ingestion" rule.
 const RAG_DOMAIN_ENDPOINT = process.env.RAG_DOMAIN_ENDPOINT ?? '';
+// Set once AgentStack exists (Task 5). Absent → `noopAgentTrigger` rejects inside the async call,
+// which `triggerAgentIsolated` turns into a warn + `AgentTriggerFailed` metric rather than blocking
+// ingestion, consistent with the "downstream failure must not fail ingest" rule.
+const AGENT_QUEUE_URL = process.env.AGENT_QUEUE_URL ?? '';
 const AWS_REGION = process.env.AWS_REGION ?? 'us-east-2';
 
 function requireEnv(): void {
@@ -80,6 +85,7 @@ async function baseHandler(event: SQSEvent): Promise<SQSBatchResponse> {
   const dedupeRepo = createDedupeRepo(DEDUPE_TABLE_NAME);
   const communicationsRepo = createCommunicationsRepo(COMMUNICATIONS_TABLE_NAME);
   const rawArtifactStore = createRawArtifactStore(RAW_ARTIFACT_BUCKET_NAME);
+  const agentTrigger = AGENT_QUEUE_URL ? createAgentTrigger(AGENT_QUEUE_URL) : noopAgentTrigger;
   const fetchMessage = makeFetchGmailMessage(createGmailClientForAccount);
   const fetchAttachment = makeFetchGmailAttachment(createGmailClientForAccount);
 
@@ -102,6 +108,7 @@ async function baseHandler(event: SQSEvent): Promise<SQSBatchResponse> {
       communicationsRepo,
       rawArtifactStore,
       retrievalIndex: retrievalIndex(),
+      agentTrigger,
       log: logger,
       metricsClient: metrics,
     });

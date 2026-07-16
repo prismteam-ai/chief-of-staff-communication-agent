@@ -3,6 +3,7 @@ import type { RetrievalIndex } from '@chief-of-staff/rag';
 import type { DedupeRepo } from './dedupe-repo.js';
 import type { CommunicationsRepo, CommunicationRecord } from './communications-repo.js';
 import type { RawArtifactStore } from './raw-artifact-store.js';
+import type { AgentTrigger } from './agent-trigger.js';
 import {
   processOneMessage,
   type FetchGmailAttachment,
@@ -74,6 +75,7 @@ function makeDeps(
     fetchMessage?: FetchGmailMessage;
     fetchAttachment?: FetchGmailAttachment;
     retrievalIndex?: RetrievalIndex;
+    agentTrigger?: AgentTrigger;
   } = {},
 ) {
   const fetchMessage: FetchGmailMessage =
@@ -108,6 +110,10 @@ function makeDeps(
     filterSearch: vi.fn(),
   };
 
+  const agentTrigger: AgentTrigger = overrides.agentTrigger ?? {
+    publish: vi.fn().mockResolvedValue(undefined),
+  };
+
   const metricsClient = { addMetric: vi.fn(), addDimension: vi.fn() };
 
   return {
@@ -117,6 +123,7 @@ function makeDeps(
     communicationsRepo,
     rawArtifactStore,
     retrievalIndex,
+    agentTrigger,
     log: noopLog,
     metricsClient,
   };
@@ -323,6 +330,36 @@ describe('processOneMessage', () => {
     const warnCall = (deps.log.warn as ReturnType<typeof vi.fn>).mock.calls.find(
       (call) =>
         call[0] === 'Failed to embed/index communication chunk(s) — message ingest still succeeded',
+    );
+    expect(warnCall?.[1]).not.toHaveProperty('body');
+    expect(warnCall?.[1]).not.toHaveProperty('participants');
+  });
+
+  it('publishes the agent trigger with {commId, accountId} after a successful ingest', async () => {
+    const deps = makeDeps();
+
+    await processOneMessage({ accountId: ACCOUNT_ID, messageId: MESSAGE_ID }, deps);
+
+    expect(deps.agentTrigger.publish).toHaveBeenCalledWith({
+      commId: 'gmail#18f2a1c3d4e5f601',
+      accountId: ACCOUNT_ID,
+    });
+  });
+
+  it('ISOLATION: an agent-trigger failure does not fail the message or change its outcome', async () => {
+    const deps = makeDeps({
+      agentTrigger: { publish: vi.fn().mockRejectedValue(new Error('SQS SendMessage throttled')) },
+    });
+
+    const result = await processOneMessage({ accountId: ACCOUNT_ID, messageId: MESSAGE_ID }, deps);
+
+    expect(result).toEqual({ outcome: 'ingested', commId: 'gmail#18f2a1c3d4e5f601' });
+    expect(deps.metricsClient.addMetric).toHaveBeenCalledWith('MessageIngested', 'Count', 1);
+    expect(deps.metricsClient.addMetric).not.toHaveBeenCalledWith('MessageFailed', 'Count', 1);
+    expect(deps.metricsClient.addMetric).toHaveBeenCalledWith('AgentTriggerFailed', 'Count', 1);
+    // No message body / participant addresses in the isolation warn (no-PII rule).
+    const warnCall = (deps.log.warn as ReturnType<typeof vi.fn>).mock.calls.find(
+      (call) => call[0] === 'Failed to publish agent trigger — message ingest still succeeded',
     );
     expect(warnCall?.[1]).not.toHaveProperty('body');
     expect(warnCall?.[1]).not.toHaveProperty('participants');
