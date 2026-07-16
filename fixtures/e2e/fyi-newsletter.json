@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "channelType": "gmail",
+  "accountId": "acct-demo-alex",
+  "externalId": "e2e-fyi-newsletter-1",
+  "threadKey": "thread-fyi-newsletter-1",
+  "participants": [
+    { "id": "newsletter@tech-digest.example", "displayName": "Tech Digest", "role": "from" },
+    { "id": "demoalex775@gmail.com", "displayName": "Alex Demo", "role": "to" }
+  ],
+  "ts": "2026-07-16T06:00:00.000Z",
+  "body": "This week's newsletter: the top 10 engineering blog posts you may have missed. This is an automated digest — no action required. Unsubscribe at any time using the link below.",
+  "attachments": []
+}

@@ -1,0 +1,42 @@
+{
+  "_comment": "End-to-end triage fixtures (Task 5). Each case is a NormalizedMessage-shaped fixture file plus the EXPECTED RECOMMENDATION CLASS (action type, not exact wording — per the brief). The replay test (apps/agent-handler/src/e2e-replay.test.ts) loads these files, drives runAgentTurn with a deterministic keyword-based fake model (no Bedrock), and asserts the produced actionType matches expectedActionType and that low-confidence cases land in needs_context. Wording is never asserted — only the class.",
+  "confidenceThreshold": 0.6,
+  "cases": [
+    {
+      "file": "reply-needed.json",
+      "expectedActionType": "reply_needed",
+      "expectedOutcome": "recommended_and_drafted",
+      "note": "A direct question from a client expecting an answer."
+    },
+    {
+      "file": "fyi-newsletter.json",
+      "expectedActionType": "fyi_no_reply",
+      "expectedOutcome": "recommended_and_drafted",
+      "note": "A newsletter / announcement — informational, no reply owed."
+    },
+    {
+      "file": "schedule-request.json",
+      "expectedActionType": "schedule",
+      "expectedOutcome": "recommended_and_drafted",
+      "note": "A meeting request needing a scheduling action."
+    },
+    {
+      "file": "delegate-task.json",
+      "expectedActionType": "delegate",
+      "expectedOutcome": "recommended_and_drafted",
+      "note": "Work that belongs to another team member — hand off."
+    },
+    {
+      "file": "escalate-urgent.json",
+      "expectedActionType": "escalate",
+      "expectedOutcome": "recommended_and_drafted",
+      "note": "Urgent, high-stakes — surface to the principal."
+    },
+    {
+      "file": "ambiguous-low-confidence.json",
+      "expectedActionType": "needs_context",
+      "expectedOutcome": "needs_context",
+      "note": "Ambiguous / low-signal — the confidence gate must route this to needs_context with no draft."
+    }
+  ]
+}

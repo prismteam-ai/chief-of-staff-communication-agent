@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "channelType": "gmail",
+  "accountId": "acct-demo-alex",
+  "externalId": "e2e-reply-needed-1",
+  "threadKey": "thread-reply-needed-1",
+  "participants": [
+    { "id": "client.morgan@acme-partners.com", "displayName": "Morgan Reyes", "role": "from" },
+    { "id": "demoalex775@gmail.com", "displayName": "Alex Demo", "role": "to" }
+  ],
+  "ts": "2026-07-16T09:12:00.000Z",
+  "body": "Hi Alex, quick question — can you confirm whether we're still on track to deliver the Q3 integration by the 30th? I need to update our steering committee today. Please reply when you get a moment.",
+  "attachments": []
+}

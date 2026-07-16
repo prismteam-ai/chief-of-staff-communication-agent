@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "channelType": "gmail",
+  "accountId": "acct-demo-alex",
+  "externalId": "e2e-delegate-1",
+  "threadKey": "thread-delegate-1",
+  "participants": [
+    { "id": "ops@acme-partners.com", "displayName": "Acme Ops", "role": "from" },
+    { "id": "demoalex775@gmail.com", "displayName": "Alex Demo", "role": "to" }
+  ],
+  "ts": "2026-07-16T11:20:00.000Z",
+  "body": "Alex — the invoice reconciliation for June needs to be handled by the finance team. This isn't really your area; could you delegate it to whoever owns accounts payable and loop them in? No reply needed from you directly, just a hand-off.",
+  "attachments": []
+}

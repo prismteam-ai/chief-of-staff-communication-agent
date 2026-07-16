@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "channelType": "gmail",
+  "accountId": "acct-demo-alex",
+  "externalId": "e2e-escalate-1",
+  "threadKey": "thread-escalate-1",
+  "participants": [
+    { "id": "cto@acme-partners.com", "displayName": "Acme CTO", "role": "from" },
+    { "id": "demoalex775@gmail.com", "displayName": "Alex Demo", "role": "to" }
+  ],
+  "ts": "2026-07-16T08:03:00.000Z",
+  "body": "URGENT: our production integration with your platform is down and customers are affected. This is a critical, high-priority incident — we need your leadership to get on a call in the next 15 minutes. Please escalate immediately.",
+  "attachments": []
+}
