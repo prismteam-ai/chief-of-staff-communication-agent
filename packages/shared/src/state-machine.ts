@@ -9,6 +9,12 @@
  *                │ needs_context → drafted (after the user supplies context)
  * ```
  *
+ * The `recommended → needs_context` edge is the confidence gate's low-confidence outcome (see
+ * `confidence.ts`/`routeByConfidence`): once the agent has produced a recommendation but its
+ * confidence is below threshold, the communication moves to `needs_context` rather than `drafted`,
+ * and the dashboard prompts the user. `needs_context → drafted` is then the recovery edge once the
+ * user supplies context. The gate DECISION is always applied in code, never in the prompt.
+ *
  * Terminal states: `answered` (entered on provider send confirmation) and `dismissed`. Both stop
  * the overdue clock — "answered" tracking counts handled = answered ∪ dismissed (see `isHandled`).
  *
@@ -35,13 +41,14 @@ export type CommunicationState = (typeof COMMUNICATION_STATES)[number];
 
 /**
  * Typed transition map: every state is an explicit key (exhaustively), and its value is the
- * exact set of legal destination states. `needs_context` is reachable via the confidence gate
- * (see `confidence.ts`) rather than a modeled inbound edge from another state — it is a routing
- * outcome of the recommend/draft step, not a transition target of an existing communication.
+ * exact set of legal destination states. `needs_context` is entered as the confidence gate's
+ * low-confidence outcome of the recommend step (`recommended → needs_context`, see `confidence.ts`)
+ * — the gate decision is applied in code, not modeled as branch logic in the graph — and exits back
+ * to `drafted` once the user supplies the missing context.
  */
 export const TRANSITIONS: Readonly<Record<CommunicationState, readonly CommunicationState[]>> = {
   ingested: ['recommended'],
-  recommended: ['drafted', 'dismissed'],
+  recommended: ['drafted', 'dismissed', 'needs_context'],
   drafted: ['awaiting_approval'],
   awaiting_approval: ['approved', 'edited', 'rejected'],
   approved: ['sent'],
