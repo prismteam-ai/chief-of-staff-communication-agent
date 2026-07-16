@@ -263,9 +263,28 @@ export class ApiStack extends TaggedStack {
       },
     });
 
+    // Task 8.5 live-proof fix: `methods: [HttpMethod.ANY]` here used to include OPTIONS, which
+    // routed every CORS preflight straight to the tRPC Lambda instead of letting API Gateway's own
+    // `corsPreflight` mock integration answer it — the Lambda has no OPTIONS handling (tRPC treats
+    // it as a real request with a missing content-type and 415s), so the preflight response never
+    // carried "200 OK", and every browser POST mutation (login included) failed closed with a CORS
+    // error before the real request was ever sent. GET queries were unaffected (a same-origin-safe
+    // GET with no custom headers never triggers a preflight), which is why this was latent through
+    // Task 8 — the dashboard's mutations were never actually exercised live from a browser before
+    // this task's proof step. Listing every real method explicitly (never ANY) leaves OPTIONS on
+    // this path unclaimed, so `corsPreflight` above's auto-generated OPTIONS route continues to
+    // answer preflights directly at the gateway, exactly as it does for every route CDK adds this
+    // way — see https://github.com/aws/aws-cdk/issues/22208 for the same failure mode elsewhere.
     httpApi.addRoutes({
       path: '/{proxy+}',
-      methods: [apigwv2.HttpMethod.ANY],
+      methods: [
+        apigwv2.HttpMethod.GET,
+        apigwv2.HttpMethod.POST,
+        apigwv2.HttpMethod.PUT,
+        apigwv2.HttpMethod.PATCH,
+        apigwv2.HttpMethod.DELETE,
+        apigwv2.HttpMethod.HEAD,
+      ],
       integration: new integrations.HttpLambdaIntegration('LambdaIntegration', handler),
     });
 
