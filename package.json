@@ -1,0 +1,41 @@
+{
+  "name": "chief-of-staff-agent",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
+    "cdk": "cdk",
+    "cdk:synth": "cdk synth --strict --context @aws-cdk/core:bootstrapQualifier=$CDK_BOOTSTRAP_QUALIFIER",
+    "cdk:deploy": "cdk deploy --all --require-approval never --context @aws-cdk/core:bootstrapQualifier=$CDK_BOOTSTRAP_QUALIFIER"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.173.2",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-amplify": "^3.1088.0",
+    "@aws-sdk/client-cloudformation": "^3.1088.0",
+    "@eslint/js": "^10.0.1",
+    "@types/archiver": "^8.0.0",
+    "@types/node": "^22.10.0",
+    "archiver": "^8.0.0",
+    "aws-cdk": "^2.173.2",
+    "eslint": "^10.7.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.64.0",
+    "vitest": "^2.1.8"
+  }
+}
