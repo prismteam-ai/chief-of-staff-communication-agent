@@ -135,9 +135,7 @@ export class MetricsService {
     assertAccountAccess(userId, accountId, ownershipMapFor(accountId, ownerUserId));
   }
 
-  private async loadAccountScoped(
-    input: DashboardMetricsInput,
-  ): Promise<ApiCommunicationRecord[]> {
+  private async loadAccountScoped(input: DashboardMetricsInput): Promise<ApiCommunicationRecord[]> {
     await this.assertAccountOwned(input.accountId, input.userId);
     return this.communicationsRepo.listByAccount(input.accountId);
   }
@@ -204,9 +202,7 @@ export class MetricsService {
 
   /** Recommended-actions view (README L36): every communication carrying a recommendation,
    * most-recent-first (by the message's own timestamp, not ingestion time). */
-  async listRecommendedActions(
-    input: DashboardMetricsInput,
-  ): Promise<ApiCommunicationRecord[]> {
+  async listRecommendedActions(input: DashboardMetricsInput): Promise<ApiCommunicationRecord[]> {
     const records = await this.loadAccountScoped(input);
     return records
       .filter((r) => r.recommendation !== undefined)

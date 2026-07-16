@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.playwright.json",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:design": "playwright test --project=design",
+    "test:browser": "playwright test --project=browser",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -18,6 +20,7 @@
   },
   "devDependencies": {
     "@chief-of-staff/tsconfig": "workspace:*",
+    "@playwright/test": "^1.61.1",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",

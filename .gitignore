@@ -16,6 +16,12 @@ coverage/
 *.tsbuildinfo
 .turbo/
 
+# --- playwright ---
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
 # --- cdk / sam ---
 cdk.out/
 .aws-sam/

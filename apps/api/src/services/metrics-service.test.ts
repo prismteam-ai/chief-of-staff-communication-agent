@@ -113,9 +113,17 @@ describe('MetricsService.getDashboardMetrics — aggregation correctness', () =>
       // Ingested 2 minutes before "now", unhandled -> not yet overdue.
       fixture({ commId: 'fresh', status: 'drafted', ingestedAt: '2026-07-16T12:58:00.000Z' }),
       // Old but answered -> never overdue (handled).
-      fixture({ commId: 'old-but-answered', status: 'answered', ingestedAt: '2026-07-16T12:00:00.000Z' }),
+      fixture({
+        commId: 'old-but-answered',
+        status: 'answered',
+        ingestedAt: '2026-07-16T12:00:00.000Z',
+      }),
       // Old but dismissed -> never overdue (handled).
-      fixture({ commId: 'old-but-dismissed', status: 'dismissed', ingestedAt: '2026-07-16T12:00:00.000Z' }),
+      fixture({
+        commId: 'old-but-dismissed',
+        status: 'dismissed',
+        ingestedAt: '2026-07-16T12:00:00.000Z',
+      }),
     ];
     const service = new MetricsService({
       communicationsRepo: inMemoryRepo(records),

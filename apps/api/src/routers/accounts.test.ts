@@ -35,7 +35,7 @@ function fakeAccountsRepo(): AccountsRepo {
 }
 
 describe('accounts router — listConnectedAccounts', () => {
-  it('returns the caller\'s own accounts without the credentialSecretArn', async () => {
+  it("returns the caller's own accounts without the credentialSecretArn", async () => {
     const router = createAccountsRouter(() => fakeAccountsRepo());
     const caller = router.createCaller({} as Context);
 
