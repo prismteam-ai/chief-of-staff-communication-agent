@@ -51,6 +51,14 @@ async function main() {
   if (!sandbox_number) {
     fail(`Secret ${TWILIO_SECRET_ID} is missing sandbox_number.`);
   }
+  // `sandbox_number` in the secret carries the `whatsapp:` protocol prefix (Twilio's own
+  // convention, e.g. "whatsapp:+14155238886"), but `normalize.ts#stripWhatsAppPrefix` strips that
+  // prefix off every participant id it derives from an inbound webhook — so `Account.displayName`
+  // (what `resolveReplyRecipients`'s self-filter compares participant ids against, see
+  // `apps/api/src/services/approval-service.ts`) MUST be stored in the SAME bare `+E.164` form, or
+  // the self-filter never matches and a reply can be misaddressed back to our own sandbox number
+  // (found live during Task 9 verification: "Message cannot have the same To and From").
+  const displayName = sandbox_number.replace(/^whatsapp:/i, '');
 
   const accountsTableName = await getStackOutput('IngestStack', 'AccountsTableName');
   const doc = DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }));
@@ -67,7 +75,7 @@ async function main() {
         accountId: WHATSAPP_DEMO_ACCOUNT_ID,
         userId: DEMO_USER_ID,
         channelType: 'whatsapp',
-        displayName: sandbox_number,
+        displayName,
         // ARN reference only (design.md §10) — the credential itself lives exclusively in
         // Secrets Manager, never copied onto the account record.
         credentialSecretArn: `arn:aws:secretsmanager:${REGION}:*:secret:${TWILIO_SECRET_ID}`,
