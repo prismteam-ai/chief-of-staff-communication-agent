@@ -143,6 +143,24 @@ export class ApiStack extends TaggedStack {
       }),
     );
 
+    // Asana execution (Task 7, design.md §9): createAsanaFollowup/linkAsana/listAsanaProjects are
+    // the ONLY code paths that read `cos/asana` (operator-provisioned — pat/workspace_gid/
+    // project_gid) — the agent's manageAsana tool never touches Asana at all (it only proposes).
+    // Secrets Manager appends a random suffix to the ARN, same wildcard-by-name pattern as the
+    // Gmail grants above.
+    const asanaSecretArn = cdk.Stack.of(this).formatArn({
+      service: 'secretsmanager',
+      resource: 'secret',
+      resourceName: 'cos/asana-??????',
+      arnFormat: cdk.ArnFormat.COLON_RESOURCE_NAME,
+    });
+    handler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [asanaSecretArn],
+      }),
+    );
+
     const httpApi = new apigwv2.HttpApi(this, 'HttpApi', {
       apiName: `${PROJECT_NAME}-api`,
       corsPreflight: {
@@ -171,14 +189,18 @@ export class ApiStack extends TaggedStack {
       namespace: METRICS_NAMESPACE,
       // Approval-loop metrics (Task 6, design.md §7) ride the same processed-vs-failed graph
       // shape as the generic request counters — DraftApproved/ReplySent/CommunicationDismissed on
-      // the "processed" axis, SendFailed alongside RequestFailed on the "failed" axis.
+      // the "processed" axis, SendFailed alongside RequestFailed on the "failed" axis. Asana
+      // execution metrics (Task 7, design.md §9) join the same graph: AsanaTaskCreated/
+      // AsanaTaskLinked on "processed", AsanaApiFailed alongside SendFailed on "failed".
       processedMetricNames: [
         'RequestProcessed',
         'DraftApproved',
         'ReplySent',
         'CommunicationDismissed',
+        'AsanaTaskCreated',
+        'AsanaTaskLinked',
       ],
-      failedMetricNames: ['RequestFailed', 'SendFailed'],
+      failedMetricNames: ['RequestFailed', 'SendFailed', 'AsanaApiFailed'],
     });
 
     new cdk.CfnOutput(this, 'DashboardName', { value: dashboard.dashboardName });

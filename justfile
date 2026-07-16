@@ -80,3 +80,9 @@ rag-replay-aws:
 # re-run upserts rather than duplicating.
 seed-org-knowledge:
     pnpm exec tsx scripts/seed-org-knowledge.ts
+
+# Task 7 (Asana integration) brief constraint 5: idempotent sync of the CoS Communication Agent
+# Asana project's tasks (ONLY that project — paginated, never workspace-wide) into the deployed
+# OpenSearch domain as asana-sourced chunks. Safe to re-run — chunk ids are content-hash-derived.
+sync-asana:
+    pnpm exec tsx scripts/sync-asana.ts

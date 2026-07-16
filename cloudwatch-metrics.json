@@ -137,6 +137,34 @@
       "unit": "Count",
       "service": "api",
       "description": "Emitted once per communication transitioned to dismissed via the dismiss tRPC procedure (design.md §7 'no reply needed') — a terminal state that stops the overdue clock alongside answered."
+    },
+    {
+      "name": "AsanaTaskCreated",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per Asana follow-up task successfully created via the createAsanaFollowup tRPC procedure (Task 7, design.md §9) — always created inside the client's scoped project_gid."
+    },
+    {
+      "name": "AsanaTaskLinked",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per communication successfully linked to an existing Asana task via the linkAsana tRPC procedure (Task 7, design.md §9) — a provenance/back-reference comment is posted on the task and the task gid/permalink is persisted on the communication record."
+    },
+    {
+      "name": "AsanaApiFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per createAsanaFollowup/linkAsana call whose underlying AsanaClient request threw (Task 7). The communication record is left without an asanaTaskGid — never marked linked on a failed write — and a retried call re-attempts."
+    },
+    {
+      "name": "AsanaSyncCompleted",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per successful just sync-asana run (Task 7, design.md §4): the CoS Communication Agent Asana project's tasks were read (paginated, project-scoped only) and upserted into the communications-chunks OpenSearch index as asana-sourced chunks. Published via PutMetricData from the operator-run sync script (not a Lambda, so no Powertools Metrics instance is available) — same namespace/registry convention as the Lambda-emitted metrics above."
     }
   ]
 }
