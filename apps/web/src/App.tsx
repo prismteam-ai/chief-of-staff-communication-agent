@@ -1,24 +1,45 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CommunicationState } from '@chief-of-staff/shared';
-import { createApiClient, TrpcError, type CommunicationDto } from './lib/trpc-client.js';
+import {
+  createApiClient,
+  TrpcError,
+  type CommunicationDto,
+  type ConnectedAccountDto,
+  type DashboardMetrics,
+} from './lib/trpc-client.js';
 import { CommunicationCard } from './components/CommunicationCard.js';
+import { MetricsView } from './views/MetricsView.js';
+import { RecommendedActionsView } from './views/RecommendedActionsView.js';
+import { DraftsAwaitingApprovalView } from './views/DraftsAwaitingApprovalView.js';
+import { ChannelsView } from './views/ChannelsView.js';
 
 /**
- * The Task 6 approval loop UI (design.md §7/§8): a working list of communications with per-item
- * approve/edit/reject/dismiss/supply-context — "does NOT need to be pretty ... must be functionally
- * usable by a stranger end-to-end" (brief constraint 4). The full metrics/response-time/permission-
- * boundary dashboard views are Task 8.
+ * The full dashboard (Task 8, design.md §8): metrics / recommended-actions / drafts-awaiting-
+ * approval / connect-channel views, plus the Task 6 approval-queue view kept as-is (extended, not
+ * discarded — brief: "EXTEND into full dashboard, don't discard"). A simple tab nav switches
+ * between them; each view fetches its own account-scoped data through `trpc-client.ts`.
  *
- * Auth (brief constraint 4): no real session auth exists yet — `accountId`/`userId` are plain text
- * inputs, persisted to localStorage for convenience, defaulting to the seeded demo account so a
- * reviewer sees data immediately without typing anything. The account-ownership guard is enforced
- * SERVER-SIDE regardless (every tRPC procedure calls `assertAccountAccess` against the accounts
- * table) — a stranger typing someone else's userId here is rejected by the API, not by this UI.
+ * Auth (Task 8 brief constraint 3): still no real session auth — `accountId`/`userId` remain plain
+ * inputs (a demo-user selector below), persisted to localStorage for convenience. The permission
+ * boundary is NOT this UI's job: every tRPC procedure (communications, metrics, accounts) calls
+ * `assertAccountAccess` against the accounts table server-side, so typing a different `userId`/
+ * `accountId` here only ever succeeds if the API's own ownership lookup agrees — proven by the
+ * account-scoping tests in `apps/api/src/services/metrics-service.test.ts` and the router
+ * integration tests. Two named demo-user presets are offered as a convenience; see
+ * `docs/setup.md`/the task report for the second demo user's provisioning status.
  */
 
 const DEFAULT_API_URL = (import.meta.env.VITE_API_URL ?? '').trim();
-const DEFAULT_ACCOUNT_ID = 'acct-gmail-demoalex775';
-const DEFAULT_USER_ID = 'demo-alex';
+
+interface DemoUserPreset {
+  label: string;
+  userId: string;
+  accountId: string;
+}
+
+const DEMO_USER_PRESETS: DemoUserPreset[] = [
+  { label: 'demo-alex (Gmail)', userId: 'demo-alex', accountId: 'acct-gmail-demoalex775' },
+];
 
 const STATUS_FILTERS: { label: string; value: CommunicationState | 'all' }[] = [
   { label: 'All', value: 'all' },
@@ -30,6 +51,16 @@ const STATUS_FILTERS: { label: string; value: CommunicationState | 'all' }[] = [
   { label: 'Dismissed', value: 'dismissed' },
 ];
 
+const TABS = [
+  { key: 'metrics', label: 'Metrics' },
+  { key: 'recommended', label: 'Recommended actions' },
+  { key: 'drafts', label: 'Drafts awaiting approval' },
+  { key: 'queue', label: 'Approval queue (all)' },
+  { key: 'channels', label: 'Connect a channel' },
+] as const;
+
+type TabKey = (typeof TABS)[number]['key'];
+
 function usePersistedState(key: string, initial: string): [string, (v: string) => void] {
   const [value, setValue] = useState(() => localStorage.getItem(key) ?? initial);
   useEffect(() => {
@@ -40,22 +71,49 @@ function usePersistedState(key: string, initial: string): [string, (v: string) =
 
 export function App() {
   const [apiUrl, setApiUrl] = usePersistedState('cos.apiUrl', DEFAULT_API_URL);
-  const [accountId, setAccountId] = usePersistedState('cos.accountId', DEFAULT_ACCOUNT_ID);
-  const [userId, setUserId] = usePersistedState('cos.userId', DEFAULT_USER_ID);
+  const [accountId, setAccountId] = usePersistedState(
+    'cos.accountId',
+    DEMO_USER_PRESETS[0]!.accountId,
+  );
+  const [userId, setUserId] = usePersistedState('cos.userId', DEMO_USER_PRESETS[0]!.userId);
+  const [activeTab, setActiveTab] = useState<TabKey>('metrics');
   const [statusFilter, setStatusFilter] = useState<CommunicationState | 'all'>('all');
-
-  const [communications, setCommunications] = useState<CommunicationDto[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [listError, setListError] = useState<string | undefined>();
-  const [busyCommId, setBusyCommId] = useState<string | undefined>();
-  const [actionErrors, setActionErrors] = useState<Record<string, string>>({});
 
   const client = useMemo(() => (apiUrl ? createApiClient(apiUrl) : undefined), [apiUrl]);
 
-  const refresh = useCallback(async () => {
+  // --- Approval queue (Task 6, unchanged behavior) ---
+  const [communications, setCommunications] = useState<CommunicationDto[]>([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [queueError, setQueueError] = useState<string | undefined>();
+
+  // --- Metrics view ---
+  const [metrics, setMetrics] = useState<DashboardMetrics | undefined>();
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [metricsError, setMetricsError] = useState<string | undefined>();
+
+  // --- Recommended-actions view ---
+  const [recommended, setRecommended] = useState<CommunicationDto[] | undefined>();
+  const [recommendedLoading, setRecommendedLoading] = useState(false);
+  const [recommendedError, setRecommendedError] = useState<string | undefined>();
+
+  // --- Drafts-awaiting-approval view ---
+  const [drafts, setDrafts] = useState<CommunicationDto[] | undefined>();
+  const [draftsLoading, setDraftsLoading] = useState(false);
+  const [draftsError, setDraftsError] = useState<string | undefined>();
+
+  // --- Connect-channel wizard ---
+  const [accounts, setAccounts] = useState<ConnectedAccountDto[] | undefined>();
+  const [accountsLoading, setAccountsLoading] = useState(false);
+  const [accountsError, setAccountsError] = useState<string | undefined>();
+
+  // --- Shared action-in-flight state (approve/edit/reject/dismiss/supply-context) ---
+  const [busyCommId, setBusyCommId] = useState<string | undefined>();
+  const [actionErrors, setActionErrors] = useState<Record<string, string>>({});
+
+  const refreshQueue = useCallback(async () => {
     if (!client) return;
-    setLoading(true);
-    setListError(undefined);
+    setQueueLoading(true);
+    setQueueError(undefined);
     try {
       const result = await client.listCommunications({
         accountId,
@@ -64,15 +122,72 @@ export function App() {
       });
       setCommunications(result);
     } catch (error) {
-      setListError(error instanceof TrpcError ? error.message : String(error));
+      setQueueError(error instanceof TrpcError ? error.message : String(error));
     } finally {
-      setLoading(false);
+      setQueueLoading(false);
     }
   }, [client, accountId, userId, statusFilter]);
 
+  const refreshMetrics = useCallback(async () => {
+    if (!client) return;
+    setMetricsLoading(true);
+    setMetricsError(undefined);
+    try {
+      setMetrics(await client.getDashboardMetrics({ accountId, userId }));
+    } catch (error) {
+      setMetricsError(error instanceof TrpcError ? error.message : String(error));
+    } finally {
+      setMetricsLoading(false);
+    }
+  }, [client, accountId, userId]);
+
+  const refreshRecommended = useCallback(async () => {
+    if (!client) return;
+    setRecommendedLoading(true);
+    setRecommendedError(undefined);
+    try {
+      setRecommended(await client.listRecommendedActions({ accountId, userId }));
+    } catch (error) {
+      setRecommendedError(error instanceof TrpcError ? error.message : String(error));
+    } finally {
+      setRecommendedLoading(false);
+    }
+  }, [client, accountId, userId]);
+
+  const refreshDrafts = useCallback(async () => {
+    if (!client) return;
+    setDraftsLoading(true);
+    setDraftsError(undefined);
+    try {
+      setDrafts(await client.listDraftsAwaitingApproval({ accountId, userId }));
+    } catch (error) {
+      setDraftsError(error instanceof TrpcError ? error.message : String(error));
+    } finally {
+      setDraftsLoading(false);
+    }
+  }, [client, accountId, userId]);
+
+  const refreshAccounts = useCallback(async () => {
+    if (!client) return;
+    setAccountsLoading(true);
+    setAccountsError(undefined);
+    try {
+      setAccounts(await client.listConnectedAccounts({ userId }));
+    } catch (error) {
+      setAccountsError(error instanceof TrpcError ? error.message : String(error));
+    } finally {
+      setAccountsLoading(false);
+    }
+  }, [client, userId]);
+
+  // Load the active tab's data whenever it becomes active or the connection/filter changes.
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (activeTab === 'queue') void refreshQueue();
+    if (activeTab === 'metrics') void refreshMetrics();
+    if (activeTab === 'recommended') void refreshRecommended();
+    if (activeTab === 'drafts') void refreshDrafts();
+    if (activeTab === 'channels') void refreshAccounts();
+  }, [activeTab, refreshQueue, refreshMetrics, refreshRecommended, refreshDrafts, refreshAccounts]);
 
   async function runAction(commId: string, action: () => Promise<CommunicationDto>) {
     if (!client) return;
@@ -81,6 +196,11 @@ export function App() {
     try {
       const updated = await action();
       setCommunications((prev) => prev.map((c) => (c.commId === commId ? updated : c)));
+      setDrafts((prev) => prev?.map((c) => (c.commId === commId ? updated : c)));
+      // A resolved draft (approved/dismissed/etc.) no longer belongs in the awaiting-approval list.
+      setDrafts((prev) =>
+        prev?.filter((c) => c.commId !== commId || ['drafted', 'awaiting_approval'].includes(updated.status)),
+      );
     } catch (error) {
       const message = error instanceof TrpcError ? error.message : String(error);
       setActionErrors((prev) => ({ ...prev, [commId]: message }));
@@ -89,19 +209,24 @@ export function App() {
     }
   }
 
+  function applyDemoUser(preset: DemoUserPreset) {
+    setUserId(preset.userId);
+    setAccountId(preset.accountId);
+  }
+
   return (
     <main
       style={{
         fontFamily: 'system-ui, sans-serif',
         padding: '2rem',
-        maxWidth: 900,
+        maxWidth: 1100,
         margin: '0 auto',
       }}
     >
-      <h1>Chief of Staff — Approval queue</h1>
+      <h1>Chief of Staff — Dashboard</h1>
       <p style={{ color: '#4b5563' }}>
-        Review recommended replies, approve to send, edit, reject to re-draft, dismiss no-reply
-        items, or supply context for low-confidence items.
+        Communication volume, recommended actions, and approvals for one connected account at a
+        time — every view below is scoped server-side to the signed-in user&apos;s own accounts.
       </p>
 
       <fieldset style={{ marginBottom: '1.5rem', border: '1px solid #d1d5db', borderRadius: 8 }}>
@@ -116,6 +241,28 @@ export function App() {
               style={{ width: '100%' }}
             />
           </label>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <label>
+              Demo user{' '}
+              <select
+                data-testid="demo-user-select"
+                value={userId}
+                onChange={(e) => {
+                  const preset = DEMO_USER_PRESETS.find((p) => p.userId === e.target.value);
+                  if (preset) applyDemoUser(preset);
+                }}
+              >
+                {DEMO_USER_PRESETS.map((p) => (
+                  <option key={p.userId} value={p.userId}>
+                    {p.label}
+                  </option>
+                ))}
+                {!DEMO_USER_PRESETS.some((p) => p.userId === userId) && (
+                  <option value={userId}>{userId} (custom)</option>
+                )}
+              </select>
+            </label>
+          </div>
           <label>
             Account id
             <input
@@ -132,7 +279,80 @@ export function App() {
               style={{ width: '100%' }}
             />
           </label>
-          <div>
+        </div>
+      </fieldset>
+
+      {!apiUrl && <p style={{ color: '#b91c1c' }}>Set the API URL above to load the dashboard.</p>}
+
+      <nav
+        role="tablist"
+        style={{
+          display: 'flex',
+          gap: '0.25rem',
+          borderBottom: '1px solid #d1d5db',
+          marginBottom: '1.5rem',
+          flexWrap: 'wrap',
+        }}
+      >
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            role="tab"
+            aria-selected={activeTab === tab.key}
+            data-testid={`tab-${tab.key}`}
+            onClick={() => setActiveTab(tab.key)}
+            style={{
+              padding: '0.5rem 0.9rem',
+              border: 'none',
+              borderBottom: activeTab === tab.key ? '2px solid #4338ca' : '2px solid transparent',
+              background: 'none',
+              fontWeight: activeTab === tab.key ? 700 : 400,
+              cursor: 'pointer',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      {apiUrl && activeTab === 'metrics' && (
+        <MetricsView metrics={metrics} loading={metricsLoading} error={metricsError} />
+      )}
+
+      {apiUrl && activeTab === 'recommended' && (
+        <RecommendedActionsView
+          communications={recommended}
+          loading={recommendedLoading}
+          error={recommendedError}
+        />
+      )}
+
+      {apiUrl && activeTab === 'drafts' && (
+        <DraftsAwaitingApprovalView
+          communications={drafts}
+          loading={draftsLoading}
+          error={draftsError}
+          busyCommId={busyCommId}
+          actionErrors={actionErrors}
+          onApprove={(commId) => void runAction(commId, () => client!.approveDraft({ commId, userId }))}
+          onEdit={(commId, newBody) =>
+            void runAction(commId, () => client!.editDraft({ commId, userId, newBody }))
+          }
+          onReject={(commId) => void runAction(commId, () => client!.rejectDraft({ commId, userId }))}
+          onDismiss={(commId) => void runAction(commId, () => client!.dismiss({ commId, userId }))}
+          onSupplyContext={(commId, text) =>
+            void runAction(commId, () => client!.supplyContext({ commId, userId, text }))
+          }
+        />
+      )}
+
+      {apiUrl && activeTab === 'channels' && (
+        <ChannelsView accounts={accounts} loading={accountsLoading} error={accountsError} />
+      )}
+
+      {apiUrl && activeTab === 'queue' && (
+        <section data-testid="approval-queue-view">
+          <div style={{ marginBottom: '1rem' }}>
             <label>
               Status filter{' '}
               <select
@@ -146,40 +366,35 @@ export function App() {
                 ))}
               </select>
             </label>{' '}
-            <button onClick={() => void refresh()} disabled={!apiUrl || loading}>
-              {loading ? 'Loading…' : 'Refresh'}
+            <button onClick={() => void refreshQueue()} disabled={queueLoading}>
+              {queueLoading ? 'Loading…' : 'Refresh'}
             </button>
           </div>
-        </div>
-      </fieldset>
 
-      {!apiUrl && <p style={{ color: '#b91c1c' }}>Set the API URL above to load communications.</p>}
-      {listError && <p style={{ color: '#b91c1c' }}>Failed to load: {listError}</p>}
-      {apiUrl && !loading && !listError && communications.length === 0 && (
-        <p style={{ color: '#6b7280' }}>No communications match this filter.</p>
+          {queueError && <p style={{ color: '#b91c1c' }}>Failed to load: {queueError}</p>}
+          {!queueLoading && !queueError && communications.length === 0 && (
+            <p style={{ color: '#6b7280' }}>No communications match this filter.</p>
+          )}
+
+          {communications.map((c) => (
+            <CommunicationCard
+              key={c.commId}
+              communication={c}
+              busy={busyCommId === c.commId}
+              error={actionErrors[c.commId] || undefined}
+              onApprove={(commId) => void runAction(commId, () => client!.approveDraft({ commId, userId }))}
+              onEdit={(commId, newBody) =>
+                void runAction(commId, () => client!.editDraft({ commId, userId, newBody }))
+              }
+              onReject={(commId) => void runAction(commId, () => client!.rejectDraft({ commId, userId }))}
+              onDismiss={(commId) => void runAction(commId, () => client!.dismiss({ commId, userId }))}
+              onSupplyContext={(commId, text) =>
+                void runAction(commId, () => client!.supplyContext({ commId, userId, text }))
+              }
+            />
+          ))}
+        </section>
       )}
-
-      {communications.map((c) => (
-        <CommunicationCard
-          key={c.commId}
-          communication={c}
-          busy={busyCommId === c.commId}
-          error={actionErrors[c.commId] || undefined}
-          onApprove={(commId) =>
-            void runAction(commId, () => client!.approveDraft({ commId, userId }))
-          }
-          onEdit={(commId, newBody) =>
-            void runAction(commId, () => client!.editDraft({ commId, userId, newBody }))
-          }
-          onReject={(commId) =>
-            void runAction(commId, () => client!.rejectDraft({ commId, userId }))
-          }
-          onDismiss={(commId) => void runAction(commId, () => client!.dismiss({ commId, userId }))}
-          onSupplyContext={(commId, text) =>
-            void runAction(commId, () => client!.supplyContext({ commId, userId, text }))
-          }
-        />
-      ))}
     </main>
   );
 }

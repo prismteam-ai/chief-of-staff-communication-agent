@@ -38,6 +38,37 @@ export interface CommunicationDto {
   sentMessageId?: string;
 }
 
+/** Every state's count, zero-filled — mirrors `MetricsService.getDashboardMetrics`'s server shape
+ * (Task 8, design.md §8) so the UI never has to guard a missing key. A plain type alias (not an
+ * `interface extends Record<...>`) — the latter loses its index signature for `Object.entries`
+ * under this project's `noUncheckedIndexedAccess` tsconfig, widening entry values to `unknown`. */
+export type StatusBreakdown = Record<CommunicationState, number>;
+
+export interface ResponseTimeStats {
+  sampleCount: number;
+  averageSeconds: number | null;
+  medianSeconds: number | null;
+  underFiveMinutesCount: number;
+}
+
+export interface DashboardMetrics {
+  totalVolume: number;
+  statusBreakdown: StatusBreakdown;
+  channelBreakdown: Partial<Record<ChannelType, number>>;
+  overdueCount: number;
+  pendingApprovalsCount: number;
+  handledCount: number;
+  responseTime: ResponseTimeStats;
+}
+
+/** Connect-channel wizard row (README L12) — no credential/secret reference, per the server DTO. */
+export interface ConnectedAccountDto {
+  accountId: string;
+  channelType: ChannelType;
+  displayName: string;
+  createdAt: string;
+}
+
 export class TrpcError extends Error {
   constructor(
     message: string,
@@ -104,6 +135,16 @@ export function createApiClient(baseUrl: string) {
       mutate<CommunicationDto>('communications.dismiss', input),
     supplyContext: (input: { commId: string; userId: string; text: string }) =>
       mutate<CommunicationDto>('communications.supplyContext', input),
+
+    // --- Task 8 dashboard views: server-side aggregation/reads, account-scoped (design.md §8) ---
+    getDashboardMetrics: (input: { accountId: string; userId: string }) =>
+      query<DashboardMetrics>('metrics.getDashboardMetrics', input),
+    listRecommendedActions: (input: { accountId: string; userId: string }) =>
+      query<CommunicationDto[]>('metrics.listRecommendedActions', input),
+    listDraftsAwaitingApproval: (input: { accountId: string; userId: string }) =>
+      query<CommunicationDto[]>('metrics.listDraftsAwaitingApproval', input),
+    listConnectedAccounts: (input: { userId: string }) =>
+      query<ConnectedAccountDto[]>('accounts.listConnectedAccounts', input),
   };
 }
 
