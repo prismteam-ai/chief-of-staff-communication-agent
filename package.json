@@ -30,6 +30,7 @@
     "@aws-sdk/client-lambda": "^3.1088.0",
     "@aws-sdk/client-secrets-manager": "^3.1088.0",
     "@aws-sdk/lib-dynamodb": "^3.1088.0",
+    "@chief-of-staff/rag": "workspace:*",
     "@eslint/js": "^10.0.1",
     "@types/archiver": "^8.0.0",
     "@types/node": "^22.10.0",

@@ -59,3 +59,23 @@ seed-demo:
 # conditional-write dedupe by replaying the same message id against the processor Lambda.
 verify-ingest:
     pnpm exec tsx scripts/verify-ingest.ts
+
+# Local-first RAG proof (brief constraint 2): starts Docker OpenSearch, embeds+indexes
+# fixtures/rag/corpus.jsonl via real Bedrock, replays fixtures/rag/golden-queries.json against
+# the SAME index mapping + query code the deployed adapter uses, tears the container down.
+rag-replay-local:
+    docker compose -f docker-compose.rag.yml up -d --wait
+    pnpm exec tsx scripts/rag-replay.ts --mode=local
+    docker compose -f docker-compose.rag.yml down -v
+
+# Golden-query proof against the deployed OpenSearch domain (brief constraint 8) — same
+# fixtures, same query code, real Bedrock embeddings, real managed OpenSearch. Requires RagStack
+# deployed.
+rag-replay-aws:
+    pnpm exec tsx scripts/rag-replay.ts --mode=aws
+
+# Idempotent, deterministic-id indexing of the seeded org-doc + preference fixtures into the
+# deployed domain (brief constraint 6). Safe to re-run — chunk ids are content-hash-derived, so a
+# re-run upserts rather than duplicating.
+seed-org-knowledge:
+    pnpm exec tsx scripts/seed-org-knowledge.ts

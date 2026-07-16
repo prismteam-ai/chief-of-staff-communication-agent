@@ -21,3 +21,14 @@ export function createSignedOpenSearchClient(params: { endpoint: string; region:
     node: `https://${endpoint}`,
   });
 }
+
+/**
+ * Unsigned client for the Docker Compose local replay (`docker-compose.rag.yml` runs with
+ * `plugins.security.disabled=true` — no auth, no TLS, matching a throwaway local container, not a
+ * production posture). Same `Client` class, same `OpenSearchRetrievalIndex` adapter, same
+ * `chunksIndexBody()` mapping as the signed path — only the transport auth differs, which is
+ * exactly the "same index mapping + query code" the local-first replay is meant to prove.
+ */
+export function createLocalOpenSearchClient(params: { node: string }): Client {
+  return new Client({ node: params.node });
+}
