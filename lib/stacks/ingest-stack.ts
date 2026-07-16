@@ -14,6 +14,7 @@ import { DataTables } from '../constructs/data-tables.js';
 import { DlqAlarm } from '../constructs/dlq-alarm.js';
 import { MetricsDashboard } from '../constructs/metrics-dashboard.js';
 import { PROJECT_NAME } from '../constructs/tags.js';
+import type { RagStack } from './rag-stack.js';
 
 const SERVICE_NAME = 'chief-of-staff-ingest';
 const METRICS_NAMESPACE = 'ChiefOfStaffIngest';
@@ -21,6 +22,17 @@ const METRICS_NAMESPACE = 'ChiefOfStaffIngest';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const POLLER_HANDLER_ENTRY = path.join(__dirname, '../../apps/ingest/src/poller-handler.ts');
 const PROCESSOR_HANDLER_ENTRY = path.join(__dirname, '../../apps/ingest/src/processor-handler.ts');
+
+export interface IngestStackProps extends cdk.StackProps {
+  /**
+   * The RAG knowledge-layer domain (design.md §4, brief constraint 8: "Wire the domain endpoint +
+   * IAM ... once CREATE completes"). Optional so IngestStack still synthesizes/deploys standalone
+   * before RagStack exists — the processor Lambda then runs with `RAG_DOMAIN_ENDPOINT` unset,
+   * which `processor-handler.ts`'s `unwiredRetrievalIndex` degrades gracefully from (isolated
+   * failure, `ChunkIndexFailed`, ingestion unaffected).
+   */
+  readonly ragStack?: RagStack;
+}
 
 const BUNDLING: nodejs.BundlingOptions = {
   minify: true,
@@ -54,7 +66,7 @@ export class IngestStack extends TaggedStack {
   public readonly processorFunctionName: string;
   public readonly pollerFunctionName: string;
 
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props?: IngestStackProps) {
     super(scope, id, props);
 
     const tables = new DataTables(this, 'DataTables', { resourcePrefix: PROJECT_NAME });
@@ -197,6 +209,7 @@ export class IngestStack extends TaggedStack {
         DEDUPE_TABLE_NAME: this.dedupeTableName,
         COMMUNICATIONS_TABLE_NAME: this.communicationsTableName,
         RAW_ARTIFACT_BUCKET_NAME: this.rawArtifactBucketName,
+        ...(props?.ragStack ? { RAG_DOMAIN_ENDPOINT: props.ragStack.domainEndpoint } : {}),
       },
       bundling: BUNDLING,
     });
@@ -205,6 +218,33 @@ export class IngestStack extends TaggedStack {
     tables.communicationsTable.grantReadWriteData(processorHandler);
     tables.rawArtifactBucket.grantWrite(processorHandler);
     processorHandler.addToRolePolicy(gmailSecretsReadPolicy);
+
+    // RAG knowledge-layer wiring (design.md §4, brief constraint 8): grants the processor's
+    // execution role `es:ESHttp*` on the domain (identity-side; the domain's own access policy is
+    // account-root-scoped — see rag-stack.ts — so this identity grant is what actually authorizes
+    // the SigV4-signed calls `rag-index-step.ts` makes) and Bedrock InvokeModel on the pinned
+    // Cohere Embed v4 inference profile.
+    if (props?.ragStack) {
+      props.ragStack.grantIndexAccess(processorHandler);
+      processorHandler.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['bedrock:InvokeModel'],
+          resources: [
+            cdk.Stack.of(this).formatArn({
+              service: 'bedrock',
+              region: 'us-east-2',
+              resource: 'inference-profile',
+              resourceName: 'us.cohere.embed-v4:0',
+              arnFormat: cdk.ArnFormat.SLASH_RESOURCE_NAME,
+            }),
+            // The inference profile forwards to regional foundation-model ARNs across the `us.`
+            // profile's member regions — grant the wildcard foundation-model resource so the
+            // profile's actual routing target is always covered without hand-listing each region.
+            `arn:aws:bedrock:*::foundation-model/cohere.embed-v4:0`,
+          ],
+        }),
+      );
+    }
 
     processorHandler.addEventSource(
       new events.SqsEventSource(ingestQueue, {
