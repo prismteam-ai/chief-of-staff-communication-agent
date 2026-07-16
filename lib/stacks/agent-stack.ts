@@ -219,12 +219,7 @@ export class AgentStack extends TaggedStack {
     // DynamoDB read/write on the communications table (persist recommendation/draft/state).
     agentHandler.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: [
-          'dynamodb:GetItem',
-          'dynamodb:UpdateItem',
-          'dynamodb:PutItem',
-          'dynamodb:Query',
-        ],
+        actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem', 'dynamodb:PutItem', 'dynamodb:Query'],
         resources: [
           props.ingestStack.communicationsTableArn,
           `${props.ingestStack.communicationsTableArn}/index/*`,

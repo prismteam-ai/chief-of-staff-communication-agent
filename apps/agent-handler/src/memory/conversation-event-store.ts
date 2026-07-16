@@ -180,10 +180,15 @@ export class AgentCoreConversationEventStore implements ConversationEventStore {
  * unconfigured). Loads nothing, stores nothing — the agent still runs, just statelessly.
  */
 export class NoopConversationEventStore implements ConversationEventStore {
-  async loadSessionEvents(): Promise<ConversationEvent[]> {
+  async loadSessionEvents(_sessionId: string, _actorId: string): Promise<ConversationEvent[]> {
     return [];
   }
-  async appendEvents(): Promise<void> {
+  async appendEvents(
+    _sessionId: string,
+    _actorId: string,
+    _events: ConversationEvent[],
+    _options: AppendEventsOptions,
+  ): Promise<void> {
     // Intentionally does nothing.
   }
 }

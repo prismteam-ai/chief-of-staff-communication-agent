@@ -71,13 +71,25 @@ function classifyByKeywords(text: string): RecommendationOutput {
     return { actionType: 'schedule', confidence: 0.9, rationale: 'A scheduling request.' };
   }
   if (/newsletter|digest|unsubscribe|no action required|automated/.test(t)) {
-    return { actionType: 'fyi_no_reply', confidence: 0.9, rationale: 'Informational, no reply owed.' };
+    return {
+      actionType: 'fyi_no_reply',
+      confidence: 0.9,
+      rationale: 'Informational, no reply owed.',
+    };
   }
   if (/\bquestion\b|please reply|can you confirm|need to update|let me know/.test(t)) {
-    return { actionType: 'reply_needed', confidence: 0.9, rationale: 'A direct question expecting a reply.' };
+    return {
+      actionType: 'reply_needed',
+      confidence: 0.9,
+      rationale: 'A direct question expecting a reply.',
+    };
   }
   // Ambiguous / low-signal → low confidence, so the gate routes to needs_context in code.
-  return { actionType: 'needs_context', confidence: 0.2, rationale: 'Too little signal to classify.' };
+  return {
+    actionType: 'needs_context',
+    confidence: 0.2,
+    rationale: 'Too little signal to classify.',
+  };
 }
 
 function keywordRunner(): AgentRunner {

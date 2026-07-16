@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  runManageAsana,
-  MANAGE_ASANA_ACTIONS,
-  ManageAsanaInputSchema,
-} from './manage-asana.js';
+import { runManageAsana, MANAGE_ASANA_ACTIONS, ManageAsanaInputSchema } from './manage-asana.js';
 
 describe('manageAsana — typed contract stub until Task 7', () => {
   it('returns the not_implemented marker for every action variant, never throwing', () => {

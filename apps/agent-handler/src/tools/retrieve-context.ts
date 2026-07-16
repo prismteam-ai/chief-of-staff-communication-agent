@@ -1,6 +1,11 @@
 import { tool, type Tool } from 'ai';
 import { z } from 'zod';
-import { embedText, EMBED_INPUT_TYPE, type RetrievalIndex, type SearchHit } from '@chief-of-staff/rag';
+import {
+  embedText,
+  EMBED_INPUT_TYPE,
+  type RetrievalIndex,
+  type SearchHit,
+} from '@chief-of-staff/rag';
 
 /**
  * `retrieveContext` tool (design.md §5 tool list). Embeds the query with Bedrock Cohere Embed v4

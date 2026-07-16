@@ -15,10 +15,12 @@ type TestMessage = {
 };
 
 function run(messages: TestMessage[]) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test-only structural cast; the
-  // production type is derived from the SDK and not constructible in a unit test without the SDK's
-  // internal message builders.
-  return applyBedrockPromptCaching(messages as any);
+  // Test-only structural cast through `unknown`: the production `BedrockPrompt` type is derived from
+  // the SDK and not constructible in a unit test without the SDK's internal message builders. Cast
+  // via `unknown` (not `any`) so the LLM-code-path no-`any` rule is honored even in test code.
+  return applyBedrockPromptCaching(
+    messages as unknown as Parameters<typeof applyBedrockPromptCaching>[0],
+  );
 }
 
 function bedrockOptions(msg: TestMessage): Record<string, unknown> {

@@ -29,7 +29,9 @@ describe('NoopConversationEventStore', () => {
  */
 class FakeAgentCoreClient {
   public readonly sent: Array<CreateEventCommand | ListEventsCommand> = [];
-  async send(command: CreateEventCommand | ListEventsCommand): Promise<{ events?: []; nextToken?: undefined }> {
+  async send(
+    command: CreateEventCommand | ListEventsCommand,
+  ): Promise<{ events?: []; nextToken?: undefined }> {
     this.sent.push(command);
     // Emulate an empty ListEvents page so loadSessionEvents terminates.
     return { events: [], nextToken: undefined };

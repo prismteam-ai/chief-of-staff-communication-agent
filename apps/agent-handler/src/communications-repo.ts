@@ -54,9 +54,7 @@ export interface AgentCommunicationsRepo {
 export function createAgentCommunicationsRepo(tableName: string): AgentCommunicationsRepo {
   return {
     async getById(commId) {
-      const result = await client().send(
-        new GetCommand({ TableName: tableName, Key: { commId } }),
-      );
+      const result = await client().send(new GetCommand({ TableName: tableName, Key: { commId } }));
       return result.Item as AgentCommunicationRecord | undefined;
     },
 

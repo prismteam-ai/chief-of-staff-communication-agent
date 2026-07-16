@@ -117,7 +117,10 @@ export async function runAgentTurn(
     });
     // Validate + shape into the shared Recommendation (throws on an out-of-enum/out-of-range model
     // response rather than persisting a malformed recommendation).
-    const recommendation: Recommendation = shapeRecommendation({ commId, accountId }, classifyOutput);
+    const recommendation: Recommendation = shapeRecommendation(
+      { commId, accountId },
+      classifyOutput,
+    );
     metricsClient.addMetric('RecommendationProduced', MetricUnit.Count, 1);
 
     // --- confidence GATE, in code (Task 5 constraint 3) --------------------------------------
