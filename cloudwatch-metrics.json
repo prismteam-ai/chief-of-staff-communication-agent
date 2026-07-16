@@ -300,6 +300,27 @@
       "unit": "Count",
       "service": "api",
       "description": "Emitted once per MCP call whose bearer token was missing, unknown, forged, or revoked (Task 11) — the security-relevant denial counter proving a forged/other-user token never resolves to a userId; graphed on the failed axis alongside AsanaScopeViolationRejected."
+    },
+    {
+      "name": "SessionTokenIssued",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per successful dashboard `login` call (Task 8.5) — a verified username/password minted a session token via the SAME McpAuthService.issue Task 11 uses for MCP tokens. Only the token's SHA-256 hash is ever persisted; this metric carries no token or password material."
+    },
+    {
+      "name": "DashboardRequestAuthenticated",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per dashboard tRPC call that passed the bearer-token gate (Task 8.5) — every communications/metrics/accounts/asana procedure behind `authedMiddleware`, the dashboard-side equivalent of McpToolInvoked."
+    },
+    {
+      "name": "DashboardAuthFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per `login` call rejected for an unknown username or wrong password (Task 8.5) — the security-relevant denial counter for the dashboard's own credential gate, graphed on the failed axis alongside McpAuthFailed. A rejected dashboard login and a rejected dashboard bearer token both also route through McpAuthFailed's shared verification path where applicable; DashboardAuthFailed specifically covers the credential-check step `login` itself owns."
     }
   ]
 }

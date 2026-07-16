@@ -19,6 +19,11 @@ import type { RagStack } from './rag-stack.js';
 const SERVICE_NAME = 'chief-of-staff-api';
 const METRICS_NAMESPACE = 'ChiefOfStaffApi';
 const GITHUB_REPO = 'jzubielik/chief-of-staff-communication-agent';
+// Task 8.5: Secrets Manager id holding the demo dashboard login credential — a JSON array of
+// `{ username, passwordHash, userId }` (routers/auth.ts's login procedure, dashboard-credentials.ts).
+// Operator-provisioned, same "name-based grant with a wildcard suffix" pattern the Gmail/Asana/
+// Twilio secrets below use (Secrets Manager appends a random suffix to every ARN).
+const DASHBOARD_LOGIN_SECRET_ID = 'cos/dashboard-login';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API_HANDLER_ENTRY = path.join(__dirname, '../../apps/api/src/handler.ts');
@@ -94,10 +99,14 @@ export class ApiStack extends TaggedStack {
               ACCOUNTS_TABLE_NAME: props.ingestStack.accountsTableName,
               // Task 10 feedback loop: bumps the style profile's sourceCount on a successful send.
               STYLE_PROFILES_TABLE_NAME: props.ingestStack.styleProfilesTableName,
-              // Task 11: per-user MCP token issuance/verification (routers/mcp.ts).
+              // Task 11: per-user MCP token issuance/verification (routers/mcp.ts). Task 8.5
+              // reuses the SAME table for dashboard session tokens minted by routers/auth.ts.
               MCP_TOKENS_TABLE_NAME: props.ingestStack.mcpTokensTableName,
             }
           : {}),
+        // Task 8.5: demo dashboard login credential (routers/auth.ts's login procedure) — see
+        // the secretsmanager:GetSecretValue grant below for the matching resource ARN.
+        DASHBOARD_LOGIN_SECRET_ID: DASHBOARD_LOGIN_SECRET_ID,
         // Task 10 feedback loop: indexes the sent reply as a new sent_style exemplar. Unset when
         // RagStack isn't wired for this deploy — `routers/index.ts`'s `styleFeedbackHook()` then
         // resolves to `undefined` and `approveDraft` runs with no feedback loop (never a failure).
@@ -226,6 +235,22 @@ export class ApiStack extends TaggedStack {
       new iam.PolicyStatement({
         actions: ['secretsmanager:GetSecretValue'],
         resources: [asanaSecretArn],
+      }),
+    );
+
+    // Task 8.5: dashboard login credential read — routers/auth.ts's login procedure is the ONLY
+    // code path that reads this secret. Same wildcard-by-name grant pattern as the Gmail/Asana/
+    // Twilio secrets above.
+    const dashboardLoginSecretArn = cdk.Stack.of(this).formatArn({
+      service: 'secretsmanager',
+      resource: 'secret',
+      resourceName: `${DASHBOARD_LOGIN_SECRET_ID}-??????`,
+      arnFormat: cdk.ArnFormat.COLON_RESOURCE_NAME,
+    });
+    handler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [dashboardLoginSecretArn],
       }),
     );
 
@@ -411,6 +436,11 @@ export class ApiStack extends TaggedStack {
         // processed axis — the tRPC-level equivalent of the other channel-specific counters above.
         'McpTokenIssued',
         'McpToolInvoked',
+        // Task 8.5: a successful dashboard login (mints a session token) + every dashboard tRPC
+        // call that passed the bearer-token gate — the dashboard-side equivalent of the MCP
+        // counters directly above (same shared authedMiddleware emits both).
+        'SessionTokenIssued',
+        'DashboardRequestAuthenticated',
       ],
       failedMetricNames: [
         'RequestFailed',
@@ -421,6 +451,9 @@ export class ApiStack extends TaggedStack {
         'WhatsAppIngestFailed',
         'WhatsAppSendFailed',
         'WhatsAppSignatureRejected',
+        // Task 8.5: rejected demo-login attempts (unknown username, wrong password) — the
+        // dashboard-side equivalent of McpAuthFailed directly below.
+        'DashboardAuthFailed',
         // Task 11: rejected MCP bearer tokens (forged, revoked, unknown) — the security-relevant
         // denial counter, same "denial belongs on the failed axis" precedent as
         // AsanaScopeViolationRejected above.
