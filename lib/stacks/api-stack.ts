@@ -22,6 +22,11 @@ const GITHUB_REPO = 'jzubielik/chief-of-staff-communication-agent';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API_HANDLER_ENTRY = path.join(__dirname, '../../apps/api/src/handler.ts');
+const WHATSAPP_WEBHOOK_HANDLER_ENTRY = path.join(
+  __dirname,
+  '../../apps/api/src/whatsapp-webhook-handler.ts',
+);
+const WHATSAPP_INBOUND_PATH = '/whatsapp/inbound';
 
 export interface ApiStackProps extends cdk.StackProps {
   /**
@@ -236,6 +241,130 @@ export class ApiStack extends TaggedStack {
         'Default execute-api URL — no custom domain owned by this account (documented adaptation).',
     });
 
+    // --- WhatsApp inbound webhook (Task 9, brief constraint 3/4): a separate Lambda from the tRPC
+    // handler above — Twilio POSTs application/x-www-form-urlencoded, not JSON-RPC, to a stable,
+    // documented path on the SAME HttpApi (so the deployed apiUrl the operator configures in the
+    // Twilio console never changes). ---
+    const whatsappWebhookUrl = `${this.apiUrl}${WHATSAPP_INBOUND_PATH}`;
+
+    const whatsappWebhookHandler = new nodejs.NodejsFunction(this, 'WhatsAppWebhookHandler', {
+      entry: WHATSAPP_WEBHOOK_HANDLER_ENTRY,
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_22_X,
+      memorySize: 512,
+      timeout: cdk.Duration.seconds(30),
+      tracing: lambda.Tracing.ACTIVE,
+      loggingFormat: lambda.LoggingFormat.JSON,
+      logGroup: new logs.LogGroup(this, 'WhatsAppWebhookHandlerLogGroup', {
+        retention: logs.RetentionDays.THREE_MONTHS,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      }),
+      environment: {
+        NODE_OPTIONS: '--enable-source-maps',
+        POWERTOOLS_SERVICE_NAME: SERVICE_NAME,
+        POWERTOOLS_METRICS_NAMESPACE: METRICS_NAMESPACE,
+        AGENT_QUEUE_URL: agentQueueUrl,
+        // The webhook's own public URL — part of Twilio's signed data (verifyTwilioSignature MUST
+        // be checked against the exact URL Twilio was configured to call).
+        WHATSAPP_WEBHOOK_URL: whatsappWebhookUrl,
+        ...(props?.ingestStack
+          ? {
+              COMMUNICATIONS_TABLE_NAME: props.ingestStack.communicationsTableName,
+              DEDUPE_TABLE_NAME: props.ingestStack.dedupeTableName,
+            }
+          : {}),
+        ...(props?.ragStack ? { RAG_DOMAIN_ENDPOINT: props.ragStack.domainEndpoint } : {}),
+      },
+      bundling: {
+        minify: true,
+        sourceMap: true,
+        target: 'node22',
+        format: nodejs.OutputFormat.ESM,
+        banner:
+          "import { createRequire as topLevelCreateRequire } from 'module'; const require = topLevelCreateRequire(import.meta.url);",
+      },
+    });
+
+    if (props?.ingestStack) {
+      whatsappWebhookHandler.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['dynamodb:PutItem'],
+          resources: [props.ingestStack.communicationsTableArn],
+        }),
+      );
+      whatsappWebhookHandler.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['dynamodb:PutItem'],
+          resources: [props.ingestStack.dedupeTableArn],
+        }),
+      );
+    }
+
+    if (props?.ragStack) {
+      props.ragStack.grantIndexAccess(whatsappWebhookHandler);
+      whatsappWebhookHandler.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['bedrock:InvokeModel'],
+          resources: [
+            cdk.Stack.of(this).formatArn({
+              service: 'bedrock',
+              region: 'us-east-2',
+              resource: 'inference-profile',
+              resourceName: 'us.cohere.embed-v4:0',
+              arnFormat: cdk.ArnFormat.SLASH_RESOURCE_NAME,
+            }),
+            'arn:aws:bedrock:*::foundation-model/cohere.embed-v4:0',
+          ],
+        }),
+      );
+    }
+
+    whatsappWebhookHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['sqs:SendMessage'],
+        resources: [agentQueueArn],
+      }),
+    );
+
+    // `cos/twilio-whatsapp` (operator-provisioned, verified live): { account_sid, auth_token,
+    // sandbox_number } — read by both the inbound webhook (signature verification) and the send
+    // path (whatsapp-send.ts). Secrets Manager appends a random suffix, same wildcard-by-name
+    // pattern as the Gmail/Asana secret grants above.
+    const twilioWhatsAppSecretArn = cdk.Stack.of(this).formatArn({
+      service: 'secretsmanager',
+      resource: 'secret',
+      resourceName: 'cos/twilio-whatsapp-??????',
+      arnFormat: cdk.ArnFormat.COLON_RESOURCE_NAME,
+    });
+    whatsappWebhookHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [twilioWhatsAppSecretArn],
+      }),
+    );
+    // The tRPC handler's send path (whatsapp-send.ts, connectorFor) also reads this secret.
+    handler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [twilioWhatsAppSecretArn],
+      }),
+    );
+
+    httpApi.addRoutes({
+      path: WHATSAPP_INBOUND_PATH,
+      methods: [apigwv2.HttpMethod.POST],
+      integration: new integrations.HttpLambdaIntegration(
+        'WhatsAppWebhookIntegration',
+        whatsappWebhookHandler,
+      ),
+    });
+
+    new cdk.CfnOutput(this, 'WhatsAppWebhookUrl', {
+      value: whatsappWebhookUrl,
+      description:
+        'Paste as the WhatsApp sandbox "WHEN A MESSAGE COMES IN" webhook URL (Twilio console, Messaging > Try it out > Send a WhatsApp message) — POST, this exact URL.',
+    });
+
     const { dashboard } = new MetricsDashboard(this, 'ApiMetricsDashboard', {
       dashboardName: `${PROJECT_NAME}-api`,
       namespace: METRICS_NAMESPACE,
@@ -261,6 +390,12 @@ export class ApiStack extends TaggedStack {
         // post-send hook call — same metric name as the agent service's build-time emission,
         // distinguished by namespace (see cloudwatch-metrics.json's two StyleExemplarAdded entries).
         'StyleExemplarAdded',
+        // Task 9 WhatsApp: inbound webhook ingestion + outbound send successes join the same
+        // processed axis as the Gmail-side equivalents (MessageIngested lives on the Ingest
+        // dashboard; WhatsAppIngested is the api-side equivalent since the webhook Lambda lives
+        // here — see whatsapp-webhook-handler.ts's doc comment for why).
+        'WhatsAppIngested',
+        'WhatsAppSent',
       ],
       failedMetricNames: [
         'RequestFailed',
@@ -268,6 +403,9 @@ export class ApiStack extends TaggedStack {
         'AsanaApiFailed',
         'AsanaScopeViolationRejected',
         'StyleFeedbackFailed',
+        'WhatsAppIngestFailed',
+        'WhatsAppSendFailed',
+        'WhatsAppSignatureRejected',
       ],
     });
 

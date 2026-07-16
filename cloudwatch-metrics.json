@@ -228,6 +228,57 @@
       "unit": "Count",
       "service": "api",
       "description": "Emitted once per linkAsana call rejected because the caller-supplied taskGid does not belong to the configured project_gid (Task 7 privacy scoping, non-negotiable). No comment is posted and nothing is persisted on the communication record when this fires — distinct from AsanaApiFailed, which covers transient/transport failures, not scope denials."
+    },
+    {
+      "name": "ChunkIndexFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "dimensions": ["channel"],
+      "description": "Emitted by the WhatsApp inbound webhook Lambda (Task 9) when the post-persist embed/index step fails for a WhatsApp message — same metric name/semantics as ChiefOfStaffIngest's ChunkIndexFailed (isolated, never fails the ingest outcome), distinguished by namespace since the WhatsApp webhook Lambda is deployed in ApiStack, not IngestStack (see WhatsAppIngested's description for why)."
+    },
+    {
+      "name": "AgentTriggerFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "dimensions": ["channel"],
+      "description": "Emitted by the WhatsApp inbound webhook Lambda (Task 9) when the post-persist agent-trigger publish fails for a WhatsApp message — same metric name/semantics as ChiefOfStaffIngest's AgentTriggerFailed, distinguished by namespace for the same reason as this entry's ChunkIndexFailed counterpart above."
+    },
+    {
+      "name": "WhatsAppIngested",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per inbound WhatsApp message successfully verified (Twilio signature), normalized, deduped, and persisted by the WhatsApp inbound webhook Lambda (Task 9). Lives on the api service's namespace (not ingest's) because the webhook Lambda is deployed alongside the tRPC handler in ApiStack — it must share the already-deployed, stable API Gateway URL Twilio is configured to call."
+    },
+    {
+      "name": "WhatsAppIngestFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per inbound WhatsApp webhook delivery that passed signature verification but could not be normalized or persisted (Task 9). Distinct from WhatsAppSignatureRejected, which covers forged/missing signatures never reaching normalization."
+    },
+    {
+      "name": "WhatsAppSignatureRejected",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per inbound WhatsApp webhook POST whose X-Twilio-Signature header failed HMAC-SHA1 verification against the auth token and exact webhook URL, or was missing entirely (Task 9 brief constraint 3: 'reject unsigned/forged'). The request is rejected with HTTP 403 before any normalization/persistence is attempted."
+    },
+    {
+      "name": "WhatsAppSent",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per successful Twilio Messages API send from the approve->send loop's WhatsApp connector (Task 9) — the channel-dimensioned counterpart to the generic ReplySent metric every channel's send emits."
+    },
+    {
+      "name": "WhatsAppSendFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per Twilio Messages API send call that threw (Task 9) — the channel-dimensioned counterpart to the generic SendFailed metric. The communication is left at status 'approved', never silently marked answered; a retried approveDraft re-attempts the send (same idempotent-claim pattern as Gmail)."
     }
   ]
 }
