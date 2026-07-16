@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ActionTypeSchema } from './action-type.js';
 
 /**
  * Confidence gate contract (design.md §5, §7): every recommendation/draft carries a `confidence`
@@ -10,11 +11,21 @@ export const DEFAULT_CONFIDENCE_THRESHOLD = 0.6;
 
 const ConfidenceFieldSchema = z.number().min(0).max(1);
 
+/**
+ * The agent's structured recommendation (Task 5 brief constraint 7): `{ actionType, confidence,
+ * rationale }` plus the identifying `commId`/`accountId`. `actionType` is the closed
+ * {@link ActionTypeSchema} enum (not free text) so the classification is gradeable and every
+ * consumer — dashboard, API, response-time metrics — can branch on a known set. `rationale` is the
+ * model's one-line justification, surfaced to the user in the dashboard's recommended-actions view;
+ * it carries no PII obligation beyond the message itself and is never used to make the routing
+ * decision (that is `routeByConfidence`, applied in code on `confidence`).
+ */
 export const RecommendationSchema = z.object({
   commId: z.string().min(1),
   accountId: z.string().min(1),
-  actionType: z.string().min(1),
+  actionType: ActionTypeSchema,
   confidence: ConfidenceFieldSchema,
+  rationale: z.string(),
 });
 export type Recommendation = z.infer<typeof RecommendationSchema>;
 

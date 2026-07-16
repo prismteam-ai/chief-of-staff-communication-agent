@@ -7,6 +7,7 @@
 export * from './normalized-message.js';
 export * from './state-machine.js';
 export * from './transition-record.js';
+export * from './action-type.js';
 export * from './confidence.js';
 export * from './account.js';
 export * from './permissions.js';

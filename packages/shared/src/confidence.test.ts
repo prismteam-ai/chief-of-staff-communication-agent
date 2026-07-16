@@ -5,16 +5,53 @@ import {
   DEFAULT_CONFIDENCE_THRESHOLD,
   routeByConfidence,
 } from './confidence.js';
+import { ACTION_TYPES } from './action-type.js';
 
 describe('RecommendationSchema / DraftSchema — confidence gate contract', () => {
-  it('accepts a recommendation carrying a confidence score in [0,1]', () => {
+  it('accepts a recommendation carrying an enum actionType, confidence in [0,1], and a rationale', () => {
+    const result = RecommendationSchema.safeParse({
+      commId: 'comm_1',
+      accountId: 'acct_1',
+      actionType: 'reply_needed',
+      confidence: 0.82,
+      rationale: 'Sender asks a direct question and expects an answer.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts every declared ActionType enum member', () => {
+    for (const actionType of ACTION_TYPES) {
+      const result = RecommendationSchema.safeParse({
+        commId: 'comm_1',
+        accountId: 'acct_1',
+        actionType,
+        confidence: 0.7,
+        rationale: 'r',
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('rejects an actionType outside the enum', () => {
+    // The old free-text placeholder value — must now fail validation (brief constraint 7).
     const result = RecommendationSchema.safeParse({
       commId: 'comm_1',
       accountId: 'acct_1',
       actionType: 'reply',
-      confidence: 0.82,
+      confidence: 0.7,
+      rationale: 'r',
     });
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a recommendation missing rationale', () => {
+    const result = RecommendationSchema.safeParse({
+      commId: 'comm_1',
+      accountId: 'acct_1',
+      actionType: 'reply_needed',
+      confidence: 0.7,
+    });
+    expect(result.success).toBe(false);
   });
 
   it('rejects a confidence outside [0,1]', () => {
@@ -22,16 +59,18 @@ describe('RecommendationSchema / DraftSchema — confidence gate contract', () =
       RecommendationSchema.safeParse({
         commId: 'c',
         accountId: 'a',
-        actionType: 'reply',
+        actionType: 'reply_needed',
         confidence: 1.5,
+        rationale: 'r',
       }).success,
     ).toBe(false);
     expect(
       RecommendationSchema.safeParse({
         commId: 'c',
         accountId: 'a',
-        actionType: 'reply',
+        actionType: 'reply_needed',
         confidence: -0.1,
+        rationale: 'r',
       }).success,
     ).toBe(false);
   });
@@ -40,7 +79,8 @@ describe('RecommendationSchema / DraftSchema — confidence gate contract', () =
     const result = RecommendationSchema.safeParse({
       commId: 'comm_1',
       accountId: 'acct_1',
-      actionType: 'reply',
+      actionType: 'reply_needed',
+      rationale: 'r',
     });
     expect(result.success).toBe(false);
   });
