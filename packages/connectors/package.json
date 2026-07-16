@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/contract-test.d.ts",
+      "default": "./dist/contract-test.js"
     }
   },
   "scripts": {
@@ -18,11 +22,19 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@chief-of-staff/shared": "workspace:*",
-    "vitest": "^2.1.8"
+    "@chief-of-staff/shared": "workspace:*"
   },
   "devDependencies": {
     "@chief-of-staff/tsconfig": "workspace:*",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "peerDependencies": {
+    "vitest": "^2.1.8"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
   }
 }
