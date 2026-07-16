@@ -1,0 +1,16 @@
+{
+  "$schema": "https://cursor.com/schemas/mcp.json",
+  "mcpServers": {
+    "pidgeot": {
+      "command": "bash",
+      "args": [
+        "-c",
+        "exec npx -y --package=github:jzubielik/chief-of-staff-communication-agent#path:mcp chief-of-staff-mcp"
+      ],
+      "env": {
+        "COS_API_URL": "https://klxrwe0sa3.execute-api.us-east-2.amazonaws.com",
+        "COS_API_TOKEN": "<paste your per-user token from the dashboard's Settings > MCP Tokens view>"
+      }
+    }
+  }
+}
