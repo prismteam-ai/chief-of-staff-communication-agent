@@ -69,6 +69,15 @@ export const NormalizedMessageSchema = z.object({
   ts: z.string().datetime(),
   body: z.string(),
   attachments: z.array(AttachmentSchema).default([]),
+  /**
+   * The channel's own RFC2822-style `Message-ID` header value (e.g. Gmail's `Message-ID:
+   * <foo@mail.gmail.com>`), when the channel has one — DISTINCT from `externalId` (Gmail's
+   * internal, provider-side message id used for dedupe/lookup). Threading a reply
+   * (`In-Reply-To`/`References`, design.md §7) requires the RFC2822 header value, not the
+   * internal id, so this is captured additively (Task 6) rather than overloading `externalId`.
+   * Optional: channels without an RFC2822 concept (SMS, X, LinkedIn) simply omit it.
+   */
+  providerMessageIdHeader: z.string().optional(),
 });
 
 export type NormalizedMessage = z.infer<typeof NormalizedMessageSchema>;

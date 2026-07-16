@@ -67,8 +67,69 @@ describe('GmailConnector', () => {
     ).rejects.toThrow();
   });
 
-  it('has no send implementation yet — deferred to Task 6', () => {
+  it('always exposes send — Gmail is a Live/sendable channel (channel-access-tiers.md)', () => {
     const connector: Connector = new GmailConnector();
-    expect(connector.send).toBeUndefined();
+    expect(connector.send).toBeTypeOf('function');
+  });
+
+  describe('send', () => {
+    const outbound = {
+      accountId: ACCOUNT_ID,
+      threadKey: '18f2b7e0a1c2d301',
+      inReplyToExternalId: '18f2b8f1b2d3e402',
+      inReplyToMessageId: '<CAF+contract-thread-002@mail.gmail.com>',
+      subject: 'Re: Meridian rollout contract — two clauses to discuss',
+      to: ['daniel.osei@meridian-partners.io'],
+      body: 'Sounds good — 2pm tomorrow works.\n\nAlex',
+    };
+
+    it('calls sendRawMessage with the account id, the built raw MIME, and the thread id', async () => {
+      const calls: { accountId: string; raw: string; threadId: string }[] = [];
+      const connector = new GmailConnector({
+        sendRawMessage: async (accountId, raw, threadId) => {
+          calls.push({ accountId, raw, threadId });
+          return { id: 'sent-message-1' };
+        },
+        resolveFromAddress: async () => 'demoalex775@gmail.com',
+      });
+
+      await connector.send?.(outbound);
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.accountId).toBe(ACCOUNT_ID);
+      expect(calls[0]?.threadId).toBe('18f2b7e0a1c2d301');
+      expect(calls[0]?.raw).toEqual(expect.any(String));
+    });
+
+    it('returns the providerMessageId from the send confirmation', async () => {
+      const connector = new GmailConnector({
+        sendRawMessage: async () => ({ id: 'sent-message-42' }),
+        resolveFromAddress: async () => 'demoalex775@gmail.com',
+      });
+
+      const result = await connector.send?.(outbound);
+
+      expect(result).toEqual({ providerMessageId: 'sent-message-42' });
+    });
+
+    it('resolves the From address for the connected account before building the MIME', async () => {
+      const fromCalls: string[] = [];
+      const connector = new GmailConnector({
+        sendRawMessage: async () => ({ id: 'sent-1' }),
+        resolveFromAddress: async (accountId) => {
+          fromCalls.push(accountId);
+          return 'demoalex775@gmail.com';
+        },
+      });
+
+      await connector.send?.(outbound);
+
+      expect(fromCalls).toEqual([ACCOUNT_ID]);
+    });
+
+    it('throws if constructed without send dependencies and send is called', async () => {
+      const connector = new GmailConnector();
+      await expect(connector.send?.(outbound)).rejects.toThrow();
+    });
   });
 });

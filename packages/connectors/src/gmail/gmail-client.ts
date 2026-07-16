@@ -3,13 +3,20 @@ import type { gmail_v1 } from 'googleapis';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 
 /**
- * Gmail OAuth + API access (brief constraint 4/5). Two Secrets Manager entries back every call:
+ * Gmail OAuth + API access (brief constraint 4/5, Task 3). Two Secrets Manager entries back every
+ * call:
  *   - `cos/gmail-oauth-client` (operator-provisioned, shared across accounts): `{ client_id,
  *     client_secret }` for the OAuth app registered with redirect URI
  *     `http://localhost:8765/oauth/callback`.
  *   - `cos/gmail-token-<accountId>` (minted by `just gmail-auth`, one per connected mailbox):
  *     `{ refresh_token }`. Access-token refresh happens in-process via `googleapis`' OAuth2
  *     client — no access token is ever persisted, only the long-lived refresh token.
+ *
+ * Moved here from `apps/ingest` in Task 6: this is Gmail OAuth infrastructure, not ingest-specific
+ * — `apps/api`'s send path needs the identical authenticated client (same `gmail.send` scope
+ * already requested by `just gmail-auth` per brief constraint 5, "no re-consent needed then"), so
+ * living in `packages/connectors` lets both `apps/ingest` (fetch) and `apps/api` (send) share one
+ * implementation instead of two copies drifting apart.
  */
 
 export const GMAIL_OAUTH_CLIENT_SECRET_ID = 'cos/gmail-oauth-client';

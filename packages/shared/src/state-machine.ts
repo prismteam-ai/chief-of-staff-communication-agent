@@ -18,9 +18,15 @@
  * Terminal states: `answered` (entered on provider send confirmation) and `dismissed`. Both stop
  * the overdue clock — "answered" tracking counts handled = answered ∪ dismissed (see `isHandled`).
  *
- * This module is the single source of truth for legal transitions. The API (Task 6), the agent
- * (Task 5), and the dashboard (Task 8) all call `canTransition`/`applyTransition` rather than
- * re-encoding the graph — business rules never live in the prompt or the frontend (design.md §7).
+ * ## `drafted → dismissed` (Task 6 addition)
+ * design.md §7 documents `dismissed` primarily as a `recommended`-state outcome ("no reply needed —
+ * FYI, newsletters"), i.e. the agent ideally never even drafts a reply for an `fyi_no_reply`
+ * classification. Today's agent (Task 5) always drafts once confidence clears the threshold,
+ * regardless of `actionType` — a real gap, tracked for a future tightening of the confidence-gate
+ * routing (it should also branch on `actionType`, not confidence alone). Until then, a human
+ * reviewing the approval queue needs a way to dismiss a communication that reached `drafted` but
+ * turns out not to need a reply (exactly the `fyi_no_reply` case) — the additive edge below is that
+ * escape hatch. It does not remove or replace `recommended → dismissed`; both remain legal.
  */
 
 export const COMMUNICATION_STATES = [
@@ -49,7 +55,9 @@ export type CommunicationState = (typeof COMMUNICATION_STATES)[number];
 export const TRANSITIONS: Readonly<Record<CommunicationState, readonly CommunicationState[]>> = {
   ingested: ['recommended'],
   recommended: ['drafted', 'dismissed', 'needs_context'],
-  drafted: ['awaiting_approval'],
+  // `dismissed` here is the Task 6 addition documented above — a human dismissing an
+  // already-drafted communication that turns out not to need a reply.
+  drafted: ['awaiting_approval', 'dismissed'],
   awaiting_approval: ['approved', 'edited', 'rejected'],
   approved: ['sent'],
   sent: ['answered'],

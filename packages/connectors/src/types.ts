@@ -30,8 +30,24 @@ export interface OutboundMessage {
   threadKey: string;
   /** Provider-native id of the message being replied to, when threading requires it. */
   inReplyToExternalId?: string;
+  /**
+   * The RFC2822 `Message-ID` header value of the message being replied to (e.g. Gmail's
+   * `<foo@mail.gmail.com>`) — DISTINCT from `inReplyToExternalId` (the provider's internal id).
+   * Email threading's `In-Reply-To`/`References` headers require this RFC2822 form (design.md §7:
+   * "which also preserves history"); channels without an RFC2822 concept omit it.
+   */
+  inReplyToMessageId?: string;
+  /** Subject line for channels that have one (email); ignored by channels that don't (SMS). */
+  subject?: string;
   to: string[];
   body: string;
+  /**
+   * Caller-supplied idempotency key (design.md §7, Task 6 brief constraint 2: "a retried approval
+   * doesn't double-send"). Connectors that can enforce it natively (rare) may use it; the
+   * durable idempotency guarantee lives in the caller's conditional-write claim
+   * (`apps/api`'s send-idempotency record), not in the connector itself.
+   */
+  idempotencyKey?: string;
 }
 
 /** Maps a provider-native participant identity onto the internal account it belongs to, if any. */

@@ -177,5 +177,9 @@ export function normalizeGmailMessage(message: GmailMessage, accountId: string):
     ts: extractTimestamp(message),
     body: extractBodyText(message.payload),
     attachments: extractAttachments(message.payload, message.id),
+    // The RFC2822 `Message-ID` header, when present — needed to thread a reply's
+    // `In-Reply-To`/`References` (design.md §7, Task 6 `send`). Absent on some synthetic/test
+    // fixtures; `send` falls back to `externalId` in that case (see gmail-connector.ts).
+    providerMessageIdHeader: getHeader(message.payload, 'Message-ID'),
   };
 }

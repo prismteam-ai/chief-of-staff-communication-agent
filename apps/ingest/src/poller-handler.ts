@@ -8,8 +8,8 @@ import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 import { logMetrics } from '@aws-lambda-powertools/metrics/middleware';
 import { MetricUnit } from '@aws-lambda-powertools/metrics';
 import middy from '@middy/core';
+import { createGmailClientForAccount } from '@chief-of-staff/connectors/gmail';
 import { createAccountsRepo } from './accounts-repo.js';
-import { createGmailClientForAccount } from './gmail-client.js';
 import { pollAllAccounts, type EnqueueMessage } from './poller-logic.js';
 import { logger, metrics, tracer } from './context.js';
 

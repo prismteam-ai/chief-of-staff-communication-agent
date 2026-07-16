@@ -8,11 +8,11 @@ import {
   OpenSearchRetrievalIndex,
 } from '@chief-of-staff/rag/opensearch';
 import type { RetrievalIndex } from '@chief-of-staff/rag';
+import { createGmailClientForAccount } from '@chief-of-staff/connectors/gmail';
 import { createDedupeRepo } from './dedupe-repo.js';
 import { createCommunicationsRepo } from './communications-repo.js';
 import { createRawArtifactStore } from './raw-artifact-store.js';
 import { createAgentTrigger, noopAgentTrigger } from './agent-trigger.js';
-import { createGmailClientForAccount } from './gmail-client.js';
 import {
   makeFetchGmailAttachment,
   makeFetchGmailMessage,
