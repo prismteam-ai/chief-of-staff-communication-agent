@@ -6,7 +6,7 @@ import type { Attachment, NormalizedMessage } from '@chief-of-staff/shared';
 import type { RetrievalIndex } from '@chief-of-staff/rag';
 import type { DedupeRepo } from './dedupe-repo.js';
 import { dedupeKeyFor } from './dedupe-repo.js';
-import type { CommunicationsRepo } from './communications-repo.js';
+import type { CommunicationRecord, CommunicationsRepo } from './communications-repo.js';
 import type { RawArtifactStore } from './raw-artifact-store.js';
 import { attachmentKey } from './raw-artifact-store.js';
 import { indexMessageChunks } from './rag-index-step.js';
@@ -102,17 +102,34 @@ export async function processOneMessage(
       return { outcome: 'duplicate', dedupeKey };
     }
 
-    await rawArtifactStore.putRawMessage(normalized.channelType, normalized.externalId, raw);
+    // Claim-then-write rollback (final-review fix): everything from here through the
+    // `communicationsRepo.putIngested` call below runs UNDER a dedupe claim this invocation just
+    // won. If any of it throws, the message was never durably persisted, but the claim would
+    // otherwise stand for the full TTL — permanently losing the message, since every future
+    // redelivery would see `claim()` return `false` and skip straight to 'duplicate'. Release the
+    // claim on any such failure so a redelivery gets a fresh attempt, then re-throw unchanged for
+    // the outer catch's existing MessageFailed logging/metrics. Once `putIngested` itself succeeds
+    // the message IS durable (and `putIngested` is idempotent — a fixed `commId` derived from
+    // `channelType#externalId` — see `communications-repo.ts`), so nothing after that point is
+    // covered: a RAG-index or agent-trigger failure past this point is already isolated separately
+    // below and must NOT release the claim (that would let a genuine duplicate delivery reprocess).
+    let record: CommunicationRecord;
+    try {
+      await rawArtifactStore.putRawMessage(normalized.channelType, normalized.externalId, raw);
 
-    const attachments = await persistAttachments(normalized.attachments, {
-      accountId,
-      messageId,
-      fetchAttachment,
-      rawArtifactStore,
-      log,
-    });
+      const attachments = await persistAttachments(normalized.attachments, {
+        accountId,
+        messageId,
+        fetchAttachment,
+        rawArtifactStore,
+        log,
+      });
 
-    const record = await communicationsRepo.putIngested({ ...normalized, attachments });
+      record = await communicationsRepo.putIngested({ ...normalized, attachments });
+    } catch (error) {
+      await releaseClaimIsolated(dedupeRepo, dedupeKey, { log });
+      throw error;
+    }
 
     metricsClient.addDimension('channel', normalized.channelType);
     metricsClient.addMetric('MessageIngested', MetricUnit.Count, 1);
@@ -121,7 +138,7 @@ export async function processOneMessage(
     log.info('Ingested message', {
       channelType: normalized.channelType,
       commId: record.commId,
-      attachmentCount: attachments.length,
+      attachmentCount: record.attachments.length,
     });
 
     // Isolated on purpose (brief constraint 4): the communication is already durably persisted
@@ -201,6 +218,37 @@ async function persistAttachments(
   }
 
   return results;
+}
+
+/**
+ * Best-effort dedupe-claim rollback (final-review fix — see the call site's comment). Failure to
+ * release is deliberately NOT re-thrown: the caller is already unwinding from a real failure (the
+ * reason this is being called at all), and letting a release failure clobber that original error
+ * would just replace one lost message with a confusing stack trace. The 30-day dedupe TTL
+ * (`dedupe-repo.ts`) is the backstop if release itself fails — the message is still stuck until TTL
+ * expiry in that double-failure case, but that's the same "TTL is the eventual bound" posture the
+ * table already has for every other dedupe-key lifecycle question.
+ */
+async function releaseClaimIsolated(
+  dedupeRepo: DedupeRepo,
+  dedupeKey: string,
+  deps: { log: Pick<typeof LoggerType, 'info' | 'warn' | 'error'> },
+): Promise<void> {
+  try {
+    await dedupeRepo.release(dedupeKey);
+    deps.log.info(
+      'Released dedupe claim after a downstream persist failure — retry can reprocess',
+      {
+        dedupeKey,
+      },
+    );
+  } catch (releaseError) {
+    const message = releaseError instanceof Error ? releaseError.message : String(releaseError);
+    deps.log.error(
+      'Failed to release dedupe claim after a downstream persist failure — message stuck until TTL expiry',
+      { dedupeKey, error: message },
+    );
+  }
 }
 
 /**

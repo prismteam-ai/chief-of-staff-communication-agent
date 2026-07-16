@@ -1,13 +1,16 @@
 import { ConditionalCheckFailedException, DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, DeleteCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 
 /**
  * Dedupe table repository for the WhatsApp inbound webhook (Task 9) — identical shape/semantics to
  * `apps/ingest/src/dedupe-repo.ts` (idempotency owned by the ingress, docs/decisions/email-ingress.md
- * §5). A small app-local copy rather than a cross-app import (mirrors how `agent-trigger.ts` and
- * `communications-repo.ts` are independently defined per app): the webhook Lambda lives in
- * `apps/api` (it must share the deployed API Gateway's stable URL — see `whatsapp-webhook.ts`), but
- * writes into the SAME shared dedupe table `IngestStack` owns.
+ * §5), including the final-review `release` rollback fix — see that file's doc comment for the full
+ * rationale (claim-then-write: a downstream persist failure after a successful claim must release
+ * the claim or the message is stuck for the full 30-day TTL). A small app-local copy rather than a
+ * cross-app import (mirrors how `agent-trigger.ts` and `communications-repo.ts` are independently
+ * defined per app): the webhook Lambda lives in `apps/api` (it must share the deployed API Gateway's
+ * stable URL — see `whatsapp-webhook.ts`), but writes into the SAME shared dedupe table `IngestStack`
+ * owns.
  */
 
 const DEDUPE_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days — same window as the ingest-side table.
@@ -29,6 +32,14 @@ export interface DedupeRepo {
    * redelivery) — the caller uses this to decide whether to persist the message or skip it.
    */
   claim(dedupeKey: string): Promise<boolean>;
+  /**
+   * Releases a claim this call made, so a subsequent Twilio redelivery of the same MessageSid is
+   * treated as a fresh attempt instead of a permanent duplicate. ONLY call this when the persist the
+   * claim was guarding did NOT complete — see `apps/ingest/src/dedupe-repo.ts`'s identical `release`
+   * for the full rationale. Best-effort: a failure here is logged, not thrown, so it never masks the
+   * original failure that triggered the release.
+   */
+  release(dedupeKey: string): Promise<void>;
 }
 
 export function createDedupeRepo(tableName: string): DedupeRepo {
@@ -54,6 +65,12 @@ export function createDedupeRepo(tableName: string): DedupeRepo {
         }
         throw error;
       }
+    },
+
+    async release(dedupeKey) {
+      // Unconditional delete — only ever invoked right after this SAME invocation's own successful
+      // claim, so there is no concurrent-writer race to guard against here.
+      await client().send(new DeleteCommand({ TableName: tableName, Key: { dedupeKey } }));
     },
   };
 }

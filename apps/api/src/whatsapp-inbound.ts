@@ -3,7 +3,7 @@ import { verifyTwilioSignature, WhatsAppConnector } from '@chief-of-staff/connec
 import type { RetrievalIndex } from '@chief-of-staff/rag';
 import { indexMessageChunks } from './rag-index-step.js';
 import { dedupeKeyFor, type DedupeRepo } from './repos/dedupe-repo.js';
-import type { CommunicationsRepo } from './repos/communications-repo.js';
+import type { ApiCommunicationRecord, CommunicationsRepo } from './repos/communications-repo.js';
 import type { AgentTrigger } from './agent-trigger.js';
 import type { logger as LoggerType, metrics as MetricsType } from './context.js';
 
@@ -114,7 +114,17 @@ export async function processInboundWhatsAppWebhook(
       return { outcome: 'duplicate', dedupeKey };
     }
 
-    const record = await communicationsRepo.putIngested(normalized);
+    // Claim-then-write rollback (final-review fix — mirrors processor-logic.ts's identical fix and
+    // rationale): if putIngested throws after a successful claim, the message was never durably
+    // persisted, so the claim must be released or the next Twilio redelivery would see `claim()`
+    // return false and permanently skip it.
+    let record: ApiCommunicationRecord;
+    try {
+      record = await communicationsRepo.putIngested(normalized);
+    } catch (error) {
+      await releaseClaimIsolated(dedupeRepo, dedupeKey, { log });
+      throw error;
+    }
 
     metricsClient.addDimension('channel', 'whatsapp');
     metricsClient.addMetric('WhatsAppIngested', MetricUnit.Count, 1);
@@ -140,6 +150,33 @@ export async function processInboundWhatsAppWebhook(
     metricsClient.addDimension('channel', 'whatsapp');
     metricsClient.addMetric('WhatsAppIngestFailed', MetricUnit.Count, 1);
     return { outcome: 'failed', error: message };
+  }
+}
+
+/**
+ * Best-effort dedupe-claim rollback (final-review fix — mirrors
+ * `apps/ingest/src/processor-logic.ts#releaseClaimIsolated` exactly). Failure to release is
+ * deliberately NOT re-thrown: the caller is already unwinding from the real failure that triggered
+ * this call, and a release failure must not clobber/mask it. The 30-day dedupe TTL is the backstop
+ * if release itself also fails.
+ */
+async function releaseClaimIsolated(
+  dedupeRepo: DedupeRepo,
+  dedupeKey: string,
+  deps: { log: Pick<typeof LoggerType, 'info' | 'warn' | 'error'> },
+): Promise<void> {
+  try {
+    await dedupeRepo.release(dedupeKey);
+    deps.log.info(
+      'Released WhatsApp dedupe claim after a downstream persist failure — retry can reprocess',
+      { dedupeKey },
+    );
+  } catch (releaseError) {
+    const message = releaseError instanceof Error ? releaseError.message : String(releaseError);
+    deps.log.error(
+      'Failed to release WhatsApp dedupe claim after a downstream persist failure — message stuck until TTL expiry',
+      { dedupeKey, error: message },
+    );
   }
 }
 

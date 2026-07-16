@@ -86,6 +86,7 @@ function makeDeps(
 
   const dedupeRepo: DedupeRepo = {
     claim: vi.fn().mockResolvedValue(overrides.dedupeClaims ?? true),
+    release: vi.fn().mockResolvedValue(undefined),
   };
 
   const putIngested = vi.fn().mockImplementation(
@@ -182,6 +183,146 @@ describe('processOneMessage', () => {
     await processOneMessage({ accountId: ACCOUNT_ID, messageId: MESSAGE_ID }, deps);
 
     expect(callOrder).toEqual(['dedupe', 's3', 'dynamo']);
+  });
+
+  describe('claim-then-write rollback (final-review fix)', () => {
+    it('releases the dedupe claim when putIngested throws after a successful claim, so a retry can reprocess', async () => {
+      const deps = makeDeps();
+      deps.communicationsRepo.putIngested = vi
+        .fn()
+        .mockRejectedValue(new Error('DynamoDB ProvisionedThroughputExceededException'));
+
+      const result = await processOneMessage(
+        { accountId: ACCOUNT_ID, messageId: MESSAGE_ID },
+        deps,
+      );
+
+      expect(result.outcome).toBe('failed');
+      expect(deps.dedupeRepo.claim).toHaveBeenCalledWith('gmail#18f2a1c3d4e5f601');
+      // Before this fix, a claim that won and then hit a downstream write failure stayed claimed
+      // for the full 30-day TTL — every redelivery of the SAME message would see `claim()` return
+      // `false` (already claimed) and skip straight to `duplicate`, permanently losing it. The
+      // claim must be released so the NEXT attempt (redelivery/manual replay) gets a real retry.
+      expect(deps.dedupeRepo.release).toHaveBeenCalledWith('gmail#18f2a1c3d4e5f601');
+      expect(deps.metricsClient.addMetric).toHaveBeenCalledWith('MessageFailed', 'Count', 1);
+    });
+
+    it('releases the dedupe claim when the S3 raw-message write throws after a successful claim', async () => {
+      const deps = makeDeps();
+      deps.rawArtifactStore.putRawMessage = vi
+        .fn()
+        .mockRejectedValue(new Error('S3 PutObject 503'));
+
+      const result = await processOneMessage(
+        { accountId: ACCOUNT_ID, messageId: MESSAGE_ID },
+        deps,
+      );
+
+      expect(result.outcome).toBe('failed');
+      expect(deps.dedupeRepo.release).toHaveBeenCalledWith('gmail#18f2a1c3d4e5f601');
+      expect(deps.communicationsRepo.putIngested).not.toHaveBeenCalled();
+    });
+
+    it('a redelivery after a released claim re-claims successfully and reprocesses the message', async () => {
+      // Simulates the two-call sequence a real redelivery produces: attempt 1 claims then fails
+      // downstream (claim released); attempt 2 (the redelivery) claims again — proving `release`
+      // actually unblocks the NEXT `claim()` call rather than just being called and ignored.
+      const claimedKeys = new Set<string>();
+      const dedupeRepo: DedupeRepo = {
+        claim: vi.fn().mockImplementation(async (key: string) => {
+          if (claimedKeys.has(key)) return false;
+          claimedKeys.add(key);
+          return true;
+        }),
+        release: vi.fn().mockImplementation(async (key: string) => {
+          claimedKeys.delete(key);
+        }),
+      };
+
+      const failingDeps = makeDeps({ dedupeClaims: true });
+      failingDeps.dedupeRepo = dedupeRepo;
+      failingDeps.communicationsRepo.putIngested = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('transient DynamoDB failure'))
+        .mockImplementation(async (message) => ({
+          ...message,
+          commId: `${message.channelType}#${message.externalId}`,
+          status: 'ingested',
+          ingestedAt: '2026-07-16T00:00:00.000Z',
+        }));
+
+      const attempt1 = await processOneMessage(
+        { accountId: ACCOUNT_ID, messageId: MESSAGE_ID },
+        failingDeps,
+      );
+      expect(attempt1.outcome).toBe('failed');
+
+      const attempt2 = await processOneMessage(
+        { accountId: ACCOUNT_ID, messageId: MESSAGE_ID },
+        failingDeps,
+      );
+      expect(attempt2).toEqual({ outcome: 'ingested', commId: 'gmail#18f2a1c3d4e5f601' });
+      expect(dedupeRepo.claim).toHaveBeenCalledTimes(2);
+    });
+
+    it('does NOT release the claim when a failure happens after putIngested already succeeded (RAG-index isolation)', async () => {
+      const deps = makeDeps({
+        retrievalIndex: {
+          indexChunks: vi.fn().mockRejectedValue(new Error('OpenSearch bulk index 503')),
+          search: vi.fn(),
+          filterSearch: vi.fn(),
+        },
+      });
+
+      const result = await processOneMessage(
+        { accountId: ACCOUNT_ID, messageId: MESSAGE_ID },
+        deps,
+      );
+
+      // The communication is already durably persisted at this point (fixed, idempotent commId) —
+      // releasing the claim here would be wrong: it would let a genuine duplicate delivery
+      // reprocess and re-run side effects (RAG re-index, a second agent trigger) against an
+      // already-ingested message.
+      expect(result.outcome).toBe('ingested');
+      expect(deps.dedupeRepo.release).not.toHaveBeenCalled();
+    });
+
+    it('does NOT release the claim when the agent-trigger publish fails after putIngested already succeeded', async () => {
+      const deps = makeDeps({
+        agentTrigger: {
+          publish: vi.fn().mockRejectedValue(new Error('SQS SendMessage throttled')),
+        },
+      });
+
+      const result = await processOneMessage(
+        { accountId: ACCOUNT_ID, messageId: MESSAGE_ID },
+        deps,
+      );
+
+      expect(result.outcome).toBe('ingested');
+      expect(deps.dedupeRepo.release).not.toHaveBeenCalled();
+    });
+
+    it('logs (no throw) when release itself fails, preserving the original failure as the outcome', async () => {
+      const deps = makeDeps();
+      deps.dedupeRepo.release = vi.fn().mockRejectedValue(new Error('DynamoDB DeleteItem 500'));
+      deps.communicationsRepo.putIngested = vi
+        .fn()
+        .mockRejectedValue(new Error('original persist failure'));
+
+      const result = await processOneMessage(
+        { accountId: ACCOUNT_ID, messageId: MESSAGE_ID },
+        deps,
+      );
+
+      // The ORIGINAL error (why release was even attempted) is what the caller sees — a
+      // release-of-the-rollback failure must not mask it or change the outcome shape.
+      expect(result).toEqual({ outcome: 'failed', error: 'original persist failure' });
+      expect(deps.log.error).toHaveBeenCalledWith(
+        'Failed to release dedupe claim after a downstream persist failure — message stuck until TTL expiry',
+        expect.objectContaining({ error: 'DynamoDB DeleteItem 500' }),
+      );
+    });
   });
 
   it('returns a failed outcome and emits MessageFailed when fetch throws', async () => {
