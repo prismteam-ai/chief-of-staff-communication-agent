@@ -12,6 +12,7 @@ import type { AgentRunner } from './agent/agent.js';
 import { createRetrieveContextTool } from './tools/retrieve-context.js';
 import { shapeRecommendation } from './tools/recommend-action.js';
 import { shapeDraft, buildStyleInstructions } from './tools/draft-reply.js';
+import { createManageAsanaTool } from './tools/manage-asana.js';
 import type { AgentCommunicationRecord, AgentCommunicationsRepo } from './communications-repo.js';
 import type {
   ConversationEvent,
@@ -200,6 +201,10 @@ export async function runAgentTurn(
     }
 
     // --- draft (at/above threshold) ----------------------------------------------------------
+    // manageAsana (Task 7) is offered as a real callable tool alongside retrieveContext during the
+    // draft step — the model decides whether follow-up tracking applies. It ONLY proposes (see
+    // tools/manage-asana.ts's module doc: no network dependency, cannot perform a write), so binding
+    // it here adds no write capability to the agent turn.
     const draftOutput = await agentRunner.draft({
       sessionId,
       messageText: record.body,
@@ -207,9 +212,13 @@ export async function runAgentTurn(
       retrieveContextTool,
       actionType: recommendation.actionType,
       styleInstructions: buildStyleInstructions(undefined),
+      manageAsanaTool: createManageAsanaTool(),
     });
     const draft: Draft = shapeDraft({ commId, accountId }, draftOutput);
     metricsClient.addMetric('DraftProduced', MetricUnit.Count, 1);
+    if (draftOutput.suggestedAsanaAction) {
+      metricsClient.addMetric('AsanaActionSuggested', MetricUnit.Count, 1);
+    }
 
     const transitions = twoHopTransitions({
       commId,
@@ -224,6 +233,7 @@ export async function runAgentTurn(
       recommendation,
       draft,
       transitions,
+      suggestedAsanaAction: draftOutput.suggestedAsanaAction,
     });
     await appendTurnIsolated(
       conversationStore,

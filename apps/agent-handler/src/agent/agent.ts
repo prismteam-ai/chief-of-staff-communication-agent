@@ -1,10 +1,12 @@
 import { Output, stepCountIs, type LanguageModel, type Tool } from 'ai';
 import { createLangSmithProviderOptions } from 'langsmith/experimental/vercel';
+import type { SuggestedAsanaAction } from '@chief-of-staff/shared';
 import {
   RecommendationOutputSchema,
   type RecommendationOutput,
 } from '../tools/recommend-action.js';
 import { DraftOutputSchema, type DraftOutput } from '../tools/draft-reply.js';
+import type { ManageAsanaResult } from '../tools/manage-asana.js';
 import { BEDROCK_PROMPT_CACHE_METADATA } from './bedrock-prompt-cache.js';
 import type { LangSmithFacade } from '../observability/langsmith.js';
 
@@ -37,11 +39,24 @@ export interface DraftInput extends ClassifyInput {
   actionType: string;
   /** Style instructions (generic v0 today; Task 10 makes them user-specific). */
   styleInstructions: string;
+  /**
+   * The `manageAsana` tool (Task 7, design.md §9), pre-bound with no client/network dependency —
+   * calling it only PROPOSES an Asana action (see `tools/manage-asana.ts`). Optional so tests and
+   * any future draft-only caller can omit it; when present, the model may call it once it decides
+   * the communication warrants Asana follow-up tracking.
+   */
+  manageAsanaTool?: Tool;
+}
+
+/** `draft()`'s return, extended with the `manageAsana` tool's result when the model called it this
+ * turn (Task 7) — `undefined` when the model did not call it. */
+export interface DraftResult extends DraftOutput {
+  suggestedAsanaAction?: SuggestedAsanaAction;
 }
 
 export interface AgentRunner {
   classify(input: ClassifyInput): Promise<RecommendationOutput>;
-  draft(input: DraftInput): Promise<DraftOutput>;
+  draft(input: DraftInput): Promise<DraftResult>;
 }
 
 const CLASSIFY_SYSTEM = [
@@ -64,6 +79,15 @@ const DRAFT_SYSTEM_PREFIX = [
   'Ground the draft in the retrieved context; never invent facts not present in the message or',
   'that context. Produce a complete, ready-to-send body and an honest confidence in [0,1].',
   'Follow this voice:',
+].join('\n');
+
+/** Appended to the draft instructions only when a `manageAsana` tool is bound (Task 7). */
+const MANAGE_ASANA_INSTRUCTIONS = [
+  'If this communication implies concrete follow-up work (a commitment, a deadline, a task someone',
+  'owns), call manageAsana to PROPOSE linking it to an Asana task or creating/updating a follow-up',
+  'task. manageAsana never performs the write itself — it only records a suggestion for human',
+  'review — so call it whenever follow-up tracking would help, even if you are not fully certain.',
+  'Skip it for purely informational messages that need no follow-up.',
 ].join('\n');
 
 /** Step-count guard so a tool loop can never run away (kit skill: "Limit tool iterations"). */
@@ -121,17 +145,36 @@ export class ToolLoopAgentRunner implements AgentRunner {
     return RecommendationOutputSchema.parse(result.output);
   }
 
-  async draft(input: DraftInput): Promise<DraftOutput> {
+  async draft(input: DraftInput): Promise<DraftResult> {
+    const tools: Record<string, Tool> = { retrieveContext: input.retrieveContextTool };
+    if (input.manageAsanaTool) {
+      tools.manageAsana = input.manageAsanaTool;
+    }
     const agent = new this.langsmith.ToolLoopAgent({
       model: this.model,
-      tools: { retrieveContext: input.retrieveContextTool },
-      instructions: `${DRAFT_SYSTEM_PREFIX}\n${input.styleInstructions}`,
+      tools,
+      instructions: `${DRAFT_SYSTEM_PREFIX}\n${input.styleInstructions}\n${MANAGE_ASANA_INSTRUCTIONS}`,
       stopWhen: stepCountIs(MAX_STEPS),
       output: Output.object({ schema: DraftOutputSchema }),
       providerOptions: this.providerOptions(input.sessionId),
     });
     const prompt = `${buildPrompt(input)}\n\nWrite a ${input.actionType} reply draft.`;
     const result = await agent.generate({ prompt });
-    return DraftOutputSchema.parse(result.output);
+    const draft = DraftOutputSchema.parse(result.output);
+
+    // Extract the LAST manageAsana tool result this turn, if the model called it (Task 7: the tool
+    // only proposes — see tools/manage-asana.ts — so this is never a performed write, only a
+    // suggestion to surface for human review). "Last" so a model that calls it more than once in one
+    // turn is resolved deterministically to its final proposal, not an arbitrary one.
+    const asanaResults = result.toolResults.filter(
+      (r): r is typeof r & { output: ManageAsanaResult } =>
+        r.toolName === 'manageAsana' && (r as { output?: unknown }).output !== undefined,
+    );
+    const lastAsanaResult = asanaResults[asanaResults.length - 1];
+
+    return {
+      ...draft,
+      suggestedAsanaAction: lastAsanaResult?.output.suggestedAsanaAction,
+    };
   }
 }

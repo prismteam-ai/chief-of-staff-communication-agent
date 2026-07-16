@@ -5,6 +5,7 @@ import type {
   Draft,
   NormalizedMessage,
   Recommendation,
+  SuggestedAsanaAction,
   TransitionRecord,
 } from '@chief-of-staff/shared';
 
@@ -34,6 +35,14 @@ export interface AgentCommunicationRecord extends NormalizedMessage {
    * it, not just re-run blind against the original message.
    */
   suppliedContext?: string[];
+  /**
+   * The `manageAsana` tool's proposed Asana action for this communication (Task 7, brief constraint
+   * 4: "PROPOSES not executes"), when the agent chose to call it during this turn. Never written by
+   * anything except `run-agent-turn.ts` persisting the tool's return value — this field is a
+   * SUGGESTION, not a record of a performed write. Cleared implicitly once a human acts on it via
+   * `createAsanaFollowup`/`linkAsana` (`apps/api`), which persist `asanaTaskGid` instead.
+   */
+  suggestedAsanaAction?: SuggestedAsanaAction;
 }
 
 let cachedClient: DynamoDBDocumentClient | undefined;
@@ -52,6 +61,8 @@ export interface PersistAgentOutcomeInput {
   draft?: Draft;
   /** Transition records produced this turn (e.g. ingested→recommended, recommended→drafted). */
   transitions: TransitionRecord[];
+  /** Present only when the agent called `manageAsana` this turn (Task 7) — a proposal, not a write. */
+  suggestedAsanaAction?: SuggestedAsanaAction;
 }
 
 export interface AgentCommunicationsRepo {
@@ -74,15 +85,29 @@ export function createAgentCommunicationsRepo(tableName: string): AgentCommunica
      * agent for the same commId fails the condition rather than re-recommending. Transitions are
      * appended to the audit list, not overwritten.
      */
-    async persistOutcome({ commId, status, recommendation, draft, transitions }) {
+    async persistOutcome({
+      commId,
+      status,
+      recommendation,
+      draft,
+      transitions,
+      suggestedAsanaAction,
+    }) {
       const expectedFrom = transitions[0]?.from;
+      const setClauses = [
+        '#status = :status',
+        'recommendation = :recommendation',
+        'draft = :draft',
+        'transitions = list_append(if_not_exists(transitions, :empty), :newTransitions)',
+      ];
+      if (suggestedAsanaAction) {
+        setClauses.push('suggestedAsanaAction = :suggestedAsanaAction');
+      }
       await client().send(
         new UpdateCommand({
           TableName: tableName,
           Key: { commId },
-          UpdateExpression:
-            'SET #status = :status, recommendation = :recommendation, draft = :draft, ' +
-            'transitions = list_append(if_not_exists(transitions, :empty), :newTransitions)',
+          UpdateExpression: `SET ${setClauses.join(', ')}`,
           ConditionExpression: expectedFrom
             ? '#status = :expectedFrom'
             : 'attribute_exists(commId)',
@@ -96,6 +121,7 @@ export function createAgentCommunicationsRepo(tableName: string): AgentCommunica
             ':newTransitions': transitions,
             ':empty': [] as TransitionRecord[],
             ...(expectedFrom ? { ':expectedFrom': expectedFrom } : {}),
+            ...(suggestedAsanaAction ? { ':suggestedAsanaAction': suggestedAsanaAction } : {}),
           },
         }),
       );

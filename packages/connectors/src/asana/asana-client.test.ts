@@ -22,6 +22,11 @@ function jsonResponse(status: number, data: unknown, headers: Record<string, str
   return new Response(JSON.stringify({ data }), { status, headers });
 }
 
+/** Raw envelope (not auto-wrapped in `{data}`) — for asserting on Asana's `next_page` pagination
+ * shape directly. */
+function rawResponse(status: number, envelope: unknown, headers: Record<string, string> = {}) {
+  return new Response(JSON.stringify(envelope), { status, headers });
+}
 
 describe('loadAsanaSecret — secret caching (mirrors gmail-client.ts)', () => {
   beforeEach(() => {
@@ -106,6 +111,31 @@ describe('AsanaClient — scoping (project_gid confinement)', () => {
     const [url] = fetchImpl.mock.calls[0]!;
     expect(url as string).toContain('/projects/proj-1/tasks');
     expect(url as string).not.toContain('/workspaces/');
+  });
+
+  it('listCommunicationAgentTasks follows Asana offset pagination across pages (never assumes one page)', async () => {
+    // Page 1: a task + a next_page.offset cursor. Page 2: another task, no next_page (last page).
+    fetchImpl
+      .mockResolvedValueOnce(
+        rawResponse(200, {
+          data: [{ gid: 'task-a', name: 'A' }],
+          next_page: { offset: 'cursor-2' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        rawResponse(200, { data: [{ gid: 'task-b', name: 'B' }], next_page: null }),
+      );
+
+    const tasks = await client.listCommunicationAgentTasks();
+
+    expect(tasks.map((t) => t.gid)).toEqual(['task-a', 'task-b']);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    // Page 1 has no offset param; page 2 carries the cursor returned by page 1.
+    expect(fetchImpl.mock.calls[0]![0] as string).not.toContain('offset=');
+    expect(fetchImpl.mock.calls[1]![0] as string).toContain('offset=cursor-2');
+    // Both pages stay scoped to the dedicated project — pagination never widens the endpoint.
+    expect(fetchImpl.mock.calls[0]![0] as string).toContain('/projects/proj-1/tasks');
+    expect(fetchImpl.mock.calls[1]![0] as string).toContain('/projects/proj-1/tasks');
   });
 
   it('never logs or exposes the PAT in a thrown error message', async () => {

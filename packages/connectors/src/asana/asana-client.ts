@@ -263,6 +263,81 @@ export class AsanaClient {
     }
   }
 
+  /**
+   * Same transport as `requestJson` (timeout + 429/5xx backoff) but for an array-returning endpoint
+   * that Asana paginates with an `offset` cursor (Task 7 brief constraint 6: "handle Asana's
+   * `offset` pagination correctly — don't assume a single page"). Follows `next_page.offset` to
+   * completion; each page is a fresh request that gets the full retry/timeout treatment. `basePath`
+   * may already carry an `?opt_fields=...` query — the `offset` param is appended with the correct
+   * separator.
+   */
+  private async requestPaginated<T>(
+    basePath: string,
+    itemSchema: z.ZodType<T, z.ZodTypeDef, unknown>,
+  ): Promise<T[]> {
+    const secret = await this.loadSecret();
+    const sep = basePath.includes('?') ? '&' : '?';
+    const collected: T[] = [];
+    let offset: string | undefined;
+
+    do {
+      const path = offset ? `${basePath}${sep}offset=${encodeURIComponent(offset)}` : basePath;
+      const url = `${ASANA_API_BASE_URL}${path}`;
+
+      let attempt = 0;
+      let envelope: { data: unknown[]; next_page?: { offset?: string } | null } | undefined;
+      for (;;) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+        let response: Response;
+        try {
+          response = await this.fetchImpl(url, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${secret.pat}`, 'Content-Type': 'application/json' },
+            signal: controller.signal,
+          });
+        } catch (error) {
+          clearTimeout(timeout);
+          const isAbort = error instanceof Error && error.name === 'AbortError';
+          if (isAbort) {
+            throw new Error(`Asana API request to "${path}" timed out after ${this.timeoutMs}ms`, {
+              cause: error,
+            });
+          }
+          throw error;
+        }
+        clearTimeout(timeout);
+
+        if (response.ok) {
+          envelope = (await response.json()) as {
+            data: unknown[];
+            next_page?: { offset?: string } | null;
+          };
+          break;
+        }
+
+        if (isRetryableStatus(response.status) && attempt < this.maxRetries) {
+          const retryAfterHeader = response.headers.get('Retry-After');
+          const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : undefined;
+          const backoffMs =
+            retryAfterMs && Number.isFinite(retryAfterMs)
+              ? retryAfterMs
+              : this.baseBackoffMs * 2 ** attempt;
+          attempt += 1;
+          await this.sleep(backoffMs);
+          continue;
+        }
+
+        throw new AsanaApiError(response.status, path);
+      }
+
+      for (const item of envelope.data) collected.push(itemSchema.parse(item));
+      offset = envelope.next_page?.offset ?? undefined;
+    } while (offset);
+
+    return collected;
+  }
+
   /** Creates a task ALWAYS in the client's scoped project (Task 7 brief constraint 3: "Created
    * tasks -> projects:[project_gid] on create"). `projects` is never accepted as caller input. */
   async createTask(input: CreateAsanaTaskInput): Promise<AsanaTask> {
@@ -289,17 +364,20 @@ export class AsanaClient {
   }
 
   async getTask(taskGid: string): Promise<AsanaTask> {
-    return this.requestJson('GET', `/tasks/${taskGid}?opt_fields=name,notes,completed,permalink_url,due_on,projects.name`, AsanaTaskSchema);
+    return this.requestJson(
+      'GET',
+      `/tasks/${taskGid}?opt_fields=name,notes,completed,permalink_url,due_on,projects.name`,
+      AsanaTaskSchema,
+    );
   }
 
   /** Lists tasks ONLY within the client's scoped project (Task 7 brief constraint: "RAG asana-sync
    * -> GET /projects/{project_gid}/tasks ONLY, never the whole workspace"). */
   async listCommunicationAgentTasks(): Promise<AsanaTask[]> {
     const projectGid = await this.projectGid();
-    return this.requestJson(
-      'GET',
-      `/projects/${projectGid}/tasks?opt_fields=name,notes,completed,permalink_url,due_on,projects.name`,
-      z.array(AsanaTaskSchema),
+    return this.requestPaginated(
+      `/projects/${projectGid}/tasks?opt_fields=name,notes,completed,permalink_url,due_on,projects.name&limit=100`,
+      AsanaTaskSchema,
     );
   }
 

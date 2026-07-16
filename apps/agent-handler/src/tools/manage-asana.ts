@@ -1,57 +1,93 @@
 import { tool, type Tool } from 'ai';
 import { z } from 'zod';
+import {
+  MANAGE_ASANA_ACTIONS,
+  type ManageAsanaAction,
+  type SuggestedAsanaAction,
+} from '@chief-of-staff/shared';
+
+// Re-exported so callers (including this module's own tests) can import the action enum from the
+// tool module directly, the same way Task 5's stub did — `@chief-of-staff/shared` remains the one
+// source of truth; this is just a convenience re-export, not a second definition.
+export { MANAGE_ASANA_ACTIONS };
+export type { ManageAsanaAction };
 
 /**
- * `manageAsana` tool — a TYPED CONTRACT STUB (Task 5 brief: "Do not implement any real Asana API
- * call — Task 7 owns that"). The input schema and the return shape are the real contract the agent,
- * the tRPC API, and the MCP server share (design.md §5 "one list, shared by the agent, the tRPC
- * API, and the MCP server"); only the `execute` body is stubbed. Task 7 replaces the body with the
- * approval-gated Asana client and leaves this schema unchanged.
+ * `manageAsana` tool (Task 7, design.md §9): the agent's Asana seam. Turns Task 5's typed-contract
+ * stub into a REAL tool that PROPOSES an Asana action and NEVER executes one — the confirm-gated
+ * write-guardrail pattern `hypno` uses for Asana writes (Task 7 brief constraint 4: "manageAsana
+ * becomes real but PROPOSES not executes").
  *
- * The stub NEVER calls a real Asana endpoint and NEVER throws — it returns an unambiguous
- * `not_implemented` marker so a caller (or a test) can assert the seam is not yet wired.
+ * `execute()` builds a `SuggestedAsanaAction` (`packages/shared/src/asana.ts`) and returns it; the
+ * caller (`run-agent-turn.ts` today; Task 8's dashboard/MCP surface tomorrow) is responsible for
+ * persisting it onto the communication record as `suggestedAsanaAction`. This function has NO
+ * network dependency whatsoever — no `AsanaClient`, no `fetch`, nothing that could reach
+ * `app.asana.com` — so "propose, never execute" is a structural guarantee, not just a runtime
+ * choice: there is no code path here that could perform a write even by mistake.
+ *
+ * Turning a suggestion into a real Asana task/comment is a SEPARATE, human-approved step:
+ * `createAsanaFollowup(commId, {...})` / `linkAsana(commId, taskGid)` in `apps/api`'s tRPC router,
+ * which IS wired to the real `AsanaClient` and IS account-guarded (reuses
+ * `ApprovalService`-style `loadAuthorized`/`assertAccountOwned`).
  */
-
-export const MANAGE_ASANA_ACTIONS = ['link', 'create', 'update'] as const;
-export type ManageAsanaAction = (typeof MANAGE_ASANA_ACTIONS)[number];
 
 export const ManageAsanaInputSchema = z.object({
   action: z.enum(MANAGE_ASANA_ACTIONS).describe('link, create, or update an Asana task/project.'),
   commId: z.string().min(1).describe('The communication this Asana action relates to.'),
   /** Existing Asana object gid — required for `link`/`update`, absent for `create`. */
   asanaGid: z.string().optional().describe('Target Asana gid (for link/update).'),
-  /** Free-text detail (task name for create, note for update, etc.). */
+  /** Free-text detail (task name for create, note for update/link, etc.). */
   detail: z.string().optional().describe('Task name (create) or note (update/link).'),
+  /** Optional proposed due date (`YYYY-MM-DD`) — only meaningful for create/update. */
+  dueOn: z.string().optional().describe('Proposed due date YYYY-MM-DD (create/update only).'),
 });
 export type ManageAsanaInput = z.infer<typeof ManageAsanaInputSchema>;
 
 export interface ManageAsanaResult {
-  status: 'not_implemented';
+  status: 'proposed';
   action: ManageAsanaAction;
   commId: string;
+  suggestedAsanaAction: SuggestedAsanaAction;
   message: string;
 }
 
-const NOT_IMPLEMENTED_MESSAGE =
-  'manageAsana is a contract stub — Task 7 wires the real, approval-gated Asana client. ' +
-  'No Asana write was performed.';
+const PROPOSED_MESSAGE =
+  'manageAsana proposes an Asana action — it does NOT perform a write. The suggestion is saved on ' +
+  'the communication record; a human must approve it via createAsanaFollowup/linkAsana (apps/api) ' +
+  'before anything is created or changed in Asana.';
 
-/** Pure stub behavior, exposed for direct unit testing without the AI SDK envelope. */
+/**
+ * Pure suggestion-shaping logic, exposed separately from the AI SDK `tool()` envelope so unit tests
+ * (and `run-agent-turn.ts`) can call it directly. Deliberately takes ONE argument (`input`) — no
+ * injected client — so the "no network dependency" guarantee in the module doc is enforceable by
+ * inspection, not just convention.
+ */
 export function runManageAsana(input: ManageAsanaInput): ManageAsanaResult {
-  return {
-    status: 'not_implemented',
+  const suggestedAsanaAction: SuggestedAsanaAction = {
     action: input.action,
     commId: input.commId,
-    message: NOT_IMPLEMENTED_MESSAGE,
+    asanaGid: input.asanaGid,
+    title: input.action === 'create' ? input.detail : undefined,
+    note: input.action !== 'create' ? input.detail : undefined,
+    dueOn: input.dueOn,
+    suggestedAt: new Date().toISOString(),
+  };
+
+  return {
+    status: 'proposed',
+    action: input.action,
+    commId: input.commId,
+    suggestedAsanaAction,
+    message: PROPOSED_MESSAGE,
   };
 }
 
 export function createManageAsanaTool(): Tool {
   return tool({
     description:
-      'Link a communication to an Asana task/project, or create/update a follow-up task. ' +
-      'NOTE: not yet wired — returns a not_implemented marker until the Asana integration lands. ' +
-      'Do not rely on it performing a real write.',
+      'Propose linking a communication to an Asana task/project, or creating/updating a follow-up ' +
+      'task. This NEVER performs the Asana write itself — it records a suggestion for human review. ' +
+      'Use this whenever a communication warrants Asana follow-up tracking.',
     inputSchema: ManageAsanaInputSchema,
     execute: async (input) => runManageAsana(input),
   });
