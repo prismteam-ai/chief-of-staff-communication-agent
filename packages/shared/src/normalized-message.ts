@@ -78,6 +78,16 @@ export const NormalizedMessageSchema = z.object({
    * Optional: channels without an RFC2822 concept (SMS, X, LinkedIn) simply omit it.
    */
   providerMessageIdHeader: z.string().optional(),
+  /**
+   * The original message's subject line (e.g. Gmail's `Subject` header), when the channel has one
+   * (Task 6 review fix — previously never captured, so every reply's subject fell back to the
+   * connector's hardcoded default regardless of the real thread). Captured additively per the
+   * versioning policy above: existing records/producers with no `subject` still validate; a
+   * legacy communication with none falls back to a safe default at send time
+   * (`ensureReSubject`/`build-outbound-mime.ts`), never a hard failure. Channels without a subject
+   * concept (SMS, X, LinkedIn) simply omit it.
+   */
+  subject: z.string().optional(),
 });
 
 export type NormalizedMessage = z.infer<typeof NormalizedMessageSchema>;

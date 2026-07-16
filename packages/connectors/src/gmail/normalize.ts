@@ -181,5 +181,11 @@ export function normalizeGmailMessage(message: GmailMessage, accountId: string):
     // `In-Reply-To`/`References` (design.md §7, Task 6 `send`). Absent on some synthetic/test
     // fixtures; `send` falls back to `externalId` in that case (see gmail-connector.ts).
     providerMessageIdHeader: getHeader(message.payload, 'Message-ID'),
+    // The original message's Subject header (Task 6 review fix) — threaded through to
+    // OutboundMessage.subject at send time so `ensureReSubject` produces `Re: <real subject>`
+    // instead of always falling back to `(no subject)`. Absent on messages with no Subject header
+    // at all (rare, but some synthetic/test fixtures omit it); undefined here is the same safe
+    // fallback path `ensureReSubject` already handles.
+    subject: getHeader(message.payload, 'Subject'),
   };
 }

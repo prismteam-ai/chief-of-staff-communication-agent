@@ -51,6 +51,29 @@ describe('normalizeGmailMessage', () => {
     expect(result.ts).toBe(new Date(1752577200000).toISOString());
   });
 
+  it('captures the Subject header (Task 6 review fix — threaded through to reply subjects)', () => {
+    const result = normalizeGmailMessage(simpleMessage as GmailMessage, ACCOUNT_ID);
+
+    expect(result.subject).toBe('Q3 budget review — confirm Thursday?');
+  });
+
+  it('leaves subject undefined when the message has no Subject header (safe fallback downstream)', () => {
+    const result = normalizeGmailMessage(
+      {
+        id: 'm1',
+        threadId: 't1',
+        internalDate: '1700000000000',
+        payload: {
+          headers: [{ name: 'From', value: 'sender@example.com' }],
+          body: { data: '' },
+        },
+      },
+      ACCOUNT_ID,
+    );
+
+    expect(result.subject).toBeUndefined();
+  });
+
   it('includes cc participants', () => {
     const result = normalizeGmailMessage(threadOriginal as GmailMessage, ACCOUNT_ID);
 
