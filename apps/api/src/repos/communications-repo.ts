@@ -89,8 +89,16 @@ export interface CommunicationsRepo {
    * once per communication. `approveDraft` calls this immediately before invoking the connector's
    * `send` — a retried/duplicate approval request for a communication that already has a claim
    * throws `SendAlreadyClaimedError` instead of sending a second time.
+   *
+   * `priorClaimedAt`, when passed, is the retry-after-failure path (`approveDraft` on a record
+   * already in `approved` with no `sentMessageId` — see its doc comment): the claim is re-issued
+   * with a fresh timestamp via a CAS on the EXACT prior `sendClaimedAt` value rather than
+   * `attribute_not_exists`. This still only succeeds once per prior claim — two concurrent retries
+   * both reading the same prior timestamp race on the same CAS and only one wins, exactly as the
+   * first-attempt case only lets one caller through `attribute_not_exists` — so the send-once
+   * guarantee holds for retries too, not just first attempts.
    */
-  claimSend(commId: string): Promise<void>;
+  claimSend(commId: string, priorClaimedAt?: string): Promise<void>;
 
   /** Persists the provider's send confirmation id — called once the connector confirms delivery. */
   recordSent(commId: string, sentMessageId: string): Promise<void>;
@@ -157,15 +165,26 @@ export function createCommunicationsRepo(tableName: string): CommunicationsRepo 
       }
     },
 
-    async claimSend(commId) {
+    async claimSend(commId, priorClaimedAt) {
+      const isRetry = priorClaimedAt !== undefined;
       try {
         await client().send(
           new UpdateCommand({
             TableName: tableName,
             Key: { commId },
             UpdateExpression: 'SET sendClaimedAt = :now',
-            ConditionExpression: 'attribute_not_exists(sendClaimedAt)',
-            ExpressionAttributeValues: { ':now': new Date().toISOString() },
+            // First attempt: only one caller may ever see no claim at all. Retry-after-failure:
+            // only one caller may win the CAS on the exact prior claim timestamp AND the send must
+            // still be unconfirmed — `sentMessageId` existing means a prior attempt's connector
+            // call actually succeeded despite throwing (e.g. the response was lost after Gmail
+            // accepted it), which must never be re-claimed for a second send.
+            ConditionExpression: isRetry
+              ? 'sendClaimedAt = :priorClaimedAt AND attribute_not_exists(sentMessageId)'
+              : 'attribute_not_exists(sendClaimedAt)',
+            ExpressionAttributeValues: {
+              ':now': new Date().toISOString(),
+              ...(isRetry ? { ':priorClaimedAt': priorClaimedAt } : {}),
+            },
           }),
         );
       } catch (error) {

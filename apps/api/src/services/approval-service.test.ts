@@ -82,8 +82,12 @@ function fakeCommunicationsRepo(
         ...(patch?.draft ? { draft: patch.draft } : {}),
       };
     },
-    async claimSend(commId) {
-      if (state.record.sendClaimedAt) {
+    async claimSend(commId, priorClaimedAt) {
+      const isRetry = priorClaimedAt !== undefined;
+      const casOk = isRetry
+        ? state.record.sendClaimedAt === priorClaimedAt && !state.record.sentMessageId
+        : !state.record.sendClaimedAt;
+      if (!casOk) {
         throw new SendAlreadyClaimedError(commId);
       }
       state.record = { ...state.record, sendClaimedAt: NOW().toISOString() };
@@ -288,6 +292,50 @@ describe('ApprovalService — approveDraft (drafted -> awaiting_approval -> appr
     expect(capturedTo).toEqual(['renee.castellano@harborline-partners.com']);
   });
 
+  it("sends to the account's own address for a pure self-thread (every participant is the account itself)", async () => {
+    // Regression case, found live during Task 6 verification: `just verify-ingest`'s
+    // self-addressed probe (Gmail's documented self-send behavior on this account: the sent
+    // message id gains the INBOX label rather than creating a distinct copy) produces a
+    // NormalizedMessage where BOTH participants are the account's own address
+    // (demoalex775@gmail.com tagged "from" AND "to"). The "everyone except myself" filter alone
+    // would leave zero recipients here, which must fall back to the account's own address —
+    // there being no other party to address a reply to — rather than sending to nobody.
+    let capturedTo: string[] | undefined;
+    const record = fixtureRecord({
+      status: 'drafted',
+      participants: [
+        { id: 'demoalex775@gmail.com', role: 'from' },
+        { id: 'demoalex775@gmail.com', role: 'to' },
+      ],
+    });
+    const repo = fakeCommunicationsRepo(record);
+    const accountsRepo = fakeAccountsRepo({ [ACCOUNT_ID]: OWNER_USER_ID });
+    const captureService = new ApprovalService({
+      communicationsRepo: repo,
+      accountsRepo,
+      connectorFor: () => ({
+        channelType: 'gmail',
+        async ingest() {
+          return [];
+        },
+        async identity(_id, accountId) {
+          return { accountId };
+        },
+        async send(message) {
+          capturedTo = message.to;
+          return { providerMessageId: 'sent-1' };
+        },
+      }),
+      now: NOW,
+      log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      metricsClient: { addMetric: vi.fn() },
+    });
+
+    await captureService.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID });
+
+    expect(capturedTo).toEqual(['demoalex775@gmail.com']);
+  });
+
   it('also works starting from awaiting_approval directly (already opened for review)', async () => {
     const { service, repo } = makeService(fixtureRecord({ status: 'awaiting_approval' }));
     const result = await service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID });
@@ -364,6 +412,98 @@ describe('ApprovalService — approveDraft (drafted -> awaiting_approval -> appr
     const { service } = makeService(record);
     await expect(service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID })).rejects.toThrow(
       SendAlreadyClaimedError,
+    );
+  });
+
+  it('retry: a second approveDraft call on a record left at approved after a failed send succeeds and re-sends exactly once', async () => {
+    let sendCallCount = 0;
+    let shouldFail = true;
+    const { service, repo } = makeService(fixtureRecord({ status: 'drafted' }), {
+      sendImpl: async () => {
+        sendCallCount += 1;
+        if (shouldFail) throw new Error('Gmail API 500');
+        return { providerMessageId: 'sent-after-retry' };
+      },
+    });
+
+    await expect(service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID })).rejects.toThrow(
+      'Gmail API 500',
+    );
+    expect(repo.record.status).toBe('approved');
+    expect(sendCallCount).toBe(1);
+
+    shouldFail = false;
+    const result = await service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID });
+
+    expect(sendCallCount).toBe(2);
+    expect(result.status).toBe('answered');
+    expect(result.sentMessageId).toBe('sent-after-retry');
+  });
+
+  it('retry: does not double-count DraftApproved metric (only emitted on the first hop into approved)', async () => {
+    let shouldFail = true;
+    const { service, repo, metricsClient } = makeService(fixtureRecord({ status: 'drafted' }), {
+      sendImpl: async () => {
+        if (shouldFail) throw new Error('Gmail API 500');
+        return { providerMessageId: 'sent-after-retry' };
+      },
+    });
+
+    await expect(
+      service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID }),
+    ).rejects.toThrow();
+    shouldFail = false;
+    await service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID });
+
+    const draftApprovedCount = metricsClient.addMetric.mock.calls.filter(
+      (call) => call[0] === 'DraftApproved',
+    ).length;
+    expect(draftApprovedCount).toBe(1);
+    expect(repo.record.status).toBe('answered');
+  });
+
+  it('rejects a retry whose CAS on the prior claim timestamp loses to a concurrent winner', async () => {
+    // A record already at `approved` with a failed send behind it (the state a genuine retry
+    // starts from). Before THIS call's `claimSend` CAS runs, a concurrent retry has already won
+    // and re-claimed with a fresh timestamp — this call's `loadAuthorized` re-read still observed
+    // the OLD `sendClaimedAt` (the read happened before the concurrent writer's update), so its
+    // CAS is built on a now-stale prior value and must lose.
+    const staleClaimedAt = NOW().toISOString();
+    const record = fixtureRecord({ status: 'approved', sendClaimedAt: staleClaimedAt });
+    const repo = fakeCommunicationsRepo(record);
+    // The concurrent winner updates the repo's underlying state directly, simulating its own
+    // successful claimSend landing between this call's read and its own claimSend CAS.
+    repo.record.sendClaimedAt = new Date(NOW().getTime() + 1000).toISOString();
+
+    const accountsRepo = fakeAccountsRepo({ [ACCOUNT_ID]: OWNER_USER_ID });
+    const connector = fakeConnector();
+    const service = new ApprovalService({
+      communicationsRepo: {
+        ...repo,
+        // This call's `loadAuthorized` observes the stale claim (as if its read raced ahead of
+        // the concurrent writer's commit) while every other repo call sees live state.
+        async getById(commId) {
+          return commId === record.commId
+            ? { ...record, sendClaimedAt: staleClaimedAt }
+            : undefined;
+        },
+      },
+      accountsRepo,
+      connectorFor: () => connector,
+      now: NOW,
+      log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      metricsClient: { addMetric: vi.fn() },
+    });
+
+    await expect(service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID })).rejects.toThrow(
+      SendAlreadyClaimedError,
+    );
+  });
+
+  it('a communication stuck at approved with no draft still rejects (defensive — should not happen)', async () => {
+    const { service } = makeService(fixtureRecord({ status: 'approved', draft: undefined }));
+    await expect(service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID })).rejects.toThrow(
+      IllegalActionError,
     );
   });
 });

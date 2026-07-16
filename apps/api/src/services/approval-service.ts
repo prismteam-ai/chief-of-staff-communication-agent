@@ -136,6 +136,14 @@ export class ApprovalService {
    * case would send it back to the account's own mailbox instead of the actual counterpart. Using
    * "everyone except myself" is correct regardless of which role a given message happened to tag
    * the account's own address with.
+   *
+   * ## Pure self-thread fallback (found live, Task 6 verification)
+   * `just verify-ingest`'s self-addressed probe (and any genuine note-to-self email) produces a
+   * record where EVERY participant is the account's own address — `to`/`cc`/`from` all filter down
+   * to empty under "everyone except myself". That is not an error case: the correct reply target
+   * for a message the account sent itself is the account's own address (there is no other party to
+   * address). Only once both the to/cc pass and the from-fallback are empty does this fall back to
+   * the account's own address, so a genuine cross-party thread is never redirected to self.
    */
   private async resolveReplyRecipients(record: ApiCommunicationRecord): Promise<string[]> {
     const ownAddress = (await this.accountsRepo.getOwnAddress(record.accountId))?.toLowerCase();
@@ -150,7 +158,13 @@ export class ApprovalService {
     // OTHER party happens to be tagged `from`) — reply to whichever participant is not the
     // account's own address.
     const fromParticipant = record.participants.find((p) => notSelf(p));
-    return fromParticipant ? [fromParticipant.id] : [];
+    if (fromParticipant) return [fromParticipant.id];
+
+    // Pure self-thread: every participant IS the account's own address — reply to self (see
+    // doc comment above). `ownAddress` is only undefined if the accounts table has no address on
+    // file, which `approveDraft`'s send would fail on regardless; falling back to any participant
+    // id (they are all equal in this branch) keeps this total rather than throwing here.
+    return ownAddress ? [ownAddress] : record.participants[0] ? [record.participants[0].id] : [];
   }
 
   async listCommunications(input: ListCommunicationsInput): Promise<ApiCommunicationRecord[]> {
@@ -164,19 +178,29 @@ export class ApprovalService {
 
   /**
    * `drafted → [awaiting_approval →] approved → sent → answered` (design.md §7). A record already
-   * sitting in `awaiting_approval` (opened for review) skips the first hop. Send is claimed via a
-   * conditional write BEFORE the connector is invoked (Task 6 brief constraint 2: idempotent send,
-   * "a retried approval doesn't double-send") — a second call on an already-`approved`/`sent`/
-   * `answered` record fails fast on the state check, and a genuinely concurrent race is caught by
+   * sitting in `awaiting_approval` (opened for review) skips the first hop; a record already sitting
+   * in `approved` (a PRIOR call claimed the send but the connector then threw — see the `catch`
+   * below, "record left at approved, not sent") skips straight to the send handoff, so a retried
+   * approval on a genuinely failed send can succeed instead of being permanently stuck (found live,
+   * Task 6 verification: a `SendFailed` record had no legal way back into `approveDraft` before this
+   * branch existed). Send is claimed via a conditional write BEFORE the connector is invoked (Task 6
+   * brief constraint 2: idempotent send, "a retried approval doesn't double-send") — a second call
+   * on an already-`sent`/`answered` record fails fast on the state check, and a genuinely concurrent
+   * race, or a retry after a send that actually succeeded despite an error, is caught by
    * `claimSend`'s own conditional write (`SendAlreadyClaimedError`).
    */
   async approveDraft(input: ByIdAndUserInput): Promise<ApiCommunicationRecord> {
     let record = await this.loadAuthorized(input.commId, input.userId);
 
-    if (record.status !== 'drafted' && record.status !== 'awaiting_approval') {
+    const retryingFailedSend = record.status === 'approved';
+    if (
+      record.status !== 'drafted' &&
+      record.status !== 'awaiting_approval' &&
+      !retryingFailedSend
+    ) {
       throw new IllegalActionError(
         `Cannot approve communication "${record.commId}" in state "${record.status}" ` +
-          '(must be drafted or awaiting_approval).',
+          '(must be drafted, awaiting_approval, or approved-with-a-failed-send to retry).',
       );
     }
     if (!record.draft) {
@@ -198,12 +222,19 @@ export class ApprovalService {
       record = { ...record, status: 'awaiting_approval' };
     }
 
-    await this.move(record, 'approved', input.userId);
-    record = { ...record, status: 'approved' };
-    this.metricsClient.addMetric('DraftApproved', MetricUnit.Count, 1);
+    if (!retryingFailedSend) {
+      await this.move(record, 'approved', input.userId);
+      record = { ...record, status: 'approved' };
+      this.metricsClient.addMetric('DraftApproved', MetricUnit.Count, 1);
+    }
 
     // --- send handoff: claim BEFORE calling the connector (idempotency, brief constraint 2) ----
-    await this.communicationsRepo.claimSend(record.commId);
+    // On retry, CAS on the prior claim timestamp (see claimSend's doc comment) rather than
+    // requiring no claim at all — a first attempt always left one behind.
+    await this.communicationsRepo.claimSend(
+      record.commId,
+      retryingFailedSend ? record.sendClaimedAt : undefined,
+    );
 
     const replyRecipients = await this.resolveReplyRecipients(record);
     const startedAt = this.now().getTime();

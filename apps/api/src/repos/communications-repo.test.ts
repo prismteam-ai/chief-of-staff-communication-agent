@@ -99,6 +99,30 @@ describe('communications-repo.claimSend — idempotency', () => {
 
     await expect(repo.claimSend('gmail#abc123')).rejects.toThrow(SendAlreadyClaimedError);
   });
+
+  it('a retry claim (priorClaimedAt passed) CASes on the exact prior timestamp plus no sentMessageId', async () => {
+    ddbMock.on(UpdateCommand).resolves({});
+    const repo = createCommunicationsRepo(TABLE);
+
+    await repo.claimSend('gmail#abc123', '2026-07-16T16:35:41.893Z');
+
+    const input = ddbMock.commandCalls(UpdateCommand)[0]?.args[0].input;
+    expect(input?.ConditionExpression).toBe(
+      'sendClaimedAt = :priorClaimedAt AND attribute_not_exists(sentMessageId)',
+    );
+    expect(input?.ExpressionAttributeValues?.[':priorClaimedAt']).toBe('2026-07-16T16:35:41.893Z');
+  });
+
+  it('throws SendAlreadyClaimedError when a retry claim loses its CAS (stale prior timestamp or already-sent)', async () => {
+    ddbMock
+      .on(UpdateCommand)
+      .rejects(new ConditionalCheckFailedException({ message: 'CAS lost', $metadata: {} }));
+    const repo = createCommunicationsRepo(TABLE);
+
+    await expect(repo.claimSend('gmail#abc123', '2026-07-16T16:35:41.893Z')).rejects.toThrow(
+      SendAlreadyClaimedError,
+    );
+  });
 });
 
 describe('communications-repo.recordSent', () => {
