@@ -39,6 +39,11 @@ export class ApiStack extends TaggedStack {
         removalPolicy: cdk.RemovalPolicy.DESTROY,
       }),
       environment: {
+        // AWS_REGION is a reserved Lambda runtime key — CloudFormation rejects it in the
+        // environment map. The Lambda runtime auto-injects it, so the design.md §12 "set
+        // explicitly in every runtime" constraint (no us-east-1 fallback) is satisfied here
+        // by the platform; the explicit setting applies to the non-Lambda runtimes (CI,
+        // scripts, the CDK app), which all set it.
         NODE_OPTIONS: '--enable-source-maps',
         POWERTOOLS_SERVICE_NAME: SERVICE_NAME,
         POWERTOOLS_METRICS_NAMESPACE: METRICS_NAMESPACE,

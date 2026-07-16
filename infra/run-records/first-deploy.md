@@ -66,6 +66,10 @@ taggable resource inside the stack — verified directly on the `TrpcHandler` La
    `build`, `deploy`) was run locally end to end instead, including a full `cdk deploy --all` +
    `deploy-web` + `smoke` pass (this run). `AWS_DEPLOY_ROLE_ARN` (see below) still needs to be set as
    a repository variable before the workflows can authenticate.
+7. **`AWS_REGION` not set on the API Lambda.** `AWS_REGION` is a reserved Lambda runtime
+   environment key — CloudFormation rejects it if present in `environment`. The runtime
+   auto-injects it, so `ApiStack`'s `TrpcHandler` relies on that instead of an explicit setting;
+   every non-Lambda runtime (CI, scripts, the CDK app) still sets it explicitly per §12.
 
 ## One-time manual step remaining
 
