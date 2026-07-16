@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AccountAccessDeniedError } from '@chief-of-staff/shared';
-import type { AsanaClient, AsanaProject, AsanaTask } from '@chief-of-staff/connectors/asana';
+import {
+  ScopeViolationError,
+  type AsanaClient,
+  type AsanaTask,
+} from '@chief-of-staff/connectors/asana';
 import type { ApiCommunicationRecord, CommunicationsRepo } from '../repos/communications-repo.js';
 import { TransitionConflictError, SendAlreadyClaimedError } from '../repos/communications-repo.js';
 import type { AccountsRepo } from '../repos/accounts-repo.js';
@@ -95,7 +99,7 @@ function fakeAccountsRepo(ownership: Record<string, string>): AccountsRepo {
 
 interface FakeAsanaClient extends Pick<
   AsanaClient,
-  'createTask' | 'linkToCommunication' | 'listProjects'
+  'createTask' | 'linkToCommunication' | 'projectGid'
 > {
   createTaskCalls: Parameters<AsanaClient['createTask']>[0][];
   linkCalls: { taskGid: string; provenance: Parameters<AsanaClient['linkToCommunication']>[1] }[];
@@ -110,6 +114,9 @@ function fakeAsanaClient(overrides: Partial<FakeAsanaClient> = {}): FakeAsanaCli
   return {
     createTaskCalls,
     linkCalls,
+    async projectGid() {
+      return PROJECT_GID;
+    },
     async createTask(input) {
       createTaskCalls.push(input);
       const task: AsanaTask = {
@@ -133,10 +140,6 @@ function fakeAsanaClient(overrides: Partial<FakeAsanaClient> = {}): FakeAsanaCli
         projects: [{ gid: PROJECT_GID, name: 'CoS Communication Agent' }],
       };
       return task;
-    },
-    async listProjects() {
-      const projects: AsanaProject[] = [{ gid: PROJECT_GID, name: 'CoS Communication Agent' }];
-      return projects;
     },
     ...overrides,
   };
@@ -271,6 +274,31 @@ describe('AsanaService — createAsanaFollowup', () => {
     expect(metricsClient.addMetric).toHaveBeenCalledWith('AsanaApiFailed', 'Count', 1);
     expect(repo.record.asanaTaskGid).toBeUndefined();
   });
+
+  it('defense-in-depth: rejects and persists nothing if the created task unexpectedly lacks project_gid', async () => {
+    const wrongProject = fakeAsanaClient({
+      createTask: async (input) => {
+        const task: AsanaTask = {
+          gid: 'rogue-task-1',
+          name: input.name,
+          notes: input.notes ?? '',
+          completed: false,
+          permalink_url: `https://app.asana.com/0/other-proj/rogue-task-1`,
+          projects: [{ gid: 'other-proj-9', name: 'A different project' }],
+        };
+        return task;
+      },
+    });
+    const { service, metricsClient, repo } = makeService(fixtureRecord(), {
+      asanaClient: wrongProject,
+    });
+
+    await expect(
+      service.createAsanaFollowup({ commId: COMM_ID, userId: OWNER_USER_ID, title: 'Follow up' }),
+    ).rejects.toThrow(/not a member of the configured project/);
+    expect(metricsClient.addMetric).toHaveBeenCalledWith('AsanaApiFailed', 'Count', 1);
+    expect(repo.record.asanaTaskGid).toBeUndefined();
+  });
 });
 
 describe('AsanaService — linkAsana', () => {
@@ -311,12 +339,46 @@ describe('AsanaService — linkAsana', () => {
     ).rejects.toThrow('status 404');
     expect(metricsClient.addMetric).toHaveBeenCalledWith('AsanaApiFailed', 'Count', 1);
   });
-});
 
-describe('AsanaService — listAsanaProjects', () => {
-  it('returns the projects the client lists (read-only, no communication scoping)', async () => {
-    const { service } = makeService(fixtureRecord());
-    const projects = await service.listAsanaProjects({ userId: OWNER_USER_ID });
-    expect(projects).toEqual([{ gid: PROJECT_GID, name: 'CoS Communication Agent' }]);
+  it('rejects a taskGid outside the configured project with ScopeViolationError, persisting nothing', async () => {
+    const outOfScope = fakeAsanaClient({
+      linkToCommunication: async (taskGid) => {
+        // Mirrors the real AsanaClient.linkToCommunication: the membership check happens BEFORE
+        // any write, so the fake also never records a linkCalls entry for a rejected gid.
+        throw new ScopeViolationError(taskGid, PROJECT_GID);
+      },
+    });
+    const { service, repo, metricsClient, log } = makeService(fixtureRecord(), {
+      asanaClient: outOfScope,
+    });
+
+    await expect(
+      service.linkAsana({
+        commId: COMM_ID,
+        userId: OWNER_USER_ID,
+        taskGid: 'other-project-task-1',
+      }),
+    ).rejects.toThrow(ScopeViolationError);
+
+    expect(repo.record.asanaTaskGid).toBeUndefined();
+    expect(outOfScope.linkCalls).toHaveLength(0);
+    expect(metricsClient.addMetric).toHaveBeenCalledWith('AsanaScopeViolationRejected', 'Count', 1);
+    expect(metricsClient.addMetric).not.toHaveBeenCalledWith('AsanaApiFailed', 'Count', 1);
+    expect(log.warn).toHaveBeenCalledWith(
+      'Asana linkAsana rejected: task is outside the configured project',
+      expect.objectContaining({ commId: COMM_ID, taskGid: 'other-project-task-1' }),
+    );
+  });
+
+  it('accepts an in-project taskGid and persists gid+permalink (baseline, no scope violation)', async () => {
+    const { service, repo } = makeService(fixtureRecord());
+    const result = await service.linkAsana({
+      commId: COMM_ID,
+      userId: OWNER_USER_ID,
+      taskGid: 'in-project-task-1',
+    });
+
+    expect(result.asanaTaskGid).toBe('in-project-task-1');
+    expect(repo.record.asanaTaskGid).toBe('in-project-task-1');
   });
 });

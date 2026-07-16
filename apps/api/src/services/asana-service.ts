@@ -1,8 +1,8 @@
 import { MetricUnit } from '@aws-lambda-powertools/metrics';
 import type { AccountOwnershipMap } from '@chief-of-staff/shared';
 import { assertAccountAccess } from '@chief-of-staff/shared';
-import type { AsanaClient, AsanaProject, AsanaTask } from '@chief-of-staff/connectors/asana';
-import { formatProvenanceNote } from '@chief-of-staff/connectors/asana';
+import type { AsanaClient, AsanaTask } from '@chief-of-staff/connectors/asana';
+import { formatProvenanceNote, ScopeViolationError } from '@chief-of-staff/connectors/asana';
 import type { logger as LoggerType, metrics as MetricsType } from '../context.js';
 import type { ApiCommunicationRecord, CommunicationsRepo } from '../repos/communications-repo.js';
 import type { AccountsRepo } from '../repos/accounts-repo.js';
@@ -53,10 +53,6 @@ export interface LinkAsanaInput {
   taskGid: string;
 }
 
-export interface ListAsanaProjectsInput {
-  userId: string;
-}
-
 function ownershipMapFor(accountId: string, ownerUserId: string | undefined): AccountOwnershipMap {
   return ownerUserId ? { [accountId]: ownerUserId } : {};
 }
@@ -97,6 +93,11 @@ export class AsanaService {
    * client). The task notes carry communication context + provenance (channel/thread/timestamps/
    * back-ref, brief constraint 4) via `formatProvenanceNote`, appended after any human-supplied
    * notes — sender name/subject only, never the full message body (brief constraint 4).
+   *
+   * Belt-and-suspenders: after create, asserts the returned task's `projects` really does include
+   * `project_gid` before persisting. The create path is safe by construction (`createTask` never
+   * accepts a caller-supplied `projects`), so this should never fire — it exists purely to catch an
+   * unexpected Asana API response, not to compensate for a gap in `createTask` itself.
    */
   async createAsanaFollowup(input: CreateAsanaFollowupInput): Promise<ApiCommunicationRecord> {
     const record = await this.loadAuthorized(input.commId, input.userId);
@@ -114,6 +115,11 @@ export class AsanaService {
     let task: AsanaTask;
     try {
       task = await this.asanaClient.createTask({ name: input.title, notes, dueOn: input.dueOn });
+      const projectGid = await this.asanaClient.projectGid();
+      const isMember = (task.projects ?? []).some((project) => project.gid === projectGid);
+      if (!isMember) {
+        throw new ScopeViolationError(task.gid, projectGid);
+      }
     } catch (error) {
       this.metricsClient.addMetric('AsanaApiFailed', MetricUnit.Count, 1);
       const message = error instanceof Error ? error.message : String(error);
@@ -133,6 +139,13 @@ export class AsanaService {
    * Appends a provenance/back-reference comment to the task (`AsanaClient.linkToCommunication`) so
    * "the link is visible from both sides" (brief `Verify`): the Asana task carries a comment
    * referencing the communication, and the communication record carries the task's gid/permalink.
+   *
+   * `input.taskGid` is caller-supplied and could name a task in ANY of the user's Asana projects,
+   * not just the configured `project_gid` (privacy scoping, non-negotiable — Task 7 brief).
+   * `AsanaClient.linkToCommunication` asserts project membership before writing the comment and
+   * throws `ScopeViolationError` if the task is out of scope; that error is logged distinctly (never
+   * counted as an ordinary `AsanaApiFailed`) and propagated WITHOUT persisting anything on the
+   * communication record — an out-of-project taskGid never reaches `linkAsanaTask`.
    *
    * Idempotent: re-linking the same commId to the same taskGid re-posts a comment (Asana has no
    * dedupe-by-content concept for stories) but always converges the communication record to the
@@ -154,8 +167,16 @@ export class AsanaService {
         subject: record.subject,
       });
     } catch (error) {
-      this.metricsClient.addMetric('AsanaApiFailed', MetricUnit.Count, 1);
       const message = error instanceof Error ? error.message : String(error);
+      if (error instanceof ScopeViolationError) {
+        this.metricsClient.addMetric('AsanaScopeViolationRejected', MetricUnit.Count, 1);
+        this.log.warn('Asana linkAsana rejected: task is outside the configured project', {
+          commId: record.commId,
+          taskGid: input.taskGid,
+        });
+        throw error;
+      }
+      this.metricsClient.addMetric('AsanaApiFailed', MetricUnit.Count, 1);
       this.log.error('Asana linkToCommunication failed', {
         commId: record.commId,
         taskGid: input.taskGid,
@@ -172,16 +193,5 @@ export class AsanaService {
     });
 
     return { ...record, asanaTaskGid: task.gid, asanaTaskPermalink: task.permalink_url };
-  }
-
-  /**
-   * Read-only listing of the workspace's projects (design.md §9's "projects" surface; used by the
-   * dashboard/UI for setup, never a write target — writes always go through `createAsanaFollowup`'s
-   * fixed `project_gid`). Requires a valid `userId` (any authenticated user may browse project
-   * names — no communication/account scoping applies here since no communication is involved), but
-   * still funnels through the one client, never a duplicated fetch.
-   */
-  async listAsanaProjects(_input: ListAsanaProjectsInput): Promise<AsanaProject[]> {
-    return this.asanaClient.listProjects();
   }
 }

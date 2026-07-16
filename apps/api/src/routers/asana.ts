@@ -36,9 +36,5 @@ export function createAsanaRouter(getService: (ctx: Context) => AsanaService) {
         }),
       )
       .mutation(({ ctx, input }) => getService(ctx).linkAsana(input)),
-
-    listAsanaProjects: publicProcedure
-      .input(z.object({ userId: z.string().min(1) }))
-      .query(({ ctx, input }) => getService(ctx).listAsanaProjects(input)),
   });
 }

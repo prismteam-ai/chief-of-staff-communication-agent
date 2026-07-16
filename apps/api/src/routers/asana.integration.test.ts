@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AsanaClient, AsanaProject, AsanaTask } from '@chief-of-staff/connectors/asana';
+import {
+  ScopeViolationError,
+  type AsanaClient,
+  type AsanaTask,
+} from '@chief-of-staff/connectors/asana';
 import type { ApiCommunicationRecord, CommunicationsRepo } from '../repos/communications-repo.js';
 import type { AccountsRepo } from '../repos/accounts-repo.js';
 import { createAsanaRouter } from './asana.js';
@@ -73,11 +77,11 @@ function inMemoryAccountsRepo(): AccountsRepo {
   };
 }
 
-function fakeAsanaClient(): Pick<
-  AsanaClient,
-  'createTask' | 'linkToCommunication' | 'listProjects'
-> {
+function fakeAsanaClient(): Pick<AsanaClient, 'createTask' | 'linkToCommunication' | 'projectGid'> {
   return {
+    async projectGid() {
+      return PROJECT_GID;
+    },
     async createTask(input) {
       const task: AsanaTask = {
         gid: 'new-task-1',
@@ -100,14 +104,38 @@ function fakeAsanaClient(): Pick<
       };
       return task;
     },
-    async listProjects() {
-      const projects: AsanaProject[] = [{ gid: PROJECT_GID, name: 'CoS Communication Agent' }];
-      return projects;
+  };
+}
+
+/** A second fake, used only by the out-of-project rejection test: simulates the real
+ * `AsanaClient.linkToCommunication`'s membership guard by always throwing `ScopeViolationError`,
+ * proving the router/service propagate the rejection rather than swallowing or persisting it. */
+function scopeViolatingAsanaClient(): Pick<
+  AsanaClient,
+  'createTask' | 'linkToCommunication' | 'projectGid'
+> {
+  return {
+    async projectGid() {
+      return PROJECT_GID;
+    },
+    async createTask(input) {
+      const task: AsanaTask = {
+        gid: 'new-task-1',
+        name: input.name,
+        notes: input.notes ?? '',
+        completed: false,
+        permalink_url: `https://app.asana.com/0/${PROJECT_GID}/new-task-1`,
+        projects: [{ gid: PROJECT_GID }],
+      };
+      return task;
+    },
+    async linkToCommunication(taskGid) {
+      throw new ScopeViolationError(taskGid, PROJECT_GID);
     },
   };
 }
 
-describe('asana router integration — createAsanaFollowup / linkAsana / listAsanaProjects', () => {
+describe('asana router integration — createAsanaFollowup / linkAsana', () => {
   it('drives createAsanaFollowup through the router, persisting the gid on the communication record', async () => {
     const repo = inMemoryCommunicationsRepo(fixtureRecord());
     const service = new AsanaService({
@@ -176,10 +204,10 @@ describe('asana router integration — createAsanaFollowup / linkAsana / listAsa
     expect(repo.current().asanaTaskGid).toBeUndefined();
   });
 
-  it('listAsanaProjects returns the client-scoped project list through the router', async () => {
+  it('rejects linkAsana for an out-of-project taskGid through the router, persisting nothing', async () => {
     const repo = inMemoryCommunicationsRepo(fixtureRecord());
     const service = new AsanaService({
-      asanaClient: fakeAsanaClient() as unknown as AsanaClient,
+      asanaClient: scopeViolatingAsanaClient() as unknown as AsanaClient,
       communicationsRepo: repo,
       accountsRepo: inMemoryAccountsRepo(),
       log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -189,7 +217,11 @@ describe('asana router integration — createAsanaFollowup / linkAsana / listAsa
     const router = createAsanaRouter(() => service);
     const ctx = {} as Context;
 
-    const projects = await router.createCaller(ctx).listAsanaProjects({ userId: USER_ID });
-    expect(projects).toEqual([{ gid: PROJECT_GID, name: 'CoS Communication Agent' }]);
+    await expect(
+      router
+        .createCaller(ctx)
+        .linkAsana({ commId: COMM_ID, userId: USER_ID, taskGid: 'other-project-task-1' }),
+    ).rejects.toThrow(/not a member of the configured project/);
+    expect(repo.current().asanaTaskGid).toBeUndefined();
   });
 });
