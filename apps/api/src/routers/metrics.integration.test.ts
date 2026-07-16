@@ -5,7 +5,11 @@ import type { AccountsRepo } from '../repos/accounts-repo.js';
 import { createMetricsRouter } from './metrics.js';
 import { MetricsService } from '../services/metrics-service.js';
 import type { Context } from '../context.js';
-import { fakeAuthService, issueBearerToken, FORGED_TOKEN } from '../test-support/fake-auth-service.js';
+import {
+  fakeAuthService,
+  issueBearerToken,
+  FORGED_TOKEN,
+} from '../test-support/fake-auth-service.js';
 
 /**
  * Integration test (Task 8 brief constraint 10, mirroring `communications.integration.test.ts`):
@@ -99,7 +103,10 @@ describe('metrics router integration', () => {
       accountsRepo: accountsRepo(),
     });
     const authService = fakeAuthService();
-    const router = createMetricsRouter(() => service, () => authService);
+    const router = createMetricsRouter(
+      () => service,
+      () => authService,
+    );
     const token = await issueBearerToken(authService, USER_A);
     const caller = router.createCaller(ctxWithToken(token));
 
@@ -114,7 +121,10 @@ describe('metrics router integration', () => {
       accountsRepo: accountsRepo(),
     });
     const authService = fakeAuthService();
-    const router = createMetricsRouter(() => service, () => authService);
+    const router = createMetricsRouter(
+      () => service,
+      () => authService,
+    );
     // SECURITY (Task 8.5 brief constraint 7): USER_B's own valid token cannot read ACCOUNT_A's
     // metrics — cross-user denial driven end to end through the router.
     const token = await issueBearerToken(authService, USER_B);
@@ -152,7 +162,10 @@ describe('metrics router integration', () => {
       accountsRepo: accountsRepo(),
     });
     const authService = fakeAuthService();
-    const router = createMetricsRouter(() => service, () => authService);
+    const router = createMetricsRouter(
+      () => service,
+      () => authService,
+    );
     const token = await issueBearerToken(authService, USER_A);
     const caller = router.createCaller(ctxWithToken(token));
 
@@ -169,7 +182,10 @@ describe('metrics router integration', () => {
       accountsRepo: accountsRepo(),
     });
     const authService = fakeAuthService();
-    const router = createMetricsRouter(() => service, () => authService);
+    const router = createMetricsRouter(
+      () => service,
+      () => authService,
+    );
     const caller = router.createCaller(ctxWithToken(undefined));
 
     await expect(caller.getDashboardMetrics({ accountId: ACCOUNT_A })).rejects.toThrow(TRPCError);
@@ -181,7 +197,10 @@ describe('metrics router integration', () => {
       accountsRepo: accountsRepo(),
     });
     const authService = fakeAuthService();
-    const router = createMetricsRouter(() => service, () => authService);
+    const router = createMetricsRouter(
+      () => service,
+      () => authService,
+    );
     const caller = router.createCaller(ctxWithToken(FORGED_TOKEN));
 
     await expect(caller.getDashboardMetrics({ accountId: ACCOUNT_A })).rejects.toThrow(TRPCError);

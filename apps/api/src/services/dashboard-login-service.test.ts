@@ -13,7 +13,14 @@ import type { McpAuthService } from './mcp-auth-service.js';
  */
 
 function fakeAuthService(): Pick<McpAuthService, 'issue'> {
-  return { issue: vi.fn(async (input) => ({ ...input, token: 'cos_mcp_faketoken', tokenHash: 'h', createdAt: '2026-07-16T00:00:00.000Z' })) };
+  return {
+    issue: vi.fn(async (input) => ({
+      ...input,
+      token: 'cos_mcp_faketoken',
+      tokenHash: 'h',
+      createdAt: '2026-07-16T00:00:00.000Z',
+    })),
+  };
 }
 
 const DEMO_USERNAME = 'demo-alex';

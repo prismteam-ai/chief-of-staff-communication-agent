@@ -20,7 +20,11 @@ function buildRouter() {
   const loginService = new DashboardLoginService({
     authService,
     loadCredentials: async () => [
-      { username: DEMO_USERNAME, passwordHash: hashCredential(DEMO_PASSWORD), userId: DEMO_USER_ID },
+      {
+        username: DEMO_USERNAME,
+        passwordHash: hashCredential(DEMO_PASSWORD),
+        userId: DEMO_USER_ID,
+      },
     ],
     log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     metricsClient: { addMetric: vi.fn() },

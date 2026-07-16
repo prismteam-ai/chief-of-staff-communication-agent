@@ -60,7 +60,9 @@ test.describe('login flow', () => {
     await page.route('**/metrics.getDashboardMetrics*', async (route) => {
       await route.fulfill({
         status: 401,
-        json: { error: { message: 'MCP token is invalid, revoked, or unknown.', code: 'UNAUTHORIZED' } },
+        json: {
+          error: { message: 'MCP token is invalid, revoked, or unknown.', code: 'UNAUTHORIZED' },
+        },
       });
     });
     await page.addInitScript(

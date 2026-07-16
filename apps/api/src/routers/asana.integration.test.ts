@@ -10,7 +10,11 @@ import type { AccountsRepo } from '../repos/accounts-repo.js';
 import { createAsanaRouter } from './asana.js';
 import { AsanaService } from '../services/asana-service.js';
 import type { Context } from '../context.js';
-import { fakeAuthService, issueBearerToken, FORGED_TOKEN } from '../test-support/fake-auth-service.js';
+import {
+  fakeAuthService,
+  issueBearerToken,
+  FORGED_TOKEN,
+} from '../test-support/fake-auth-service.js';
 
 /**
  * Integration test (mirrors `communications.integration.test.ts`'s pattern for Task 6): drives the
@@ -161,7 +165,10 @@ describe('asana router integration — createAsanaFollowup / linkAsana', () => {
     });
 
     const authService = fakeAuthService();
-    const router = createAsanaRouter(() => service, () => authService);
+    const router = createAsanaRouter(
+      () => service,
+      () => authService,
+    );
     const token = await issueBearerToken(authService, USER_ID);
 
     const result = await router.createCaller(ctxWithToken(token)).createAsanaFollowup({
@@ -184,7 +191,10 @@ describe('asana router integration — createAsanaFollowup / linkAsana', () => {
     });
 
     const authService = fakeAuthService();
-    const router = createAsanaRouter(() => service, () => authService);
+    const router = createAsanaRouter(
+      () => service,
+      () => authService,
+    );
     const token = await issueBearerToken(authService, USER_ID);
 
     const result = await router
@@ -206,7 +216,10 @@ describe('asana router integration — createAsanaFollowup / linkAsana', () => {
     });
 
     const authService = fakeAuthService();
-    const router = createAsanaRouter(() => service, () => authService);
+    const router = createAsanaRouter(
+      () => service,
+      () => authService,
+    );
     // SECURITY (Task 8.5 brief constraint 7): OTHER_USER_ID's own real, valid token cannot act on
     // an account it does not own — cross-user denial driven end to end through the router.
     const token = await issueBearerToken(authService, OTHER_USER_ID);
@@ -233,7 +246,10 @@ describe('asana router integration — createAsanaFollowup / linkAsana', () => {
     });
 
     const authService = fakeAuthService();
-    const router = createAsanaRouter(() => service, () => authService);
+    const router = createAsanaRouter(
+      () => service,
+      () => authService,
+    );
     const token = await issueBearerToken(authService, USER_ID);
 
     await expect(
@@ -255,7 +271,10 @@ describe('asana router integration — createAsanaFollowup / linkAsana', () => {
     });
 
     const authService = fakeAuthService();
-    const router = createAsanaRouter(() => service, () => authService);
+    const router = createAsanaRouter(
+      () => service,
+      () => authService,
+    );
 
     await expect(
       router.createCaller(ctxWithToken(undefined)).createAsanaFollowup({
@@ -277,7 +296,10 @@ describe('asana router integration — createAsanaFollowup / linkAsana', () => {
     });
 
     const authService = fakeAuthService();
-    const router = createAsanaRouter(() => service, () => authService);
+    const router = createAsanaRouter(
+      () => service,
+      () => authService,
+    );
 
     await expect(
       router.createCaller(ctxWithToken(FORGED_TOKEN)).createAsanaFollowup({

@@ -107,7 +107,10 @@ function isErrorEnvelope(body: unknown): body is TrpcErrorEnvelope {
 
 /** `getToken` is read fresh on every call (not captured once) so a token obtained after the
  * client was constructed — or cleared on logout — is always the one actually sent. */
-export function createApiClient(baseUrl: string, getToken: () => string | undefined = () => undefined) {
+export function createApiClient(
+  baseUrl: string,
+  getToken: () => string | undefined = () => undefined,
+) {
   function authHeaders(): Record<string, string> {
     const token = getToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
@@ -159,7 +162,8 @@ export function createApiClient(baseUrl: string, getToken: () => string | undefi
       mutate<CommunicationDto>('communications.editDraft', input),
     rejectDraft: (input: { commId: string }) =>
       mutate<CommunicationDto>('communications.rejectDraft', input),
-    dismiss: (input: { commId: string }) => mutate<CommunicationDto>('communications.dismiss', input),
+    dismiss: (input: { commId: string }) =>
+      mutate<CommunicationDto>('communications.dismiss', input),
     supplyContext: (input: { commId: string; text: string }) =>
       mutate<CommunicationDto>('communications.supplyContext', input),
 

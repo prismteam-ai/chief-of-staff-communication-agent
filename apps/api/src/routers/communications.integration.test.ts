@@ -8,7 +8,11 @@ import { createCommunicationsRouter } from './communications.js';
 import { ApprovalService } from '../services/approval-service.js';
 import type { AgentTrigger } from '../agent-trigger.js';
 import type { Context } from '../context.js';
-import { fakeAuthService, issueBearerToken, FORGED_TOKEN } from '../test-support/fake-auth-service.js';
+import {
+  fakeAuthService,
+  issueBearerToken,
+  FORGED_TOKEN,
+} from '../test-support/fake-auth-service.js';
 
 /**
  * Integration test (Task 6 brief constraint 7): "approve a fixture drafted communication -> send
@@ -177,12 +181,13 @@ describe('communications router integration — approve -> send -> answered', ()
     });
 
     const authService = fakeAuthService();
-    const router = createCommunicationsRouter(() => service, () => authService);
+    const router = createCommunicationsRouter(
+      () => service,
+      () => authService,
+    );
     const token = await issueBearerToken(authService, USER_ID);
 
-    const result = await router
-      .createCaller(ctxWithToken(token))
-      .approveDraft({ commId: COMM_ID });
+    const result = await router.createCaller(ctxWithToken(token)).approveDraft({ commId: COMM_ID });
 
     expect(result.status).toBe('answered');
     expect(result.sentMessageId).toBe('gmail-sent-live-1');
@@ -237,7 +242,10 @@ describe('communications router integration — approve -> send -> answered', ()
     });
 
     const authService = fakeAuthService();
-    const router = createCommunicationsRouter(() => service, () => authService);
+    const router = createCommunicationsRouter(
+      () => service,
+      () => authService,
+    );
     const token = await issueBearerToken(authService, USER_ID);
     const caller = router.createCaller(ctxWithToken(token));
 
@@ -261,7 +269,10 @@ describe('communications router integration — approve -> send -> answered', ()
     });
 
     const authService = fakeAuthService();
-    const router = createCommunicationsRouter(() => service, () => authService);
+    const router = createCommunicationsRouter(
+      () => service,
+      () => authService,
+    );
     // SECURITY (Task 8.5 brief constraint 7): a token issued for a real but non-owning user cannot
     // read/act on another user's communication — cross-user denial, driven end to end through the
     // router, not just the service's own ownership check.
@@ -284,7 +295,10 @@ describe('communications router integration — approve -> send -> answered', ()
     });
 
     const authService = fakeAuthService();
-    const router = createCommunicationsRouter(() => service, () => authService);
+    const router = createCommunicationsRouter(
+      () => service,
+      () => authService,
+    );
     const caller = router.createCaller(ctxWithToken(undefined));
 
     await expect(caller.listCommunications({ accountId: ACCOUNT_ID })).rejects.toThrow(TRPCError);
@@ -303,7 +317,10 @@ describe('communications router integration — approve -> send -> answered', ()
     });
 
     const authService = fakeAuthService();
-    const router = createCommunicationsRouter(() => service, () => authService);
+    const router = createCommunicationsRouter(
+      () => service,
+      () => authService,
+    );
     const caller = router.createCaller(ctxWithToken(FORGED_TOKEN));
 
     await expect(caller.approveDraft({ commId: COMM_ID })).rejects.toThrow(TRPCError);
@@ -334,7 +351,10 @@ describe('communications router integration — approve -> send -> answered', ()
     });
 
     const authService = fakeAuthService();
-    const router = createCommunicationsRouter(() => service, () => authService);
+    const router = createCommunicationsRouter(
+      () => service,
+      () => authService,
+    );
     const token = await issueBearerToken(authService, USER_ID);
     const caller = router.createCaller(ctxWithToken(token));
 

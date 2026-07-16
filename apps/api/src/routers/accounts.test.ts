@@ -3,7 +3,11 @@ import { TRPCError } from '@trpc/server';
 import type { AccountsRepo } from '../repos/accounts-repo.js';
 import { createAccountsRouter } from './accounts.js';
 import type { Context } from '../context.js';
-import { fakeAuthService, issueBearerToken, FORGED_TOKEN } from '../test-support/fake-auth-service.js';
+import {
+  fakeAuthService,
+  issueBearerToken,
+  FORGED_TOKEN,
+} from '../test-support/fake-auth-service.js';
 
 /**
  * Router-level coverage for the connect-channel wizard's connected-accounts list (README L12,
@@ -43,7 +47,10 @@ function ctxWithToken(token?: string): Context {
 describe('accounts router — listConnectedAccounts', () => {
   it("returns the caller's own accounts without the credentialSecretArn", async () => {
     const authService = fakeAuthService();
-    const router = createAccountsRouter(() => fakeAccountsRepo(), () => authService);
+    const router = createAccountsRouter(
+      () => fakeAccountsRepo(),
+      () => authService,
+    );
     const token = await issueBearerToken(authService, 'demo-alex');
     const caller = router.createCaller(ctxWithToken(token));
 
@@ -63,7 +70,10 @@ describe('accounts router — listConnectedAccounts', () => {
 
   it('returns an empty list for a user with no connected accounts', async () => {
     const authService = fakeAuthService();
-    const router = createAccountsRouter(() => fakeAccountsRepo(), () => authService);
+    const router = createAccountsRouter(
+      () => fakeAccountsRepo(),
+      () => authService,
+    );
     const token = await issueBearerToken(authService, 'demo-blair');
     const caller = router.createCaller(ctxWithToken(token));
 
@@ -74,7 +84,10 @@ describe('accounts router — listConnectedAccounts', () => {
 
   it('SECURITY: rejects a call with no Authorization header (401)', async () => {
     const authService = fakeAuthService();
-    const router = createAccountsRouter(() => fakeAccountsRepo(), () => authService);
+    const router = createAccountsRouter(
+      () => fakeAccountsRepo(),
+      () => authService,
+    );
     const caller = router.createCaller(ctxWithToken(undefined));
 
     await expect(caller.listConnectedAccounts()).rejects.toThrow(TRPCError);
@@ -82,7 +95,10 @@ describe('accounts router — listConnectedAccounts', () => {
 
   it('SECURITY: rejects a forged/unknown bearer token (401)', async () => {
     const authService = fakeAuthService();
-    const router = createAccountsRouter(() => fakeAccountsRepo(), () => authService);
+    const router = createAccountsRouter(
+      () => fakeAccountsRepo(),
+      () => authService,
+    );
     const caller = router.createCaller(ctxWithToken(FORGED_TOKEN));
 
     await expect(caller.listConnectedAccounts()).rejects.toThrow(TRPCError);

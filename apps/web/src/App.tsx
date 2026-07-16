@@ -291,7 +291,9 @@ export function App() {
             />
           </label>
           {isLoggedIn && (
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div
+              style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}
+            >
               <span data-testid="session-user">
                 Signed in as <strong>{sessionUserId}</strong>
               </span>
@@ -339,7 +341,8 @@ export function App() {
                 style={{
                   padding: '0.5rem 0.9rem',
                   border: 'none',
-                  borderBottom: activeTab === tab.key ? '2px solid #4338ca' : '2px solid transparent',
+                  borderBottom:
+                    activeTab === tab.key ? '2px solid #4338ca' : '2px solid transparent',
                   background: 'none',
                   fontWeight: activeTab === tab.key ? 700 : 400,
                   cursor: 'pointer',
@@ -417,11 +420,15 @@ export function App() {
                   communication={c}
                   busy={busyCommId === c.commId}
                   error={actionErrors[c.commId] || undefined}
-                  onApprove={(commId) => void runAction(commId, () => client!.approveDraft({ commId }))}
+                  onApprove={(commId) =>
+                    void runAction(commId, () => client!.approveDraft({ commId }))
+                  }
                   onEdit={(commId, newBody) =>
                     void runAction(commId, () => client!.editDraft({ commId, newBody }))
                   }
-                  onReject={(commId) => void runAction(commId, () => client!.rejectDraft({ commId }))}
+                  onReject={(commId) =>
+                    void runAction(commId, () => client!.rejectDraft({ commId }))
+                  }
                   onDismiss={(commId) => void runAction(commId, () => client!.dismiss({ commId }))}
                   onSupplyContext={(commId, text) =>
                     void runAction(commId, () => client!.supplyContext({ commId, text }))

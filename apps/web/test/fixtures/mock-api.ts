@@ -97,7 +97,9 @@ function envelope(data: unknown) {
  * the request URL/path — works for both GET (`?input=`) queries and POST mutations. */
 export async function mockDashboardApi(page: Page): Promise<void> {
   await page.route('**/auth.login*', async (route) => {
-    await route.fulfill({ json: envelope({ token: FIXTURE_SESSION_TOKEN, userId: FIXTURE_USER_ID }) });
+    await route.fulfill({
+      json: envelope({ token: FIXTURE_SESSION_TOKEN, userId: FIXTURE_USER_ID }),
+    });
   });
   await page.route('**/metrics.getDashboardMetrics*', async (route) => {
     await route.fulfill({ json: envelope(FIXTURE_METRICS) });
