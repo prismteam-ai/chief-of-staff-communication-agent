@@ -165,6 +165,27 @@
       "unit": "Count",
       "service": "api",
       "description": "Emitted once per successful just sync-asana run (Task 7, design.md §4): the CoS Communication Agent Asana project's tasks were read (paginated, project-scoped only) and upserted into the communications-chunks OpenSearch index as asana-sourced chunks. Published via PutMetricData from the operator-run sync script (not a Lambda, so no Powertools Metrics instance is available) — same namespace/registry convention as the Lambda-emitted metrics above."
+    },
+    {
+      "name": "AsanaSyncTasksSynced",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted alongside AsanaSyncCompleted on each just sync-asana run: the count of project-scoped Asana tasks read via listCommunicationAgentTasks() in that run (before dedup/chunking) — sizes the sync alongside the pass/fail signal AsanaSyncCompleted already gives."
+    },
+    {
+      "name": "AsanaSyncChunksIndexed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted alongside AsanaSyncCompleted on each just sync-asana run: the count of asana-sourced chunks upserted into the communications-chunks OpenSearch index in that run — the sync's actual output volume, distinct from AsanaSyncTasksSynced's input count (one task can yield zero or more chunks)."
+    },
+    {
+      "name": "AsanaScopeViolationRejected",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per linkAsana call rejected because the caller-supplied taskGid does not belong to the configured project_gid (Task 7 privacy scoping, non-negotiable). No comment is posted and nothing is persisted on the communication record when this fires — distinct from AsanaApiFailed, which covers transient/transport failures, not scope denials."
     }
   ]
 }

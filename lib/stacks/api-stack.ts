@@ -143,9 +143,11 @@ export class ApiStack extends TaggedStack {
       }),
     );
 
-    // Asana execution (Task 7, design.md §9): createAsanaFollowup/linkAsana/listAsanaProjects are
-    // the ONLY code paths that read `cos/asana` (operator-provisioned — pat/workspace_gid/
-    // project_gid) — the agent's manageAsana tool never touches Asana at all (it only proposes).
+    // Asana execution (Task 7, design.md §9): createAsanaFollowup/linkAsana are the ONLY code paths
+    // that read `cos/asana` (operator-provisioned — pat/workspace_gid/project_gid) — the agent's
+    // manageAsana tool never touches Asana at all (it only proposes). Every write and read is
+    // confined to `project_gid`; there is no workspace-wide project or task listing anywhere in the
+    // system (privacy scoping, non-negotiable — Task 7 brief).
     // Secrets Manager appends a random suffix to the ARN, same wildcard-by-name pattern as the
     // Gmail grants above.
     const asanaSecretArn = cdk.Stack.of(this).formatArn({
@@ -191,7 +193,10 @@ export class ApiStack extends TaggedStack {
       // shape as the generic request counters — DraftApproved/ReplySent/CommunicationDismissed on
       // the "processed" axis, SendFailed alongside RequestFailed on the "failed" axis. Asana
       // execution metrics (Task 7, design.md §9) join the same graph: AsanaTaskCreated/
-      // AsanaTaskLinked on "processed", AsanaApiFailed alongside SendFailed on "failed".
+      // AsanaTaskLinked/AsanaSyncCompleted/AsanaSyncTasksSynced/AsanaSyncChunksIndexed on
+      // "processed", AsanaApiFailed/AsanaScopeViolationRejected alongside SendFailed on "failed"
+      // (a scope-violation rejection is a security-relevant denial, not a transient API failure,
+      // but it belongs on the same "something didn't go through" axis for at-a-glance visibility).
       processedMetricNames: [
         'RequestProcessed',
         'DraftApproved',
@@ -199,8 +204,16 @@ export class ApiStack extends TaggedStack {
         'CommunicationDismissed',
         'AsanaTaskCreated',
         'AsanaTaskLinked',
+        'AsanaSyncCompleted',
+        'AsanaSyncTasksSynced',
+        'AsanaSyncChunksIndexed',
       ],
-      failedMetricNames: ['RequestFailed', 'SendFailed', 'AsanaApiFailed'],
+      failedMetricNames: [
+        'RequestFailed',
+        'SendFailed',
+        'AsanaApiFailed',
+        'AsanaScopeViolationRejected',
+      ],
     });
 
     new cdk.CfnOutput(this, 'DashboardName', { value: dashboard.dashboardName });

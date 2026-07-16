@@ -22,8 +22,9 @@
  * script (or a later re-sync after only some tasks changed) only ever creates NEW chunk ids for
  * tasks that actually changed content, never a duplicate of an unmodified task's chunk.
  *
- * Emits an `AsanaSyncCompleted` CloudWatch metric datapoint (namespace `ChiefOfStaffApi`, same
- * convention `cloudwatch-metrics.json` registers) via `PutMetricData` — this script runs from an
+ * Emits `AsanaSyncCompleted`/`AsanaSyncTasksSynced`/`AsanaSyncChunksIndexed` CloudWatch metric
+ * datapoints (namespace `ChiefOfStaffApi`, all three registered in `cloudwatch-metrics.json` and
+ * graphed on the API dashboard's processed axis) via `PutMetricData` — this script runs from an
  * operator's machine, not a Lambda, so there is no Powertools `Metrics` instance to flush; a direct
  * `PutMetricDataCommand` is the equivalent for an operator-run script (`verify-ingest.ts` already
  * establishes the precedent of a script using `@aws-sdk/client-cloudwatch` directly, there to READ
