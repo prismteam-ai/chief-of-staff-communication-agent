@@ -15,6 +15,9 @@ importers:
         specifier: ^10.4.2
         version: 10.7.0
     devDependencies:
+      '@ai-sdk/amazon-bedrock':
+        specifier: ^5.0.23
+        version: 5.0.23(zod@3.25.76)
       '@aws-sdk/client-amplify':
         specifier: ^3.1088.0
         version: 3.1088.0
@@ -33,15 +36,24 @@ importers:
       '@aws-sdk/client-secrets-manager':
         specifier: ^3.1088.0
         version: 3.1088.0
+      '@aws-sdk/credential-providers':
+        specifier: ^3.1088.0
+        version: 3.1088.0
       '@aws-sdk/lib-dynamodb':
         specifier: ^3.1088.0
         version: 3.1088.0(@aws-sdk/client-dynamodb@3.1088.0)
+      '@chief-of-staff/agent-handler':
+        specifier: workspace:*
+        version: link:apps/agent-handler
       '@chief-of-staff/connectors':
         specifier: workspace:*
         version: link:packages/connectors
       '@chief-of-staff/rag':
         specifier: workspace:*
         version: link:packages/rag
+      '@chief-of-staff/shared':
+        specifier: workspace:*
+        version: link:packages/shared
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.7.0)
@@ -51,6 +63,9 @@ importers:
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.1
+      ai:
+        specifier: ^7.0.29
+        version: 7.0.29(zod@3.25.76)
       archiver:
         specifier: ^8.0.0
         version: 8.0.0
@@ -84,6 +99,9 @@ importers:
       vitest:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
 
   apps/agent-handler:
     dependencies:

@@ -23,15 +23,19 @@
     "constructs": "^10.4.2"
   },
   "devDependencies": {
+    "@ai-sdk/amazon-bedrock": "^5.0.23",
     "@aws-sdk/client-amplify": "^3.1088.0",
     "@aws-sdk/client-cloudformation": "^3.1088.0",
     "@aws-sdk/client-cloudwatch": "^3.1088.0",
     "@aws-sdk/client-dynamodb": "^3.1088.0",
     "@aws-sdk/client-lambda": "^3.1088.0",
     "@aws-sdk/client-secrets-manager": "^3.1088.0",
+    "@aws-sdk/credential-providers": "^3.1088.0",
     "@aws-sdk/lib-dynamodb": "^3.1088.0",
+    "@chief-of-staff/agent-handler": "workspace:*",
     "@chief-of-staff/connectors": "workspace:*",
     "@chief-of-staff/rag": "workspace:*",
+    "@chief-of-staff/shared": "workspace:*",
     "@eslint/js": "^10.0.1",
     "@types/archiver": "^8.0.0",
     "@types/node": "^22.10.0",
@@ -40,11 +44,13 @@
     "esbuild": "0.28.1",
     "eslint": "^10.7.0",
     "googleapis": "^173.0.0",
+    "ai": "^7.0.29",
     "prettier": "^3.4.2",
     "tsx": "^4.19.2",
     "turbo": "^2.3.3",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.64.0",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "zod": "^3.24.1"
   }
 }

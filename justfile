@@ -86,3 +86,10 @@ seed-org-knowledge:
 # OpenSearch domain as asana-sourced chunks. Safe to re-run — chunk ids are content-hash-derived.
 sync-asana:
     pnpm exec tsx scripts/sync-asana.ts
+
+# Task 10 (style learning) brief constraint 4: (re)builds the connected demo user's style profile
+# from their real Gmail SENT mailbox — extracts a style card (tone/length/sign-off/formality/
+# greeting) via one Bedrock call and indexes every sampled sent reply as a retrievable exemplar.
+# Idempotent — safe to re-run after `just seed-demo` tops up the sent-history corpus.
+build-style-profile:
+    pnpm exec tsx scripts/build-style-profile.ts

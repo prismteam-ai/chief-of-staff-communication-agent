@@ -166,6 +166,10 @@ export class AgentStack extends TaggedStack {
         POWERTOOLS_SERVICE_NAME: SERVICE_NAME,
         POWERTOOLS_METRICS_NAMESPACE: METRICS_NAMESPACE,
         COMMUNICATIONS_TABLE_NAME: props.ingestStack.communicationsTableName,
+        // Task 10 style seam: STYLE_PROFILES_TABLE_NAME/ACCOUNTS_TABLE_NAME let the agent Lambda
+        // resolve accountId -> userId and read/build the learned style profile (design.md §6).
+        STYLE_PROFILES_TABLE_NAME: props.ingestStack.styleProfilesTableName,
+        ACCOUNTS_TABLE_NAME: props.ingestStack.accountsTableName,
         BEDROCK_MODEL_ID: BEDROCK_MODEL_ID,
         AGENTCORE_MEMORY_ID: this.memoryId,
         CHAT_HISTORY_EVENT_LIMIT: '200',
@@ -224,6 +228,23 @@ export class AgentStack extends TaggedStack {
           props.ingestStack.communicationsTableArn,
           `${props.ingestStack.communicationsTableArn}/index/*`,
         ],
+      }),
+    );
+
+    // Task 10 style seam: read-only on accounts (accountId -> userId), read/write on style-profiles
+    // (`getStyleProfile` reads; `just build-style-profile`'s CLI script and its underlying
+    // `buildStyleProfile` orchestration — invoked from this same Lambda's code paths in tests, and
+    // runnable standalone via `scripts/build-style-profile.ts` — write the extracted card).
+    agentHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['dynamodb:GetItem'],
+        resources: [props.ingestStack.accountsTableArn],
+      }),
+    );
+    agentHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem'],
+        resources: [props.ingestStack.styleProfilesTableArn],
       }),
     );
 

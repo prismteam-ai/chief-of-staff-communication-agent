@@ -1,11 +1,34 @@
-import { MetricUnit } from '@aws-lambda-powertools/metrics';
+import { MetricUnit as MetricUnitValue } from '@aws-lambda-powertools/metrics';
 import { chunkSentReply, embedTexts, EMBED_INPUT_TYPE } from '@chief-of-staff/rag';
 import type { EmbeddedChunk, RetrievalIndex } from '@chief-of-staff/rag';
 import type { StyleCard, StyleProfileRecord } from '@chief-of-staff/shared';
 import { STYLE_LENGTH_BANDS } from '@chief-of-staff/shared';
 import type { StyleCardExtractor, SentReplySample } from './style-card.js';
 import type { StyleProfileRepo } from './style-profile-repo.js';
-import type { logger as LoggerType, metrics as MetricsType } from '../context.js';
+
+/** `MetricUnit` (`@aws-lambda-powertools/metrics`) is exported as a value only from the package's
+ * main entry point, not as a type — this derives the same union type from that value so
+ * `StyleMetricsClient` can reference it without a second, colliding import. */
+type MetricUnit = (typeof MetricUnitValue)[keyof typeof MetricUnitValue];
+
+/**
+ * Minimal logger/metrics ports — NOT `Pick<typeof LoggerType/MetricsType, ...>` from `../context.js`
+ * as every other module in this app does, because `buildStyleProfile` has TWO call sites in two
+ * different runtimes: the agent Lambda (Task 10's `just build-style-profile` could run inline in a
+ * future Lambda-triggered rebuild) and, today, the `just build-style-profile` operator SCRIPT
+ * (`scripts/build-style-profile.ts`), which is not a Lambda and has no Powertools `Metrics`
+ * instance to flush (same rationale `scripts/sync-asana.ts`'s module doc gives for using
+ * `PutMetricDataCommand` directly there). A narrow structural interface lets both a real Powertools
+ * `Logger`/`Metrics` instance AND a plain `PutMetricDataCommand`-backed adapter satisfy the same
+ * dependency.
+ */
+export interface StyleLogger {
+  info(message: string, meta?: Record<string, unknown>): void;
+  warn(message: string, meta?: Record<string, unknown>): void;
+}
+export interface StyleMetricsClient {
+  addMetric(name: string, unit: MetricUnit, value: number): void;
+}
 
 /**
  * `just build-style-profile` orchestration (brief constraint 4): (re)builds one user's style
@@ -45,8 +68,8 @@ export interface BuildStyleProfileDeps {
   extractor: StyleCardExtractor;
   styleProfileRepo: StyleProfileRepo;
   retrievalIndex: RetrievalIndex;
-  log: Pick<typeof LoggerType, 'info' | 'warn'>;
-  metricsClient: Pick<typeof MetricsType, 'addMetric'>;
+  log: StyleLogger;
+  metricsClient: StyleMetricsClient;
   /** Injectable embedder so tests never call Bedrock; defaults to the real Cohere Embed v4 helper. */
   embed?: (texts: string[]) => Promise<number[][]>;
   now?: () => Date;
@@ -92,7 +115,7 @@ export async function buildStyleProfile(
     updatedAt: now().toISOString(),
   };
   await styleProfileRepo.put(record);
-  metricsClient.addMetric('StyleProfileBuilt', MetricUnit.Count, 1);
+  metricsClient.addMetric('StyleProfileBuilt', MetricUnitValue.Count, 1);
   log.info('Style profile built', {
     userId,
     sourceCount: record.sourceCount,
@@ -119,10 +142,14 @@ export async function buildStyleProfile(
     }));
     await retrievalIndex.indexChunks(embedded);
     exemplarsIndexed = embedded.length;
-    metricsClient.addMetric('StyleExemplarAdded', MetricUnit.Count, exemplarsIndexed);
+    metricsClient.addMetric('StyleExemplarAdded', MetricUnitValue.Count, exemplarsIndexed);
   }
 
-  metricsClient.addMetric('StyleProfileBuildDuration', MetricUnit.Milliseconds, clock() - startedAt);
+  metricsClient.addMetric(
+    'StyleProfileBuildDuration',
+    MetricUnitValue.Milliseconds,
+    clock() - startedAt,
+  );
   log.info('Style exemplars indexed', { userId, exemplarsIndexed });
 
   return { styleCard, exemplarsIndexed };
