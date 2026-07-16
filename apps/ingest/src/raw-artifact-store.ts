@@ -16,8 +16,18 @@ export function rawMessageKey(channelType: string, externalId: string): string {
   return `${channelType}/${externalId}/raw.json`;
 }
 
+/**
+ * Deterministic key for one Gmail attachment's bytes — mirrors the placeholder shape
+ * `normalize.ts` already computes for `Attachment.s3Key` (`gmail/<messageId>/attachments/<id>`),
+ * scoped under the account so two accounts' attachments never collide in the shared bucket.
+ */
+export function attachmentKey(accountId: string, messageId: string, attachmentId: string): string {
+  return `raw/${accountId}/${messageId}/attachments/${attachmentId}`;
+}
+
 export interface RawArtifactStore {
   putRawMessage(channelType: string, externalId: string, payload: unknown): Promise<string>;
+  putAttachment(key: string, bytes: Buffer, contentType: string): Promise<string>;
 }
 
 export function createRawArtifactStore(bucketName: string): RawArtifactStore {
@@ -30,6 +40,18 @@ export function createRawArtifactStore(bucketName: string): RawArtifactStore {
           Key: key,
           Body: JSON.stringify(payload),
           ContentType: 'application/json',
+        }),
+      );
+      return key;
+    },
+
+    async putAttachment(key, bytes, contentType) {
+      await client().send(
+        new PutObjectCommand({
+          Bucket: bucketName,
+          Key: key,
+          Body: bytes,
+          ContentType: contentType,
         }),
       );
       return key;

@@ -36,6 +36,7 @@ interface InboxThreadFixture {
   from: { name: string; email: string };
   body: string;
   reply?: { from: { name: string; email: string }; body: string };
+  attachment?: { filename: string; contentType: string; base64Data: string };
 }
 
 interface SentFixture {
@@ -109,6 +110,44 @@ function encodeMimeMessage(headers: Record<string, string>, body: string): strin
   return Buffer.from(raw).toString('base64url');
 }
 
+/**
+ * Builds a `multipart/mixed` MIME message with one inline base64 attachment part — exercises the
+ * real Gmail attachment-bytes path end to end (`users.messages.attachments.get` in the processor)
+ * once the seeded message is polled and ingested, rather than only the plain-text body path.
+ */
+function encodeMimeMessageWithAttachment(
+  headers: Record<string, string>,
+  body: string,
+  attachment: { filename: string; contentType: string; base64Data: string },
+): string {
+  const boundary = `----seed-demo-${Date.now()}`;
+  const headerLines = Object.entries(headers)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('\r\n');
+
+  const raw = [
+    headerLines,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    '',
+    body,
+    '',
+    `--${boundary}`,
+    `Content-Type: ${attachment.contentType}; name="${attachment.filename}"`,
+    'Content-Transfer-Encoding: base64',
+    `Content-Disposition: attachment; filename="${attachment.filename}"`,
+    '',
+    attachment.base64Data,
+    '',
+    `--${boundary}--`,
+    '',
+  ].join('\r\n');
+
+  return Buffer.from(raw).toString('base64url');
+}
+
 function newMessageId(localPart: string): string {
   const unique = `${Date.now()}.${Math.random().toString(36).slice(2, 10)}`;
   return `<${localPart}-${unique}@seed-demo.local>`;
@@ -120,7 +159,12 @@ async function insertInboxMessage(
   from: { name: string; email: string },
   subject: string,
   body: string,
-  opts: { threadId?: string; inReplyTo?: string; references?: string } = {},
+  opts: {
+    threadId?: string;
+    inReplyTo?: string;
+    references?: string;
+    attachment?: { filename: string; contentType: string; base64Data: string };
+  } = {},
 ): Promise<{ id: string; threadId: string }> {
   const messageId = newMessageId('inbox');
   const headers: Record<string, string> = {
@@ -133,7 +177,9 @@ async function insertInboxMessage(
   if (opts.inReplyTo) headers['In-Reply-To'] = opts.inReplyTo;
   if (opts.references) headers.References = opts.references;
 
-  const raw = encodeMimeMessage(headers, body);
+  const raw = opts.attachment
+    ? encodeMimeMessageWithAttachment(headers, body, opts.attachment)
+    : encodeMimeMessage(headers, body);
 
   const response = await gmail.users.messages.insert({
     userId: 'me',
@@ -192,9 +238,12 @@ async function main() {
 
   let inboxCount = 0;
   for (const thread of inboxThreads) {
-    const original = await insertInboxMessage(gmail, account.address, thread.from, thread.subject, thread.body);
+    const original = await insertInboxMessage(gmail, account.address, thread.from, thread.subject, thread.body, {
+      attachment: thread.attachment,
+    });
     inboxCount += 1;
-    console.log(`[seed-demo] inbox: "${thread.subject}" (${thread.category}) -> ${original.id}`);
+    const attachmentNote = thread.attachment ? `, attachment: ${thread.attachment.filename}` : '';
+    console.log(`[seed-demo] inbox: "${thread.subject}" (${thread.category}${attachmentNote}) -> ${original.id}`);
 
     if (thread.reply) {
       const originalMessageId = `<inbox-${original.id}@seed-demo.local>`; // best-effort, informational only

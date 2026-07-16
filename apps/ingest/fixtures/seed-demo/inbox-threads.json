@@ -19,7 +19,12 @@
     "category": "attachment",
     "subject": "Signed vendor agreement attached",
     "from": { "name": "Marta Kowalczyk", "email": "marta.kowalczyk@brightpath-vendors.com" },
-    "body": "Hi Alex,\n\nPlease find attached the signed vendor agreement for your records. Let me know if you need anything else before onboarding starts next month.\n\nMarta"
+    "body": "Hi Alex,\n\nPlease find attached the signed vendor agreement for your records. Let me know if you need anything else before onboarding starts next month.\n\nMarta",
+    "attachment": {
+      "filename": "vendor-agreement-signature.png",
+      "contentType": "image/png",
+      "base64Data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    }
   },
   {
     "category": "newsletter",

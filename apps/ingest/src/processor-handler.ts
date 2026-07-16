@@ -7,7 +7,12 @@ import { createDedupeRepo } from './dedupe-repo.js';
 import { createCommunicationsRepo } from './communications-repo.js';
 import { createRawArtifactStore } from './raw-artifact-store.js';
 import { createGmailClientForAccount } from './gmail-client.js';
-import { makeFetchGmailMessage, processOneMessage, type ProcessOneMessageInput } from './processor-logic.js';
+import {
+  makeFetchGmailAttachment,
+  makeFetchGmailMessage,
+  processOneMessage,
+  type ProcessOneMessageInput,
+} from './processor-logic.js';
 import { logger, metrics, tracer } from './context.js';
 
 const DEDUPE_TABLE_NAME = process.env.DEDUPE_TABLE_NAME ?? '';
@@ -35,6 +40,7 @@ async function baseHandler(event: SQSEvent): Promise<SQSBatchResponse> {
   const communicationsRepo = createCommunicationsRepo(COMMUNICATIONS_TABLE_NAME);
   const rawArtifactStore = createRawArtifactStore(RAW_ARTIFACT_BUCKET_NAME);
   const fetchMessage = makeFetchGmailMessage(createGmailClientForAccount);
+  const fetchAttachment = makeFetchGmailAttachment(createGmailClientForAccount);
 
   const batchItemFailures: { itemIdentifier: string }[] = [];
 
@@ -50,6 +56,7 @@ async function baseHandler(event: SQSEvent): Promise<SQSBatchResponse> {
 
     const result = await processOneMessage(input, {
       fetchMessage,
+      fetchAttachment,
       dedupeRepo,
       communicationsRepo,
       rawArtifactStore,
