@@ -15,9 +15,9 @@ access level each platform actually grants:
 
 | Tier | Channels | Access |
 |---|---|---|
-| Live | Gmail · SMS (Twilio) · second email provider (IMAP/Outlook) · X (xAI Live Search, read-only) | Real APIs, live ingestion |
+| Live | Gmail · SMS (Twilio) · second email provider (generic IMAP, demoed on a named Outlook account) · X (xAI Live Search, read-only) | Real APIs, live ingestion |
 | Sandbox | WhatsApp (Twilio sandbox) | Real protocol, sandbox account |
-| Constrained | LinkedIn (notification-derived, read-only) | Fixture-verified connector |
+| Constrained | LinkedIn (notification-derived, read-only) | Live via real LinkedIn notification emails through the email connector + fixture-verified connector tests |
 
 The dashboard labels each channel's provenance (live / sandbox / fixture) honestly.
 
@@ -43,7 +43,8 @@ The dashboard labels each channel's provenance (live / sandbox / fixture) honest
 
 All six channel ACs are delivered as code against one interface; live ingestion is demonstrated
 from Gmail, SMS, a second email provider, and X; WhatsApp is demonstrated in sandbox; LinkedIn is
-demonstrated against recorded fixtures. Cross-channel linking and the dashboard channel breakdown
+demonstrated live from real notification emails (reply/send remains impossible on this path) plus
+recorded fixtures for connector tests. Cross-channel linking and the dashboard channel breakdown
 include every tier.
 
 ## 5. Consequences

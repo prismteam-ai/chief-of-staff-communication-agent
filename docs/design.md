@@ -11,13 +11,14 @@ outcomes the acceptance criteria and the demo criteria call for:
    providers, SMS, WhatsApp, X, LinkedIn, behind a modular connector architecture; messages, threads,
    metadata, participants, timestamps, attachments (README L13-L22, L43).
 2. **RAG-backed context** — communication history, Asana context, user preferences, organizational
-   knowledge; history preserved across platforms (README L23-L24, L44).
+   knowledge; history preserved across platforms; related messages linked across channels
+   (README L23-L24, L28, L44).
 3. **A recommended action for every incoming communication** (README L26, L36, L45).
 4. **Learned, style-matched draft replies** — "learn and apply each user's response style"
    (README L25, L27, L46).
 5. **Approval before send, and a prompt for context when confidence is low** (README L31-L32, L47).
 6. **Asana as the action sink** — link communications to tasks/projects/milestones/comments; create
-   or update tasks for follow-ups (README L28-L30, L48).
+   or update tasks for follow-ups (README L29-L30, L48).
 7. **Answered-tracking and the <5-minute goal made visible** — volume, response status, overdue,
    pending approvals, channel breakdown, response-time metrics (README L33-L37).
 8. **An agent usable directly in Cursor** with RAG retrieval, recommendations, drafts, and Asana
@@ -62,10 +63,13 @@ CURSOR — MCP server (stdio) → hosted API with per-user token; kit packaging 
 
 Everything the kit already provides is used as shipped: `build-frontend-backends` (metagross) for the
 Turborepo/Amplify/tRPC surface, `build-rag-systems` (alakazam, direct-build flow) for retrieval,
-`build-ai-agents` (ash) for the agent runtime pattern, `apply-engineering-guidelines` +
-`integrate-ci-cd` for standards. What the kit does not provide — inbound channel ingestion, the
-style learner, the MCP server — is built new, following the closest kit pattern and recorded as an
-explicit decision.
+`build-ai-agents` (ash) for the agent runtime pattern, `manage-communication-activity` (chatot) for
+the **send half** of the loop — send handoff, send idempotency, delivery-confirmation ingestion,
+activity closure — and `apply-engineering-guidelines` + `integrate-ci-cd` for standards. What the
+kit does not provide — inbound channel ingestion, the style learner, the MCP server — is built new,
+following the closest kit pattern and recorded as an explicit decision. Every plan task carries a
+`Drives:` attribution naming its driving agent and skill, with honest "no clean kit match"
+declarations where the kit has no capability.
 
 ## 3. Channel connector architecture (README L13-L20, L43)
 
@@ -78,17 +82,20 @@ Channel access levels differ by what each platform actually grants an integrator
 per-channel scope, and upgrade conditions are recorded in
 `docs/decisions/channel-access-tiers.md`:
 
-- **Live:** Gmail (OAuth, push/poll), SMS via Twilio, a second email provider via IMAP/Outlook,
+- **Live:** Gmail (OAuth, push/poll), SMS via Twilio, a second email provider via a generic IMAP
+  connector (demoed on a named Outlook account — README L15's "providers", plural, honestly met),
   X public posts/mentions via xAI Live Search (read-only; data acquisition only — reasoning stays on
   Bedrock).
 - **Sandbox:** WhatsApp via the Twilio sandbox (Meta business verification does not fit the
   assignment window).
-- **Constrained:** LinkedIn (messaging API is partner-restricted) — notification-derived, read-only,
-  exercised against recorded fixtures.
+- **Constrained:** LinkedIn (messaging API is partner-restricted) — notification-derived, read-only:
+  runs **live** off real LinkedIn notification emails flowing through the email connector, with
+  recorded fixtures for connector tests.
 
 Multi-brand and multi-account support (L13) is a data-model property from day one: every message,
 token, and query carries an `account_id`, and every read path enforces per-user account boundaries
-(L42).
+(L42). `NormalizedMessage` evolves additively (versioned, additive-field policy), so existing
+connectors never break when a new channel needs a new field.
 
 ## 4. Knowledge layer and RAG (README L21-L24, L28, L44)
 
@@ -97,17 +104,22 @@ token, and query carries an `account_id`, and every read path enforces per-user 
   DynamoDB for message state/metadata/idempotency, S3 for raw artifacts and attachments (L21).
 - **Corpus (L23):** communication chunks (deterministic ids; `text_for_embedding` /
   `text_for_context` split), Asana tasks/projects/milestones/comments, user preferences (style card +
-  stored explicit preferences), organizational knowledge (Asana workspace structure + seeded org
-  documents).
+  explicit preferences, seeded at setup and editable in the dashboard), organizational knowledge
+  (Asana workspace structure + seeded org documents).
 - **Cross-channel linking (L28):** metadata filters (participant, topic, project, Asana id) plus
-  explicit link records — not embeddings alone. Conversation history is preserved per thread across
-  platforms via `threadKey` (L24).
+  explicit link records — not embeddings alone. "Workstreams" (README L5) map to Asana
+  projects/topics in this linking metadata. Conversation history is preserved per thread across
+  platforms via `threadKey` (L24). Retrieval sits behind the `RetrievalIndex` interface and model
+  ids are pinned in one config module, so the index or the embedding model can be swapped without
+  touching consumers.
 - **Local proof:** fixture corpus + Docker OpenSearch + SAM-local replay before AWS, per
   `build-rag-systems`; golden queries replayed against the deployed index.
 
 ## 5. Agent brain (README L26-L27, L29-L30, L32)
 
-The runtime agent (`pidgeot`, per the kit's agent-naming convention) keeps the kit's agent interior
+The runtime agent (`pidgeot` — collision-checked against the kit roster; a messenger-bird fit for a
+message-delivery agent; runtime identifiers use `pidgeot-agent`, incl. `LANGSMITH_PROJECT`) keeps
+the kit's agent interior
 exactly as `build-ai-agents` prescribes it — Amazon Bedrock through the Vercel AI SDK
 `ToolLoopAgent` with prompt caching, conversation history in AgentCore Memory behind a
 `ConversationEventStore`, LangSmith telemetry — with one deliberate difference: the trigger is an
@@ -159,13 +171,17 @@ ingested → recommended → drafted → awaiting_approval → approved → sent
 - **API (`apps/api`, tRPC on Lambda):** server-only reads/writes; every procedure enforces the
   account boundary; business logic lives in `packages/shared`, consumed identically by the API, the
   agent tools, and the MCP server.
-- **Cursor (L38-L40):** an MCP server (stdio, npx-runnable) exposing the same four tools, calling
-  the hosted API with a per-user scoped token issued in the dashboard — the Cursor user gets RAG
-  retrieval, recommendations, drafts, and Asana updates without AWS credentials. Asana writes from
-  Cursor are confirm-gated. Packaged for the ecosystem (L50) the way the kit packages every agent:
-  `agents/pidgeot.md` + `skills/use-pidgeot/` + an `mcp.json` entry.
+- **Cursor (L38-L40):** an MCP server (stdio, npx-runnable) exposing the same four tools **plus the
+  approval surface — `approveDraft` and `supplyContext`** — so the Cursor workflow serves its stated
+  purpose (README L9: "final approval and additional context"), calling the hosted API with a
+  per-user scoped token issued in the dashboard — the Cursor user gets RAG retrieval,
+  recommendations, drafts, approval, context supply, and Asana updates without AWS credentials.
+  Asana writes and `approveDraft` are confirm-gated. Packaged for the ecosystem (L50) the way the
+  kit packages every agent: `agents/pidgeot.md` + `skills/use-pidgeot/` + an `mcp.json` entry,
+  staged as a PR-ready patch to the kit repo per its new-agent checklist (roster row, sync outputs,
+  manifest bump, validation pass).
 
-## 9. Asana integration (README L28-L30, L48)
+## 9. Asana integration (README L29-L30, L48)
 
 Asana REST API client: link communications to tasks, projects, milestones, and comments; create or
 update follow-up tasks from a communication. Writes are approval-gated (dashboard action or
@@ -200,8 +216,8 @@ confirm-gated MCP call). Task descriptions carry the communication context and p
   flowing) with working credentials in the PR — the reviewer must never have to complete an OAuth
   flow to see the product working.
 - **Demo data realism:** synthetic-but-realistic traffic is sent through the real channels to
-  dedicated demo accounts continuously from the first deploy — real ingestion evidence at
-  meaningful volume, no third-party PII.
+  dedicated demo accounts continuously from the first channel deploy (a committed, runnable
+  `just seed-demo` recipe) — real ingestion evidence at meaningful volume, no third-party PII.
 
 ## 12. Engineering standards
 
@@ -213,10 +229,17 @@ Ingest, Rag, Agent, Api, Amplify); region us-east-2 with `AWS_REGION` set explic
 durations); a metrics registry (`cloudwatch-metrics.json`) and a CDK CloudWatch dashboard in-repo
 (the org-central registry and main dashboard are not reachable from an external repo — adaptation
 documented); PagerDuty Events API v2 on critical failure paths, key in Secrets Manager, paging gated
-to the production flag; one self-resolving alarm per DLQ; 90-day log retention; `project_name` tags;
-no secrets or PII in logs; Vitest with error-path coverage; Prettier/ESLint/tsc; CI via a `justfile`
-(format → lint → type-check → test → build → deploy) called by plain GitHub Actions workflows in
-this fork (the shared org workflows are not accessible from outside the org — adaptation documented).
+to the production flag; exactly one stateful alarm per DLQ (`ApproximateNumberOfMessagesVisible`,
+Maximum, >0, 1/1 evaluation, `treatMissingData: NOT_BREACHING`) with ALARM **and** OK actions on one
+SNS topic fanning out to email/chat/PagerDuty (PagerDuty subscription production-only; never
+per-message alerts); 90-day log retention; `project_name` tags; no secrets or PII in logs; Vitest on
+a ~70/30 unit/integration pyramid with `aws-sdk-client-mock`, real integrations in containers where
+practical (Docker OpenSearch), and error-path coverage; responsive design tests for the dashboard
+(the kit's breakpoint-config Playwright pattern, adapted — no Figma source); Prettier/ESLint/tsc; CI
+via a `justfile` (format → lint → type-check → test → build → deploy) called by plain GitHub Actions
+workflows in this fork — two documented adaptations: the shared org workflows are not accessible
+from outside the org, and the prod-deploy trigger is the feature branch rather than `main` (this
+fork's `main` mirrors the upstream assignment repo).
 
 ## 13. Deliverables
 
@@ -225,7 +248,8 @@ this fork (the shared org workflows are not accessible from outside the org — 
   in the PR**.
 - Demo video: the full triage loop on live multi-channel data — ingestion (L43), RAG retrieval
   (L44), recommended actions (L45), style-matched drafts (L46), approval before delivery (L47),
-  Asana task creation/update (L48).
+  Asana task creation/update (L48) — with per-milestone clips recorded along the way as insurance
+  and a committed demo storyboard.
 - Setup documentation for non-technical users (L12, L49) and reviewer setup notes.
 - Ecosystem packaging: `agents/pidgeot.md`, `skills/use-pidgeot/`, `mcp.json` entry (L50).
 - Self-assessed with `slowking` before submission (per the assignment guidance).

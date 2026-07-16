@@ -42,8 +42,12 @@ tier; Asana as a first-class action sink with approval-gated writes.
   duplicated delivery neither reprocesses the message nor double-writes history.
 - **Concurrency:** per-thread ordering is enforced at the processor level rather than by the Chat
   SDK's distributed locks.
-- The deviation is confined to ingress; a future Asana-triggered surface (e.g. mention-driven
-  workflows) can be added alongside without rework, using the stock adapter.
+- The deviation is confined to ingress. The **send half** of the loop — provider send handoff, send
+  idempotency, delivery-confirmation ingestion, activity closure — IS governed by the
+  communication-activity skill and is driven by it in the plan (Tasks 6 and 9); only unsolicited
+  inbound acquisition is outside the kit.
+- A future Asana-triggered surface (e.g. mention-driven workflows) can be added alongside without
+  rework, using the stock adapter.
 
 ## 6. Conditions for revisiting
 
