@@ -34,7 +34,9 @@ export async function findRelated(
 ): Promise<SearchHit[]> {
   const { sourceId, participant, topic, project, asanaGid } = query;
   if (!sourceId && !participant && !topic && !project && !asanaGid) {
-    throw new Error('findRelated requires at least one linking dimension (sourceId/participant/topic/project/asanaGid)');
+    throw new Error(
+      'findRelated requires at least one linking dimension (sourceId/participant/topic/project/asanaGid)',
+    );
   }
 
   const topK = options.topK ?? 50;

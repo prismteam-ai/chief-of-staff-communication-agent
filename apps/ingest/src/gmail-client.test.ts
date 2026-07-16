@@ -30,7 +30,9 @@ describe('gmail-client secret caching', () => {
 
     expect(first).toBe('rt-1');
     expect(second).toBe('rt-1');
-    expect(smMock.commandCalls(GetSecretValueCommand, { SecretId: 'cos/gmail-token-acct_ttl_hit' })).toHaveLength(1);
+    expect(
+      smMock.commandCalls(GetSecretValueCommand, { SecretId: 'cos/gmail-token-acct_ttl_hit' }),
+    ).toHaveLength(1);
   });
 
   it('re-fetches after the cache TTL expires', async () => {
@@ -42,9 +44,9 @@ describe('gmail-client secret caching', () => {
     vi.setSystemTime(new Date('2026-07-16T00:05:01.000Z')); // > 5 min maxAge
     await loadAccountRefreshToken('acct_ttl_expiry');
 
-    expect(smMock.commandCalls(GetSecretValueCommand, { SecretId: 'cos/gmail-token-acct_ttl_expiry' })).toHaveLength(
-      2,
-    );
+    expect(
+      smMock.commandCalls(GetSecretValueCommand, { SecretId: 'cos/gmail-token-acct_ttl_expiry' }),
+    ).toHaveLength(2);
   });
 
   it('caches distinct secret ids independently (two different accounts)', async () => {
@@ -60,11 +62,11 @@ describe('gmail-client secret caching', () => {
     await loadAccountRefreshToken('acct_distinct_a');
     await loadAccountRefreshToken('acct_distinct_b');
 
-    expect(smMock.commandCalls(GetSecretValueCommand, { SecretId: 'cos/gmail-token-acct_distinct_a' })).toHaveLength(
-      1,
-    );
-    expect(smMock.commandCalls(GetSecretValueCommand, { SecretId: 'cos/gmail-token-acct_distinct_b' })).toHaveLength(
-      1,
-    );
+    expect(
+      smMock.commandCalls(GetSecretValueCommand, { SecretId: 'cos/gmail-token-acct_distinct_a' }),
+    ).toHaveLength(1);
+    expect(
+      smMock.commandCalls(GetSecretValueCommand, { SecretId: 'cos/gmail-token-acct_distinct_b' }),
+    ).toHaveLength(1);
   });
 });

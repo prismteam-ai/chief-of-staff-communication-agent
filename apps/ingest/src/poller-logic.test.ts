@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { gmail_v1 } from 'googleapis';
 import type { AccountsRepo, StoredAccount } from './accounts-repo.js';
-import { pollAccount, pollAllAccounts, type EnqueueMessage, type GmailClientFactory } from './poller-logic.js';
+import {
+  pollAccount,
+  pollAllAccounts,
+  type EnqueueMessage,
+  type GmailClientFactory,
+} from './poller-logic.js';
 
 function makeAccount(overrides: Partial<StoredAccount> = {}): StoredAccount {
   return {
@@ -9,7 +14,8 @@ function makeAccount(overrides: Partial<StoredAccount> = {}): StoredAccount {
     userId: 'demo-alex',
     channelType: 'gmail',
     displayName: 'demoalex775@gmail.com',
-    credentialSecretArn: 'arn:aws:secretsmanager:us-east-2:000000000000:secret:cos/gmail-token-acct_demo-alex-gmail',
+    credentialSecretArn:
+      'arn:aws:secretsmanager:us-east-2:000000000000:secret:cos/gmail-token-acct_demo-alex-gmail',
     createdAt: '2026-07-01T00:00:00.000Z',
     ...overrides,
   };
@@ -127,7 +133,9 @@ describe('pollAccount', () => {
           history: [{ messagesAdded: [{ message: { id: 'msg-b' } }] }],
         },
       });
-    const gmail = { users: { getProfile: vi.fn(), history: { list } } } as unknown as gmail_v1.Gmail;
+    const gmail = {
+      users: { getProfile: vi.fn(), history: { list } },
+    } as unknown as gmail_v1.Gmail;
     const factory: GmailClientFactory = vi.fn().mockResolvedValue(gmail);
 
     const result = await pollAccount(account, factory, accountsRepo, enqueue, noopLog);
@@ -141,7 +149,9 @@ describe('pollAccount', () => {
     const account = makeAccount({ historyCursor: '1000' });
     const accountsRepo = makeAccountsRepo();
     const enqueue = vi.fn<EnqueueFnSig>().mockResolvedValue(undefined);
-    const expiredCursorError = Object.assign(new Error('Requested entity was not found.'), { code: 404 });
+    const expiredCursorError = Object.assign(new Error('Requested entity was not found.'), {
+      code: 404,
+    });
     const gmail = {
       users: {
         getProfile: vi.fn().mockResolvedValue({ data: { historyId: '9999' } }),
@@ -194,7 +204,9 @@ describe('pollAccount', () => {
     } as unknown as gmail_v1.Gmail;
     const factory: GmailClientFactory = vi.fn().mockResolvedValue(gmail);
 
-    await expect(pollAccount(account, factory, accountsRepo, enqueue, noopLog)).rejects.toThrow('Internal error');
+    await expect(pollAccount(account, factory, accountsRepo, enqueue, noopLog)).rejects.toThrow(
+      'Internal error',
+    );
     expect(gmail.users.getProfile).not.toHaveBeenCalled();
     expect(accountsRepo.updateHistoryCursor).not.toHaveBeenCalled();
   });
@@ -202,13 +214,18 @@ describe('pollAccount', () => {
   it('does not advance the cursor when enqueue fails (batch send unrecoverably failed)', async () => {
     const account = makeAccount({ historyCursor: '1000' });
     const accountsRepo = makeAccountsRepo();
-    const enqueue = vi.fn<EnqueueFnSig>().mockRejectedValue(new Error('SendMessageBatch: 1/2 entries still failed'));
+    const enqueue = vi
+      .fn<EnqueueFnSig>()
+      .mockRejectedValue(new Error('SendMessageBatch: 1/2 entries still failed'));
     const gmail = {
       users: {
         getProfile: vi.fn(),
         history: {
           list: vi.fn().mockResolvedValue({
-            data: { historyId: '1050', history: [{ messagesAdded: [{ message: { id: 'msg-1' } }] }] },
+            data: {
+              historyId: '1050',
+              history: [{ messagesAdded: [{ message: { id: 'msg-1' } }] }],
+            },
           }),
         },
       },
@@ -254,7 +271,10 @@ describe('pollAllAccounts', () => {
         throw new Error('token expired');
       }
       return {
-        users: { getProfile: vi.fn().mockResolvedValue({ data: { historyId: '2000' } }), history: { list: vi.fn() } },
+        users: {
+          getProfile: vi.fn().mockResolvedValue({ data: { historyId: '2000' } }),
+          history: { list: vi.fn() },
+        },
       } as unknown as gmail_v1.Gmail;
     });
 

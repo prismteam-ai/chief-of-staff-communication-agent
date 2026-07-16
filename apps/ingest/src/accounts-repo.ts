@@ -39,7 +39,9 @@ export interface AccountsRepo {
 export function createAccountsRepo(tableName: string): AccountsRepo {
   return {
     async getAccount(accountId) {
-      const result = await client().send(new GetCommand({ TableName: tableName, Key: { accountId } }));
+      const result = await client().send(
+        new GetCommand({ TableName: tableName, Key: { accountId } }),
+      );
       return result.Item as StoredAccount | undefined;
     },
 

@@ -6,7 +6,10 @@
       "queryText": "When is the Meridian contract review call happening?",
       "accountId": "acct_alex",
       "topK": 5,
-      "expectedTopChunkIds": ["gmail#msg-meridian-1#0#aaaaaaaaaaaa", "sms#sms-meridian-2#0#bbbbbbbbbbbb"],
+      "expectedTopChunkIds": [
+        "gmail#msg-meridian-1#0#aaaaaaaaaaaa",
+        "sms#sms-meridian-2#0#bbbbbbbbbbbb"
+      ],
       "mustNotContainChunkIds": ["gmail#msg-other-acct-1#0#ffffffffffff"],
       "note": "Cross-channel (gmail + sms) match on the same topic; the same-topic doc in a DIFFERENT account must never appear — this is the primary account-isolation assertion."
     },
@@ -15,7 +18,10 @@
       "queryText": "Is there an overdue invoice I need to follow up on?",
       "accountId": "acct_alex",
       "topK": 5,
-      "expectedTopChunkIds": ["gmail#msg-invoice-1#0#cccccccccccc", "asana#task-invoice-followup#0#222222222222"],
+      "expectedTopChunkIds": [
+        "gmail#msg-invoice-1#0#cccccccccccc",
+        "asana#task-invoice-followup#0#222222222222"
+      ],
       "mustNotContainChunkIds": [],
       "note": "Cross-source (communication + asana) match — proves Asana context chunks retrieve alongside communications on the same topic."
     },
@@ -24,7 +30,10 @@
       "queryText": "What time is the product launch newsletter going out?",
       "accountId": "acct_alex",
       "topK": 5,
-      "expectedTopChunkIds": ["gmail#msg-launch-2#0#eeeeeeeeeeee", "sms#sms-launch-1#0#dddddddddddd"],
+      "expectedTopChunkIds": [
+        "gmail#msg-launch-2#0#eeeeeeeeeeee",
+        "sms#sms-launch-1#0#dddddddddddd"
+      ],
       "mustNotContainChunkIds": [],
       "note": "Cross-channel (sms + gmail) same-project match."
     },
@@ -52,7 +61,10 @@
       "accountId": "acct_other",
       "topK": 5,
       "expectedTopChunkIds": ["gmail#msg-other-acct-1#0#ffffffffffff"],
-      "mustNotContainChunkIds": ["gmail#msg-meridian-1#0#aaaaaaaaaaaa", "sms#sms-meridian-2#0#bbbbbbbbbbbb"],
+      "mustNotContainChunkIds": [
+        "gmail#msg-meridian-1#0#aaaaaaaaaaaa",
+        "sms#sms-meridian-2#0#bbbbbbbbbbbb"
+      ],
       "note": "Same query scoped to acct_other must return ONLY acct_other's chunk, never acct_alex's — the permission boundary from the other direction."
     },
     {
@@ -61,7 +73,10 @@
       "accountId": "acct_alex",
       "topK": 5,
       "filters": { "project": "Meridian" },
-      "expectedTopChunkIds": ["gmail#msg-meridian-1#0#aaaaaaaaaaaa", "sms#sms-meridian-2#0#bbbbbbbbbbbb"],
+      "expectedTopChunkIds": [
+        "gmail#msg-meridian-1#0#aaaaaaaaaaaa",
+        "sms#sms-meridian-2#0#bbbbbbbbbbbb"
+      ],
       "mustNotContainChunkIds": ["gmail#msg-invoice-1#0#cccccccccccc"],
       "note": "Explicit project metadata filter (cross-channel linking, README L28) narrows a generic query to one workstream."
     }
@@ -72,7 +87,10 @@
       "accountId": "acct_alex",
       "query": { "topic": "meridian-contract" },
       "topK": 5,
-      "expectedTopChunkIds": ["gmail#msg-meridian-1#0#aaaaaaaaaaaa", "sms#sms-meridian-2#0#bbbbbbbbbbbb"],
+      "expectedTopChunkIds": [
+        "gmail#msg-meridian-1#0#aaaaaaaaaaaa",
+        "sms#sms-meridian-2#0#bbbbbbbbbbbb"
+      ],
       "mustNotContainChunkIds": ["gmail#msg-other-acct-1#0#ffffffffffff"],
       "note": "findRelated({ topic }) via filterSearch (no knn clause) against real OpenSearch — cross-channel (gmail+sms) same-topic linking, cross-account isolation held even though acct_other shares the exact topic name."
     },
@@ -81,7 +99,10 @@
       "accountId": "acct_alex",
       "query": { "participant": "sam@vendor.io" },
       "topK": 5,
-      "expectedTopChunkIds": ["gmail#msg-meridian-1#0#aaaaaaaaaaaa", "sms#sms-meridian-2#0#bbbbbbbbbbbb"],
+      "expectedTopChunkIds": [
+        "gmail#msg-meridian-1#0#aaaaaaaaaaaa",
+        "sms#sms-meridian-2#0#bbbbbbbbbbbb"
+      ],
       "mustNotContainChunkIds": [],
       "note": "findRelated({ participant }) via filterSearch against real OpenSearch — cross-channel (gmail+sms) linking on a shared participant identity, no vector similarity involved."
     }

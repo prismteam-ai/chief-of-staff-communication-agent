@@ -1,4 +1,9 @@
-import type { Attachment, ChannelType, NormalizedMessage, Participant } from '@chief-of-staff/shared';
+import type {
+  Attachment,
+  ChannelType,
+  NormalizedMessage,
+  Participant,
+} from '@chief-of-staff/shared';
 
 /**
  * Minimal shape of the Gmail API `users.messages.get` (`format=full`) response this module
@@ -68,7 +73,10 @@ function extractBodyText(payload: GmailMessagePart | undefined): string {
 /** Attachment descriptors — leaf parts carrying an `attachmentId` (the actual bytes are fetched
  * separately via `users.messages.attachments.get` and persisted to S3 by the processor, never
  * inlined into `NormalizedMessage`). */
-function extractAttachments(payload: GmailMessagePart | undefined, messageId: string): Attachment[] {
+function extractAttachments(
+  payload: GmailMessagePart | undefined,
+  messageId: string,
+): Attachment[] {
   const leaves = collectLeafParts(payload);
 
   return leaves
@@ -154,7 +162,9 @@ export function normalizeGmailMessage(message: GmailMessage, accountId: string):
 
   const participants = extractParticipants(message.payload);
   if (participants.length === 0) {
-    throw new Error(`Gmail message ${message.id} has no From/To/Cc/Bcc headers to derive participants from`);
+    throw new Error(
+      `Gmail message ${message.id} has no From/To/Cc/Bcc headers to derive participants from`,
+    );
   }
 
   return {

@@ -96,7 +96,11 @@ async function createGmailClient(accountId: string): Promise<gmail_v1.Gmail> {
   };
   const { refresh_token } = JSON.parse(tokenSecretResult.SecretString) as { refresh_token: string };
 
-  const oauth2Client = new google.auth.OAuth2(client_id, client_secret, 'http://localhost:8765/oauth/callback');
+  const oauth2Client = new google.auth.OAuth2(
+    client_id,
+    client_secret,
+    'http://localhost:8765/oauth/callback',
+  );
   oauth2Client.setCredentials({ refresh_token });
 
   return google.gmail({ version: 'v1', auth: oauth2Client });
@@ -222,7 +226,9 @@ async function main() {
   const account = await findConnectedGmailAccount();
   if (!account) {
     console.error('[seed-demo] No connected Gmail account found.');
-    console.error('[seed-demo] Run `just gmail-auth` first (one Allow click), then re-run `just seed-demo`.');
+    console.error(
+      '[seed-demo] Run `just gmail-auth` first (one Allow click), then re-run `just seed-demo`.',
+    );
     process.exit(1);
   }
 
@@ -238,22 +244,40 @@ async function main() {
 
   let inboxCount = 0;
   for (const thread of inboxThreads) {
-    const original = await insertInboxMessage(gmail, account.address, thread.from, thread.subject, thread.body, {
-      attachment: thread.attachment,
-    });
+    const original = await insertInboxMessage(
+      gmail,
+      account.address,
+      thread.from,
+      thread.subject,
+      thread.body,
+      {
+        attachment: thread.attachment,
+      },
+    );
     inboxCount += 1;
     const attachmentNote = thread.attachment ? `, attachment: ${thread.attachment.filename}` : '';
-    console.log(`[seed-demo] inbox: "${thread.subject}" (${thread.category}${attachmentNote}) -> ${original.id}`);
+    console.log(
+      `[seed-demo] inbox: "${thread.subject}" (${thread.category}${attachmentNote}) -> ${original.id}`,
+    );
 
     if (thread.reply) {
       const originalMessageId = `<inbox-${original.id}@seed-demo.local>`; // best-effort, informational only
-      await insertInboxMessage(gmail, account.address, thread.reply.from, thread.subject, thread.reply.body, {
-        threadId: original.threadId,
-        inReplyTo: originalMessageId,
-        references: originalMessageId,
-      });
+      await insertInboxMessage(
+        gmail,
+        account.address,
+        thread.reply.from,
+        thread.subject,
+        thread.reply.body,
+        {
+          threadId: original.threadId,
+          inReplyTo: originalMessageId,
+          references: originalMessageId,
+        },
+      );
       inboxCount += 1;
-      console.log(`[seed-demo] inbox reply: "Re: ${thread.subject}" -> thread ${original.threadId}`);
+      console.log(
+        `[seed-demo] inbox reply: "Re: ${thread.subject}" -> thread ${original.threadId}`,
+      );
     }
   }
 
@@ -265,7 +289,9 @@ async function main() {
   }
 
   console.log(`\n[seed-demo] Done. ${inboxCount} inbox messages, ${sentCount} sent messages.`);
-  console.log('[seed-demo] The poller (rate(1 minute)) will pick up the inbox messages on its next tick.');
+  console.log(
+    '[seed-demo] The poller (rate(1 minute)) will pick up the inbox messages on its next tick.',
+  );
 }
 
 main().catch((error: unknown) => {

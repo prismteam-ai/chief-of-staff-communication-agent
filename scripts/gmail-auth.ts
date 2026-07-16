@@ -78,7 +78,9 @@ function waitForAuthorizationCode(): Promise<string> {
       const code = url.searchParams.get('code');
 
       if (error) {
-        res.writeHead(400, { 'Content-Type': 'text/html' }).end(`<h1>Authorization failed</h1><p>${error}</p>`);
+        res
+          .writeHead(400, { 'Content-Type': 'text/html' })
+          .end(`<h1>Authorization failed</h1><p>${error}</p>`);
         server.close();
         reject(new Error(`OAuth consent returned an error: ${error}`));
         return;
@@ -161,7 +163,9 @@ async function main() {
     new GetSecretValueCommand({ SecretId: OAUTH_CLIENT_SECRET_ID }),
   );
   if (!clientSecretResult.SecretString) {
-    fail(`Secret ${OAUTH_CLIENT_SECRET_ID} has no SecretString — ask the operator to provision it.`);
+    fail(
+      `Secret ${OAUTH_CLIENT_SECRET_ID} has no SecretString — ask the operator to provision it.`,
+    );
   }
   const { client_id, client_secret } = JSON.parse(clientSecretResult.SecretString) as {
     client_id: string;
@@ -201,7 +205,9 @@ async function main() {
 
   await upsertTokenSecret(tokenSecretId, tokens.refresh_token);
 
-  const secretDescribe = await secretsManager.send(new GetSecretValueCommand({ SecretId: tokenSecretId }));
+  const secretDescribe = await secretsManager.send(
+    new GetSecretValueCommand({ SecretId: tokenSecretId }),
+  );
   const tokenSecretArn = secretDescribe.ARN ?? tokenSecretId;
 
   const accountsTableName = await getStackOutput('IngestStack', 'AccountsTableName');

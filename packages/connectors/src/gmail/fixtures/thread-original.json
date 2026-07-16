@@ -1,10 +1,7 @@
 {
   "id": "18f2b7e0a1c2d301",
   "threadId": "18f2b7e0a1c2d301",
-  "labelIds": [
-    "INBOX",
-    "IMPORTANT"
-  ],
+  "labelIds": ["INBOX", "IMPORTANT"],
   "snippet": "We reviewed the draft contract for the Meridian rollout and have two clauses we'd like to discuss before signing.",
   "historyId": "1048701",
   "internalDate": "1752580800000",

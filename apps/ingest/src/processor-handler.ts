@@ -3,7 +3,10 @@ import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 import { logMetrics } from '@aws-lambda-powertools/metrics/middleware';
 import middy from '@middy/core';
-import { createSignedOpenSearchClient, OpenSearchRetrievalIndex } from '@chief-of-staff/rag/opensearch';
+import {
+  createSignedOpenSearchClient,
+  OpenSearchRetrievalIndex,
+} from '@chief-of-staff/rag/opensearch';
 import type { RetrievalIndex } from '@chief-of-staff/rag';
 import { createDedupeRepo } from './dedupe-repo.js';
 import { createCommunicationsRepo } from './communications-repo.js';
@@ -59,9 +62,12 @@ function realRetrievalIndex(): OpenSearchRetrievalIndex {
  * itself is never blocked by the RAG domain being unavailable or unwired.
  */
 const unwiredRetrievalIndex: RetrievalIndex = {
-  indexChunks: () => Promise.reject(new Error('RAG_DOMAIN_ENDPOINT not set — chunk indexing unavailable')),
-  search: () => Promise.reject(new Error('RAG_DOMAIN_ENDPOINT not set — chunk indexing unavailable')),
-  filterSearch: () => Promise.reject(new Error('RAG_DOMAIN_ENDPOINT not set — chunk indexing unavailable')),
+  indexChunks: () =>
+    Promise.reject(new Error('RAG_DOMAIN_ENDPOINT not set — chunk indexing unavailable')),
+  search: () =>
+    Promise.reject(new Error('RAG_DOMAIN_ENDPOINT not set — chunk indexing unavailable')),
+  filterSearch: () =>
+    Promise.reject(new Error('RAG_DOMAIN_ENDPOINT not set — chunk indexing unavailable')),
 };
 
 function retrievalIndex(): RetrievalIndex {

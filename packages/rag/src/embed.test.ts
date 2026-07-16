@@ -63,13 +63,21 @@ describe('embedTexts', () => {
   });
 
   it('parses the embeddings.float array out of the Cohere response shape', async () => {
-    sendMock.mockResolvedValue(cohereResponseBody([[1, 2, 3], [4, 5, 6]]));
+    sendMock.mockResolvedValue(
+      cohereResponseBody([
+        [1, 2, 3],
+        [4, 5, 6],
+      ]),
+    );
     const { embedTexts } = await import('./embed.js');
     const { EMBED_INPUT_TYPE } = await import('./model-config.js');
 
     const vectors = await embedTexts(['a', 'b'], EMBED_INPUT_TYPE.document);
 
-    expect(vectors).toEqual([[1, 2, 3], [4, 5, 6]]);
+    expect(vectors).toEqual([
+      [1, 2, 3],
+      [4, 5, 6],
+    ]);
   });
 
   it('returns an empty array without calling Bedrock for an empty text list', async () => {

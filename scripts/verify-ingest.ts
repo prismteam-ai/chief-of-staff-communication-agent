@@ -17,10 +17,7 @@ import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-sec
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
-import {
-  CloudWatchClient,
-  GetMetricStatisticsCommand,
-} from '@aws-sdk/client-cloudwatch';
+import { CloudWatchClient, GetMetricStatisticsCommand } from '@aws-sdk/client-cloudwatch';
 
 const REGION = process.env.AWS_REGION ?? 'us-east-2';
 const OAUTH_CLIENT_SECRET_ID = 'cos/gmail-oauth-client';
@@ -85,9 +82,15 @@ async function createGmailClient(accountId: string): Promise<gmail_v1.Gmail> {
     client_id: string;
     client_secret: string;
   };
-  const { refresh_token } = JSON.parse(tokenSecretResult.SecretString!) as { refresh_token: string };
+  const { refresh_token } = JSON.parse(tokenSecretResult.SecretString!) as {
+    refresh_token: string;
+  };
 
-  const oauth2Client = new google.auth.OAuth2(client_id, client_secret, 'http://localhost:8765/oauth/callback');
+  const oauth2Client = new google.auth.OAuth2(
+    client_id,
+    client_secret,
+    'http://localhost:8765/oauth/callback',
+  );
   oauth2Client.setCredentials({ refresh_token });
   return google.gmail({ version: 'v1', auth: oauth2Client });
 }
@@ -123,7 +126,9 @@ async function sendSelfAddressedProbe(gmail: gmail_v1.Gmail, address: string): P
   const threadId = response.data.threadId;
   if (!sentId) fail('messages.send returned no message id');
   if (!threadId) fail('messages.send returned no threadId');
-  console.log(`[verify-ingest] Sent probe message, SENT-copy Gmail message id = ${sentId} (thread ${threadId})`);
+  console.log(
+    `[verify-ingest] Sent probe message, SENT-copy Gmail message id = ${sentId} (thread ${threadId})`,
+  );
   return { sentId, threadId };
 }
 
@@ -166,7 +171,9 @@ async function pollForInboxCopyId(
       (m) => m.id && m.id !== sentId && (m.labelIds ?? []).includes('INBOX'),
     );
     if (distinctInboxMessage?.id) {
-      console.log(`[verify-ingest] Inbox copy found, distinct Gmail message id = ${distinctInboxMessage.id}`);
+      console.log(
+        `[verify-ingest] Inbox copy found, distinct Gmail message id = ${distinctInboxMessage.id}`,
+      );
       return distinctInboxMessage.id;
     }
 
@@ -190,11 +197,11 @@ async function pollForCommunicationRecord(
   const doc = DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }));
 
   while (Date.now() < deadline) {
-    const result = await doc.send(new GetCommand({ TableName: communicationsTableName, Key: { commId } }));
-    if (result.Item) return result.Item;
-    console.log(
-      `[verify-ingest] Waiting for ${commId} to appear (poller runs every 1 minute)...`,
+    const result = await doc.send(
+      new GetCommand({ TableName: communicationsTableName, Key: { commId } }),
     );
+    if (result.Item) return result.Item;
+    console.log(`[verify-ingest] Waiting for ${commId} to appear (poller runs every 1 minute)...`);
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
 
@@ -223,7 +230,9 @@ async function checkMessageIngestedMetric(): Promise<void> {
 
   const total = (result.Datapoints ?? []).reduce((sum, dp) => sum + (dp.Sum ?? 0), 0);
   if (total > 0) {
-    console.log(`[verify-ingest] MessageIngested metric datapoint confirmed: ${total} in the last 15 minutes.`);
+    console.log(
+      `[verify-ingest] MessageIngested metric datapoint confirmed: ${total} in the last 15 minutes.`,
+    );
   } else {
     console.log(
       '[verify-ingest] No MessageIngested datapoint visible yet (CloudWatch can lag a few minutes) — not a hard failure.',
@@ -286,7 +295,9 @@ async function main() {
   const commId = `gmail#${inboxMessageId}`;
 
   const record = await pollForCommunicationRecord(communicationsTableName, commId, deadline);
-  console.log(`[verify-ingest] Communication record found: commId=${record.commId} status=${record.status}`);
+  console.log(
+    `[verify-ingest] Communication record found: commId=${record.commId} status=${record.status}`,
+  );
 
   if (record.status !== 'ingested') {
     fail(`Expected status "ingested", got "${String(record.status)}"`);
@@ -294,14 +305,24 @@ async function main() {
 
   await checkMessageIngestedMetric();
 
-  console.log('\n[verify-ingest] Proving conditional-write dedupe: replaying the inbox-copy message id...');
-  const replayResult = await invokeProcessorDirectly(processorFunctionName, account.accountId, inboxMessageId);
+  console.log(
+    '\n[verify-ingest] Proving conditional-write dedupe: replaying the inbox-copy message id...',
+  );
+  const replayResult = await invokeProcessorDirectly(
+    processorFunctionName,
+    account.accountId,
+    inboxMessageId,
+  );
   console.log('[verify-ingest] Replay processor response:', JSON.stringify(replayResult));
 
   // The replay must resolve immediately (the record already exists), so give it its own short
   // budget independent of the now-expired outer deadline rather than failing on a technicality.
   const replayDeadline = Date.now() + POLL_INTERVAL_MS * 3;
-  const recordAfterReplay = await pollForCommunicationRecord(communicationsTableName, commId, replayDeadline);
+  const recordAfterReplay = await pollForCommunicationRecord(
+    communicationsTableName,
+    commId,
+    replayDeadline,
+  );
   if (recordAfterReplay.ingestedAt !== record.ingestedAt) {
     fail('ingestedAt changed after replay — the record was overwritten instead of deduped.');
   }

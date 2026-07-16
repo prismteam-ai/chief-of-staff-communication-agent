@@ -8,7 +8,12 @@ process.env.AWS_ACCESS_KEY_ID ??= 'test-access-key-id';
 process.env.AWS_SECRET_ACCESS_KEY ??= 'test-secret-access-key';
 
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, UpdateCommand, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  UpdateCommand,
+  GetCommand,
+  PutCommand,
+} from '@aws-sdk/lib-dynamodb';
 import { mockClient } from 'aws-sdk-client-mock';
 import { createAccountsRepo } from './accounts-repo.js';
 
@@ -45,9 +50,11 @@ describe('accounts-repo updateHistoryCursor', () => {
   });
 
   it('propagates a ConditionalCheckFailedException when the account does not exist', async () => {
-    ddbMock.on(UpdateCommand).rejects(
-      new ConditionalCheckFailedException({ message: 'conditional check failed', $metadata: {} }),
-    );
+    ddbMock
+      .on(UpdateCommand)
+      .rejects(
+        new ConditionalCheckFailedException({ message: 'conditional check failed', $metadata: {} }),
+      );
     const repo = createAccountsRepo('accounts-table');
 
     await expect(repo.updateHistoryCursor('acct_missing', '999')).rejects.toBeInstanceOf(

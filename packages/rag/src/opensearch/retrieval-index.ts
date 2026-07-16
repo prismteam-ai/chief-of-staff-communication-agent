@@ -1,7 +1,12 @@
 import type { Client } from '@opensearch-project/opensearch';
 import { CHUNKS_INDEX_NAME, chunksIndexBody } from '../index-mapping.js';
 import type { EmbeddedChunk } from '../corpus.js';
-import type { RetrievalIndex, SearchFilters, SearchHit, SearchOptions } from '../retrieval-index.js';
+import type {
+  RetrievalIndex,
+  SearchFilters,
+  SearchHit,
+  SearchOptions,
+} from '../retrieval-index.js';
 
 /**
  * The deployed (and Docker-local-replay) `RetrievalIndex` adapter — the OpenSearch-backed
@@ -33,7 +38,9 @@ export class OpenSearchRetrievalIndex implements RetrievalIndex {
       const failed = (response.body.items as Array<Record<string, { error?: unknown }>>)
         .map((item) => Object.values(item)[0])
         .filter((op) => op?.error);
-      throw new Error(`OpenSearch bulk index had ${failed.length} failed item(s): ${JSON.stringify(failed[0])}`);
+      throw new Error(
+        `OpenSearch bulk index had ${failed.length} failed item(s): ${JSON.stringify(failed[0])}`,
+      );
     }
   }
 
@@ -43,10 +50,16 @@ export class OpenSearchRetrievalIndex implements RetrievalIndex {
    * vector similarity) applied identically whether or not the caller passes additional
    * `SearchFilters`.
    */
-  async search(queryEmbedding: number[], queryText: string, options: SearchOptions): Promise<SearchHit[]> {
+  async search(
+    queryEmbedding: number[],
+    queryText: string,
+    options: SearchOptions,
+  ): Promise<SearchHit[]> {
     const { accountId, topK, filters } = options;
 
-    const filterClauses: Record<string, unknown>[] = [{ term: { 'metadata.account_id': accountId } }];
+    const filterClauses: Record<string, unknown>[] = [
+      { term: { 'metadata.account_id': accountId } },
+    ];
     for (const clause of toFilterClauses(filters)) {
       filterClauses.push(clause);
     }
@@ -87,7 +100,9 @@ export class OpenSearchRetrievalIndex implements RetrievalIndex {
   async filterSearch(options: SearchOptions): Promise<SearchHit[]> {
     const { accountId, topK, filters } = options;
 
-    const filterClauses: Record<string, unknown>[] = [{ term: { 'metadata.account_id': accountId } }];
+    const filterClauses: Record<string, unknown>[] = [
+      { term: { 'metadata.account_id': accountId } },
+    ];
     for (const clause of toFilterClauses(filters)) {
       filterClauses.push(clause);
     }

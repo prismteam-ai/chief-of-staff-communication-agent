@@ -42,7 +42,11 @@ export function createDedupeRepo(tableName: string): DedupeRepo {
         await client().send(
           new PutCommand({
             TableName: tableName,
-            Item: { dedupeKey, claimedAt: new Date().toISOString(), expiresAt: now + DEDUPE_TTL_SECONDS },
+            Item: {
+              dedupeKey,
+              claimedAt: new Date().toISOString(),
+              expiresAt: now + DEDUPE_TTL_SECONDS,
+            },
             ConditionExpression: 'attribute_not_exists(dedupeKey)',
           }),
         );

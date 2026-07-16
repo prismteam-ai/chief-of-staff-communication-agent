@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { NormalizedMessageSchema, CURRENT_SCHEMA_VERSION, commIdFor } from './normalized-message.js';
+import {
+  NormalizedMessageSchema,
+  CURRENT_SCHEMA_VERSION,
+  commIdFor,
+} from './normalized-message.js';
 
 describe('commIdFor', () => {
   it('derives a stable id from channel + externalId', () => {

@@ -16,7 +16,10 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as path from 'node:path';
 import { CloudFormationClient, DescribeStacksCommand } from '@aws-sdk/client-cloudformation';
-import { createSignedOpenSearchClient, OpenSearchRetrievalIndex } from '@chief-of-staff/rag/opensearch';
+import {
+  createSignedOpenSearchClient,
+  OpenSearchRetrievalIndex,
+} from '@chief-of-staff/rag/opensearch';
 import { embedTexts, EMBED_INPUT_TYPE } from '@chief-of-staff/rag';
 import type { EmbeddedChunk } from '@chief-of-staff/rag';
 
@@ -64,7 +67,9 @@ async function main() {
   console.log(`[seed-org-knowledge] seeding ${rows.length} org-doc/preference chunk(s)...`);
 
   const endpoint = await getDeployedDomainEndpoint();
-  const index = new OpenSearchRetrievalIndex(createSignedOpenSearchClient({ endpoint, region: REGION }));
+  const index = new OpenSearchRetrievalIndex(
+    createSignedOpenSearchClient({ endpoint, region: REGION }),
+  );
   await index.ensureIndex();
 
   const vectors = await embedTexts(
@@ -85,10 +90,14 @@ async function main() {
   await index.indexChunks(embedded);
 
   for (const row of rows) {
-    console.log(`[seed-org-knowledge] seeded  ${row.chunkId}  (${row.metadata.sourceType}, account=${row.metadata.accountId})`);
+    console.log(
+      `[seed-org-knowledge] seeded  ${row.chunkId}  (${row.metadata.sourceType}, account=${row.metadata.accountId})`,
+    );
   }
 
-  console.log(`\n[seed-org-knowledge] PASS — ${embedded.length} chunk(s) upserted into communications-chunks.\n`);
+  console.log(
+    `\n[seed-org-knowledge] PASS — ${embedded.length} chunk(s) upserted into communications-chunks.\n`,
+  );
 }
 
 main().catch((error: unknown) => {

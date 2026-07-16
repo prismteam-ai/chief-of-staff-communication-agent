@@ -20,7 +20,10 @@ describe('sendBatchWithRetry', () => {
         Failed: [{ Id: '1', SenderFault: false, Code: 'ServiceUnavailable' }],
         Successful: [{ Id: '0' }],
       })
-      .mockResolvedValueOnce({ Failed: [], Successful: [{ Id: '1' }] }) as unknown as SendMessageBatchFn;
+      .mockResolvedValueOnce({
+        Failed: [],
+        Successful: [{ Id: '1' }],
+      }) as unknown as SendMessageBatchFn;
     const entries = [
       { Id: '0', MessageBody: '{"a":1}' },
       { Id: '1', MessageBody: '{"a":2}' },
@@ -30,7 +33,9 @@ describe('sendBatchWithRetry', () => {
 
     expect(send).toHaveBeenCalledTimes(2);
     // The retry call carries only the failed entry, not the whole batch.
-    expect((send as ReturnType<typeof vi.fn>).mock.calls[1]?.[0]).toEqual([{ Id: '1', MessageBody: '{"a":2}' }]);
+    expect((send as ReturnType<typeof vi.fn>).mock.calls[1]?.[0]).toEqual([
+      { Id: '1', MessageBody: '{"a":2}' },
+    ]);
     expect(noopLog.error).not.toHaveBeenCalled();
   });
 
@@ -50,7 +55,9 @@ describe('sendBatchWithRetry', () => {
       { Id: '1', MessageBody: '{"a":2}' },
     ];
 
-    await expect(sendBatchWithRetry(entries, send, noopLog)).rejects.toThrow(/still failed after one retry/);
+    await expect(sendBatchWithRetry(entries, send, noopLog)).rejects.toThrow(
+      /still failed after one retry/,
+    );
     expect(send).toHaveBeenCalledTimes(2);
     expect(noopLog.error).toHaveBeenCalledTimes(1);
   });

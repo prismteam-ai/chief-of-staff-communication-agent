@@ -36,10 +36,7 @@ function decodeBase64UrlToBuffer(data: string): Buffer {
 
 const connector = new GmailConnector();
 
-export type FetchGmailMessage = (
-  accountId: string,
-  messageId: string,
-) => Promise<GmailMessage>;
+export type FetchGmailMessage = (accountId: string, messageId: string) => Promise<GmailMessage>;
 
 /** Fetches one attachment's raw base64url-encoded bytes via `users.messages.attachments.get`. */
 export type FetchGmailAttachment = (
@@ -228,7 +225,11 @@ export function makeFetchGmailMessage(
 ): FetchGmailMessage {
   return async (accountId, messageId) => {
     const gmail = await gmailClientFactory(accountId);
-    const response = await gmail.users.messages.get({ userId: 'me', id: messageId, format: 'full' });
+    const response = await gmail.users.messages.get({
+      userId: 'me',
+      id: messageId,
+      format: 'full',
+    });
     return response.data as GmailMessage;
   };
 }

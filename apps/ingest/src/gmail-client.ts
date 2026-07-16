@@ -1,9 +1,6 @@
 import { google } from 'googleapis';
 import type { gmail_v1 } from 'googleapis';
-import {
-  SecretsManagerClient,
-  GetSecretValueCommand,
-} from '@aws-sdk/client-secrets-manager';
+import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 
 /**
  * Gmail OAuth + API access (brief constraint 4/5). Two Secrets Manager entries back every call:

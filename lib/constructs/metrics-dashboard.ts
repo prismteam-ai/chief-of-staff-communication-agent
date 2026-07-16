@@ -42,7 +42,12 @@ export class MetricsDashboard extends Construct {
     const titlePrefix = props.titlePrefix ?? 'Service';
 
     const toSumMetric = (metricName: string) =>
-      new cloudwatch.Metric({ namespace, metricName, statistic: 'Sum', period: cdk.Duration.minutes(5) });
+      new cloudwatch.Metric({
+        namespace,
+        metricName,
+        statistic: 'Sum',
+        period: cdk.Duration.minutes(5),
+      });
 
     const processed = processedNames.map(toSumMetric);
     const failed = failedNames.map(toSumMetric);

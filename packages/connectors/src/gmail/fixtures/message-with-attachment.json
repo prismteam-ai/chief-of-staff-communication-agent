@@ -1,10 +1,7 @@
 {
   "id": "18f2c4a9e5f60703",
   "threadId": "18f2c4a9e5f60703",
-  "labelIds": [
-    "INBOX",
-    "UNREAD"
-  ],
+  "labelIds": ["INBOX", "UNREAD"],
   "snippet": "Please find attached the signed vendor agreement for your records.",
   "historyId": "1049112",
   "internalDate": "1752584400000",

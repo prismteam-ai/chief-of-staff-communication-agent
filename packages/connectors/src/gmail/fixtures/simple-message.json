@@ -24,9 +24,7 @@
         "partId": "0",
         "mimeType": "text/plain",
         "filename": "",
-        "headers": [
-          { "name": "Content-Type", "value": "text/plain; charset=\"UTF-8\"" }
-        ],
+        "headers": [{ "name": "Content-Type", "value": "text/plain; charset=\"UTF-8\"" }],
         "body": {
           "size": 143,
           "data": "SGkgQWxleCwNCg0KSnVzdCBjaGVja2luZyBpbiBvbiB0aGUgUTMgYnVkZ2V0IHJldmlldyDigJQgY2FuIHdlIGNvbmZpcm0gdGhlIG1lZXRpbmcgc2xvdCBmb3IgVGh1cnNkYXk_DQoNClRoYW5rcywNClByaXlh"
@@ -36,9 +34,7 @@
         "partId": "1",
         "mimeType": "text/html",
         "filename": "",
-        "headers": [
-          { "name": "Content-Type", "value": "text/html; charset=\"UTF-8\"" }
-        ],
+        "headers": [{ "name": "Content-Type", "value": "text/html; charset=\"UTF-8\"" }],
         "body": {
           "size": 187,
           "data": "PGRpdj5IaSBBbGV4LDxicj48YnI-SnVzdCBjaGVja2luZyBpbiBvbiB0aGUgUTMgYnVkZ2V0IHJldmlldyDigJQgY2FuIHdlIGNvbmZpcm0gdGhlIG1lZXRpbmcgc2xvdCBmb3IgVGh1cnNkYXk_PGJyPjxicj5UaGFua3MsPGJyPlByaXlhPC9kaXY-"

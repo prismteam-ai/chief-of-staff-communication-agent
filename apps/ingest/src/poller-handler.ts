@@ -1,4 +1,8 @@
-import { SQSClient, SendMessageBatchCommand, type SendMessageBatchCommandOutput } from '@aws-sdk/client-sqs';
+import {
+  SQSClient,
+  SendMessageBatchCommand,
+  type SendMessageBatchCommandOutput,
+} from '@aws-sdk/client-sqs';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 import { logMetrics } from '@aws-lambda-powertools/metrics/middleware';
@@ -69,7 +73,10 @@ export async function sendBatchWithRetry(
 async function enqueueToSqs(messages: EnqueueMessage[]): Promise<void> {
   for (let i = 0; i < messages.length; i += SQS_BATCH_SIZE) {
     const batch = messages.slice(i, i + SQS_BATCH_SIZE);
-    const entries = batch.map((m, index) => ({ Id: `${i + index}`, MessageBody: JSON.stringify(m) }));
+    const entries = batch.map((m, index) => ({
+      Id: `${i + index}`,
+      MessageBody: JSON.stringify(m),
+    }));
     await sendBatchWithRetry(entries, sendBatchViaSqs, logger);
   }
 }

@@ -106,7 +106,10 @@ describe('normalizeGmailMessage', () => {
 
   it('throws when the message has no From/To/Cc/Bcc headers', () => {
     expect(() =>
-      normalizeGmailMessage({ id: 'm1', threadId: 't1', internalDate: '1700000000000' }, ACCOUNT_ID),
+      normalizeGmailMessage(
+        { id: 'm1', threadId: 't1', internalDate: '1700000000000' },
+        ACCOUNT_ID,
+      ),
     ).toThrow();
   });
 });

@@ -113,10 +113,13 @@ export async function pollAccount(
     // follows on first run) and re-seed from the current profile so polling resumes cleanly on
     // the next tick. This is a real, visible data-loss event, not a silent skip — it is logged at
     // `warn` (not just `info`) specifically so it is distinguishable from routine ticks.
-    log.warn('Gmail history cursor expired (404) — messages in the unpolled gap are lost; re-seeding cursor', {
-      accountId: account.accountId,
-      staleCursor: account.historyCursor,
-    });
+    log.warn(
+      'Gmail history cursor expired (404) — messages in the unpolled gap are lost; re-seeding cursor',
+      {
+        accountId: account.accountId,
+        staleCursor: account.historyCursor,
+      },
+    );
     await seedHistoryCursor(gmail, account, accountsRepo);
     // No messages are enqueued for a re-seed, matching the first-run (no-backfill) path above.
     return { accountId: account.accountId, seeded: true, enqueuedCount: 0 };
@@ -132,7 +135,10 @@ export async function pollAccount(
     await accountsRepo.updateHistoryCursor(account.accountId, latestHistoryId);
   }
 
-  log.info('Polled Gmail account', { accountId: account.accountId, enqueuedCount: messageIds.size });
+  log.info('Polled Gmail account', {
+    accountId: account.accountId,
+    enqueuedCount: messageIds.size,
+  });
   return { accountId: account.accountId, seeded: false, enqueuedCount: messageIds.size };
 }
 

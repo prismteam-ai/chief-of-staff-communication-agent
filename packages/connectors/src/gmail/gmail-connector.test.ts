@@ -13,10 +13,14 @@ const ACCOUNT_ID = 'acct_demo-alex-gmail';
 // Runs the reusable contract suite (packages/connectors/src/contract-test.ts) against the real
 // Gmail connector with a realistic multi-message raw payload — this is what "MUST pass the
 // ./testing contract-test factory" (brief constraint 2) means in practice.
-defineConnectorContractTests('gmail', () => new GmailConnector(), () => ({
-  accountId: ACCOUNT_ID,
-  raw: { messages: [simpleMessage as GmailMessage] },
-}));
+defineConnectorContractTests(
+  'gmail',
+  () => new GmailConnector(),
+  () => ({
+    accountId: ACCOUNT_ID,
+    raw: { messages: [simpleMessage as GmailMessage] },
+  }),
+);
 
 describe('GmailConnector', () => {
   it('normalizes every message in a multi-message ingest payload', async () => {
@@ -24,7 +28,14 @@ describe('GmailConnector', () => {
 
     const messages = await connector.ingest({
       accountId: ACCOUNT_ID,
-      raw: { messages: [simpleMessage, threadOriginal, threadReply, messageWithAttachment] as GmailMessage[] },
+      raw: {
+        messages: [
+          simpleMessage,
+          threadOriginal,
+          threadReply,
+          messageWithAttachment,
+        ] as GmailMessage[],
+      },
     });
 
     expect(messages).toHaveLength(4);
@@ -51,7 +62,9 @@ describe('GmailConnector', () => {
   it('rejects a malformed raw payload instead of silently returning nothing', async () => {
     const connector = new GmailConnector();
 
-    await expect(connector.ingest({ accountId: ACCOUNT_ID, raw: { notMessages: [] } })).rejects.toThrow();
+    await expect(
+      connector.ingest({ accountId: ACCOUNT_ID, raw: { notMessages: [] } }),
+    ).rejects.toThrow();
   });
 
   it('has no send implementation yet — deferred to Task 6', () => {

@@ -102,7 +102,9 @@ interface FindRelatedGoldenQuery {
 
 function loadFindRelatedQueries(): FindRelatedGoldenQuery[] {
   const raw = readFileSync(GOLDEN_QUERIES_PATH, 'utf-8');
-  return (JSON.parse(raw) as { findRelatedQueries?: FindRelatedGoldenQuery[] }).findRelatedQueries ?? [];
+  return (
+    (JSON.parse(raw) as { findRelatedQueries?: FindRelatedGoldenQuery[] }).findRelatedQueries ?? []
+  );
 }
 
 async function getDeployedDomainEndpoint(): Promise<string> {
@@ -121,14 +123,19 @@ async function main() {
     mode === 'local'
       ? new OpenSearchRetrievalIndex(createLocalOpenSearchClient({ node: 'http://localhost:9200' }))
       : new OpenSearchRetrievalIndex(
-          createSignedOpenSearchClient({ endpoint: await getDeployedDomainEndpoint(), region: REGION }),
+          createSignedOpenSearchClient({
+            endpoint: await getDeployedDomainEndpoint(),
+            region: REGION,
+          }),
         );
 
   console.log('[rag-replay] ensuring index exists (idempotent)...');
   await index.ensureIndex();
 
   const corpus = loadCorpus();
-  console.log(`[rag-replay] embedding ${corpus.length} corpus chunks via ${mode === 'local' ? 'real Bedrock (fixtures are embedded live even in local mode)' : 'real Bedrock'}...`);
+  console.log(
+    `[rag-replay] embedding ${corpus.length} corpus chunks via ${mode === 'local' ? 'real Bedrock (fixtures are embedded live even in local mode)' : 'real Bedrock'}...`,
+  );
 
   const vectors = await embedTexts(
     corpus.map((c) => c.textForEmbedding),
@@ -169,14 +176,18 @@ async function main() {
     } else {
       failures++;
       console.error(`[rag-replay] FAIL  ${q.id}`);
-      if (missingExpected.length > 0) console.error(`  missing expected: ${missingExpected.join(', ')}`);
-      if (leakedForbidden.length > 0) console.error(`  leaked forbidden: ${leakedForbidden.join(', ')}`);
+      if (missingExpected.length > 0)
+        console.error(`  missing expected: ${missingExpected.join(', ')}`);
+      if (leakedForbidden.length > 0)
+        console.error(`  leaked forbidden: ${leakedForbidden.join(', ')}`);
       console.error(`  got: ${hitIds.join(', ')}`);
     }
   }
 
   const findRelatedQueries = loadFindRelatedQueries();
-  console.log(`[rag-replay] replaying ${findRelatedQueries.length} findRelated (filter-only) golden queries...`);
+  console.log(
+    `[rag-replay] replaying ${findRelatedQueries.length} findRelated (filter-only) golden queries...`,
+  );
 
   for (const q of findRelatedQueries) {
     const hits = await findRelated(index, q.accountId, q.query, { topK: q.topK });
@@ -190,8 +201,10 @@ async function main() {
     } else {
       failures++;
       console.error(`[rag-replay] FAIL  ${q.id}`);
-      if (missingExpected.length > 0) console.error(`  missing expected: ${missingExpected.join(', ')}`);
-      if (leakedForbidden.length > 0) console.error(`  leaked forbidden: ${leakedForbidden.join(', ')}`);
+      if (missingExpected.length > 0)
+        console.error(`  missing expected: ${missingExpected.join(', ')}`);
+      if (leakedForbidden.length > 0)
+        console.error(`  leaked forbidden: ${leakedForbidden.join(', ')}`);
       console.error(`  got: ${hitIds.join(', ')}`);
     }
   }
@@ -201,7 +214,9 @@ async function main() {
     fail(`${failures}/${totalQueries} golden queries failed.`);
   }
 
-  console.log(`\n[rag-replay] PASS — all ${totalQueries} golden queries returned expected results (mode=${mode}).\n`);
+  console.log(
+    `\n[rag-replay] PASS — all ${totalQueries} golden queries returned expected results (mode=${mode}).\n`,
+  );
 }
 
 main().catch((error: unknown) => {
