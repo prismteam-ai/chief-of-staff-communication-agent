@@ -43,6 +43,22 @@
       "unit": "Milliseconds",
       "service": "ingest",
       "description": "Wall-clock time for one poller tick (all accounts) or one processor invocation (one message) on the ingest Lambdas."
+    },
+    {
+      "name": "ChunkIndexed",
+      "namespace": "ChiefOfStaffIngest",
+      "unit": "Count",
+      "service": "ingest",
+      "dimensions": ["channel"],
+      "description": "Emitted once per communication chunk successfully embedded (Bedrock Cohere Embed v4) and indexed into the communications-chunks OpenSearch index by the processor Lambda, dimensioned by channel."
+    },
+    {
+      "name": "ChunkIndexFailed",
+      "namespace": "ChiefOfStaffIngest",
+      "unit": "Count",
+      "service": "ingest",
+      "dimensions": ["channel"],
+      "description": "Emitted once per communication whose post-persist embed/index step failed (Bedrock or OpenSearch error). Isolated from message ingestion: the communication record is already persisted (status ingested) by the time this can fire, so a chunk-index failure never fails the message — it is a warn-and-count degradation, not an ingest failure."
     }
   ]
 }

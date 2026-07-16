@@ -2,12 +2,14 @@ import type { gmail_v1 } from 'googleapis';
 import { MetricUnit } from '@aws-lambda-powertools/metrics';
 import { GmailConnector } from '@chief-of-staff/connectors/gmail';
 import type { GmailMessage } from '@chief-of-staff/connectors/gmail';
-import type { Attachment } from '@chief-of-staff/shared';
+import type { Attachment, NormalizedMessage } from '@chief-of-staff/shared';
+import type { RetrievalIndex } from '@chief-of-staff/rag';
 import type { DedupeRepo } from './dedupe-repo.js';
 import { dedupeKeyFor } from './dedupe-repo.js';
 import type { CommunicationsRepo } from './communications-repo.js';
 import type { RawArtifactStore } from './raw-artifact-store.js';
 import { attachmentKey } from './raw-artifact-store.js';
+import { indexMessageChunks } from './rag-index-step.js';
 import type { logger as LoggerType, metrics as MetricsType } from './context.js';
 
 /** Attachment bytes above this size are skipped (logged, not persisted) rather than pulled into
@@ -64,13 +66,22 @@ export async function processOneMessage(
     dedupeRepo: DedupeRepo;
     communicationsRepo: CommunicationsRepo;
     rawArtifactStore: RawArtifactStore;
+    retrievalIndex: RetrievalIndex;
     log: Pick<typeof LoggerType, 'info' | 'warn' | 'error'>;
     metricsClient: Pick<typeof MetricsType, 'addMetric' | 'addDimension'>;
   },
 ): Promise<ProcessOutcome> {
   const { accountId, messageId } = input;
-  const { fetchMessage, fetchAttachment, dedupeRepo, communicationsRepo, rawArtifactStore, log, metricsClient } =
-    deps;
+  const {
+    fetchMessage,
+    fetchAttachment,
+    dedupeRepo,
+    communicationsRepo,
+    rawArtifactStore,
+    retrievalIndex,
+    log,
+    metricsClient,
+  } = deps;
   const start = Date.now();
 
   try {
@@ -112,6 +123,12 @@ export async function processOneMessage(
       commId: record.commId,
       attachmentCount: attachments.length,
     });
+
+    // Isolated on purpose (brief constraint 4): the communication is already durably persisted
+    // above — an embed/index failure here must degrade to a warning + ChunkIndexFailed metric,
+    // never flip this call's outcome to 'failed' (which would falsely suggest ingestion itself
+    // failed and could cause an unnecessary redelivery of an already-ingested message).
+    await indexChunksIsolated(normalized, { retrievalIndex, log, metricsClient });
 
     return { outcome: 'ingested', commId: record.commId };
   } catch (error) {
@@ -175,6 +192,34 @@ async function persistAttachments(
   }
 
   return results;
+}
+
+/**
+ * Wraps `indexMessageChunks` (chunk -> embed -> index into OpenSearch, `rag-index-step.ts`) so a
+ * Bedrock or OpenSearch failure never propagates out of `processOneMessage` — see the call site's
+ * comment for why this isolation matters. Failure is a warn log + `ChunkIndexFailed` metric only;
+ * no message body/participant data in the log (brief constraint 4).
+ */
+async function indexChunksIsolated(
+  normalized: NormalizedMessage,
+  deps: {
+    retrievalIndex: RetrievalIndex;
+    log: Pick<typeof LoggerType, 'info' | 'warn' | 'error'>;
+    metricsClient: Pick<typeof MetricsType, 'addMetric' | 'addDimension'>;
+  },
+): Promise<void> {
+  const { retrievalIndex, log, metricsClient } = deps;
+  try {
+    await indexMessageChunks(normalized, { retrievalIndex, log, metricsClient });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log.warn('Failed to embed/index communication chunk(s) — message ingest still succeeded', {
+      channelType: normalized.channelType,
+      error: message,
+    });
+    metricsClient.addDimension('channel', normalized.channelType);
+    metricsClient.addMetric('ChunkIndexFailed', MetricUnit.Count, 1);
+  }
 }
 
 /** Adapts a real `gmail_v1.Gmail` client into the `FetchGmailMessage` shape processor logic needs. */

@@ -3,6 +3,8 @@ import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 import { logMetrics } from '@aws-lambda-powertools/metrics/middleware';
 import middy from '@middy/core';
+import { createSignedOpenSearchClient, OpenSearchRetrievalIndex } from '@chief-of-staff/rag/opensearch';
+import type { RetrievalIndex } from '@chief-of-staff/rag';
 import { createDedupeRepo } from './dedupe-repo.js';
 import { createCommunicationsRepo } from './communications-repo.js';
 import { createRawArtifactStore } from './raw-artifact-store.js';
@@ -18,6 +20,12 @@ import { logger, metrics, tracer } from './context.js';
 const DEDUPE_TABLE_NAME = process.env.DEDUPE_TABLE_NAME ?? '';
 const COMMUNICATIONS_TABLE_NAME = process.env.COMMUNICATIONS_TABLE_NAME ?? '';
 const RAW_ARTIFACT_BUCKET_NAME = process.env.RAW_ARTIFACT_BUCKET_NAME ?? '';
+// Set once RagStack's domain exists (brief constraint 8 — wired after the OpenSearch domain
+// CREATE completes). Absent, `requireEnv` still passes: an unset endpoint degrades to
+// `indexChunksIsolated` warning + `ChunkIndexFailed` per message rather than blocking ingestion,
+// consistent with the "embed/index failure must not fail ingestion" rule.
+const RAG_DOMAIN_ENDPOINT = process.env.RAG_DOMAIN_ENDPOINT ?? '';
+const AWS_REGION = process.env.AWS_REGION ?? 'us-east-2';
 
 function requireEnv(): void {
   if (!DEDUPE_TABLE_NAME || !COMMUNICATIONS_TABLE_NAME || !RAW_ARTIFACT_BUCKET_NAME) {
@@ -33,6 +41,32 @@ function requireEnv(): void {
  * only that record redelivers (eventually to the DLQ after maxReceiveCount), rather than the
  * whole batch retrying and re-processing already-succeeded messages.
  */
+/** Built once per Lambda execution environment (module-level cache — same pattern as
+ * `communications-repo.ts`'s `client()`). */
+let cachedRealRetrievalIndex: OpenSearchRetrievalIndex | undefined;
+function realRetrievalIndex(): OpenSearchRetrievalIndex {
+  cachedRealRetrievalIndex ??= new OpenSearchRetrievalIndex(
+    createSignedOpenSearchClient({ endpoint: RAG_DOMAIN_ENDPOINT, region: AWS_REGION }),
+  );
+  return cachedRealRetrievalIndex;
+}
+
+/**
+ * When `RAG_DOMAIN_ENDPOINT` is unset (RagStack not yet wired for this deploy), every method
+ * rejects INSIDE the async call rather than the handler throwing synchronously while building
+ * dependencies — `indexChunksIsolated` in `processor-logic.ts` wraps exactly that async call in
+ * its own try/catch and turns the rejection into a warn + `ChunkIndexFailed` metric, so ingestion
+ * itself is never blocked by the RAG domain being unavailable or unwired.
+ */
+const unwiredRetrievalIndex: RetrievalIndex = {
+  indexChunks: () => Promise.reject(new Error('RAG_DOMAIN_ENDPOINT not set — chunk indexing unavailable')),
+  search: () => Promise.reject(new Error('RAG_DOMAIN_ENDPOINT not set — chunk indexing unavailable')),
+};
+
+function retrievalIndex(): RetrievalIndex {
+  return RAG_DOMAIN_ENDPOINT ? realRetrievalIndex() : unwiredRetrievalIndex;
+}
+
 async function baseHandler(event: SQSEvent): Promise<SQSBatchResponse> {
   requireEnv();
 
@@ -60,6 +94,7 @@ async function baseHandler(event: SQSEvent): Promise<SQSBatchResponse> {
       dedupeRepo,
       communicationsRepo,
       rawArtifactStore,
+      retrievalIndex: retrievalIndex(),
       log: logger,
       metricsClient: metrics,
     });

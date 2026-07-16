@@ -1,8 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { RetrievalIndex } from '@chief-of-staff/rag';
 import type { DedupeRepo } from './dedupe-repo.js';
 import type { CommunicationsRepo, CommunicationRecord } from './communications-repo.js';
 import type { RawArtifactStore } from './raw-artifact-store.js';
 import { processOneMessage, type FetchGmailAttachment, type FetchGmailMessage } from './processor-logic.js';
+
+// `indexMessageChunks` (rag-index-step.ts) calls `embedTexts`, which is a real Bedrock call —
+// mocked here so `processOneMessage` unit tests exercise the isolation/orchestration behavior
+// (does a chunk-index failure leave the ingest outcome alone?) without a live model call. The
+// embed-shaping behavior itself has its own fake-backed suite in packages/rag/src/embed.test.ts.
+vi.mock('@chief-of-staff/rag', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@chief-of-staff/rag')>();
+  return { ...actual, embedTexts: vi.fn().mockResolvedValue([[0.1, 0.2, 0.3]]) };
+});
 
 const ACCOUNT_ID = 'acct_demo-alex-gmail';
 const MESSAGE_ID = '18f2a1c3d4e5f601';
@@ -58,6 +68,7 @@ function makeDeps(overrides: {
   dedupeClaims?: boolean;
   fetchMessage?: FetchGmailMessage;
   fetchAttachment?: FetchGmailAttachment;
+  retrievalIndex?: RetrievalIndex;
 } = {}) {
   const fetchMessage: FetchGmailMessage =
     overrides.fetchMessage ?? (async () => simpleMessage as never);
@@ -80,6 +91,9 @@ function makeDeps(overrides: {
     putAttachment: vi.fn().mockImplementation(async (key: string) => key),
   };
 
+  const retrievalIndex: RetrievalIndex =
+    overrides.retrievalIndex ?? { indexChunks: vi.fn().mockResolvedValue(undefined), search: vi.fn() };
+
   const metricsClient = { addMetric: vi.fn(), addDimension: vi.fn() };
 
   return {
@@ -88,6 +102,7 @@ function makeDeps(overrides: {
     dedupeRepo,
     communicationsRepo,
     rawArtifactStore,
+    retrievalIndex,
     log: noopLog,
     metricsClient,
   };
@@ -228,5 +243,58 @@ describe('processOneMessage', () => {
     );
     expect(deps.metricsClient.addMetric).toHaveBeenCalledWith('MessageIngested', 'Count', 1);
     expect(deps.metricsClient.addMetric).not.toHaveBeenCalledWith('MessageFailed', 'Count', 1);
+  });
+
+  it('embeds and indexes the message body after persisting, emitting ChunkIndexed', async () => {
+    const deps = makeDeps();
+
+    const result = await processOneMessage({ accountId: ACCOUNT_ID, messageId: MESSAGE_ID }, deps);
+
+    expect(result.outcome).toBe('ingested');
+    expect(deps.retrievalIndex.indexChunks).toHaveBeenCalledTimes(1);
+    const [chunks] = (deps.retrievalIndex.indexChunks as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      { chunkId: string; embedding: number[] }[],
+    ];
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.embedding).toEqual([0.1, 0.2, 0.3]);
+    expect(deps.metricsClient.addMetric).toHaveBeenCalledWith('ChunkIndexed', 'Count', 1);
+  });
+
+  it('ISOLATION: a chunk-index failure does not fail the message or change its outcome', async () => {
+    const deps = makeDeps({
+      retrievalIndex: {
+        indexChunks: vi.fn().mockRejectedValue(new Error('OpenSearch bulk index 503')),
+        search: vi.fn(),
+      },
+    });
+
+    const result = await processOneMessage({ accountId: ACCOUNT_ID, messageId: MESSAGE_ID }, deps);
+
+    expect(result).toEqual({ outcome: 'ingested', commId: 'gmail#18f2a1c3d4e5f601' });
+    expect(deps.communicationsRepo.putIngested).toHaveBeenCalledTimes(1);
+    expect(deps.metricsClient.addMetric).toHaveBeenCalledWith('MessageIngested', 'Count', 1);
+    expect(deps.metricsClient.addMetric).not.toHaveBeenCalledWith('MessageFailed', 'Count', 1);
+    expect(deps.metricsClient.addMetric).toHaveBeenCalledWith('ChunkIndexFailed', 'Count', 1);
+    expect(deps.log.warn).toHaveBeenCalledWith(
+      'Failed to embed/index communication chunk(s) — message ingest still succeeded',
+      expect.objectContaining({ error: 'OpenSearch bulk index 503' }),
+    );
+  });
+
+  it('does not log message body or participant addresses when chunk indexing fails (no-PII rule)', async () => {
+    const deps = makeDeps({
+      retrievalIndex: {
+        indexChunks: vi.fn().mockRejectedValue(new Error('boom')),
+        search: vi.fn(),
+      },
+    });
+
+    await processOneMessage({ accountId: ACCOUNT_ID, messageId: MESSAGE_ID }, deps);
+
+    const warnCall = (deps.log.warn as ReturnType<typeof vi.fn>).mock.calls.find(
+      (call) => call[0] === 'Failed to embed/index communication chunk(s) — message ingest still succeeded',
+    );
+    expect(warnCall?.[1]).not.toHaveProperty('body');
+    expect(warnCall?.[1]).not.toHaveProperty('participants');
   });
 });

@@ -148,6 +148,9 @@ importers:
       '@chief-of-staff/connectors':
         specifier: workspace:*
         version: link:../../packages/connectors
+      '@chief-of-staff/rag':
+        specifier: workspace:*
+        version: link:../../packages/rag
       '@chief-of-staff/shared':
         specifier: workspace:*
         version: link:../../packages/shared

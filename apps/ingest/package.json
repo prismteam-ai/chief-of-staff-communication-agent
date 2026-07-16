@@ -21,6 +21,7 @@
     "@aws-sdk/client-dynamodb": "^3.1088.0",
     "@middy/core": "^5.5.1",
     "@chief-of-staff/connectors": "workspace:*",
+    "@chief-of-staff/rag": "workspace:*",
     "@chief-of-staff/shared": "workspace:*",
     "googleapis": "^173.0.0",
     "zod": "^3.24.1"
