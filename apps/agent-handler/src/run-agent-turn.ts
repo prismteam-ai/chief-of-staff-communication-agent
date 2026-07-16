@@ -57,6 +57,8 @@ export interface RunAgentTurnDeps {
   log: Pick<typeof LoggerType, 'info' | 'warn' | 'error'>;
   metricsClient: Pick<typeof MetricsType, 'addMetric'>;
   now?: () => Date;
+  /** Injectable wall-clock for the duration metric; defaults to `Date.now`. */
+  clock?: () => number;
 }
 
 /** The sender is the participant with role `from` — the AgentCore Memory actor (design.md §5). */
@@ -78,8 +80,10 @@ export async function runAgentTurn(
     log,
     metricsClient,
     now = () => new Date(),
+    clock = () => Date.now(),
   } = deps;
   const { commId, accountId } = input;
+  const startedAt = clock();
 
   try {
     const record = await communicationsRepo.getById(commId);
@@ -193,6 +197,8 @@ export async function runAgentTurn(
     log.error('Agent turn failed', { commId, error: message });
     metricsClient.addMetric('AgentTurnFailed', MetricUnit.Count, 1);
     return { outcome: 'failed', commId, error: message };
+  } finally {
+    metricsClient.addMetric('AgentTurnDuration', MetricUnit.Milliseconds, clock() - startedAt);
   }
 }
 

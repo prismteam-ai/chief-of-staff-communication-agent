@@ -15,6 +15,7 @@ import { DlqAlarm } from '../constructs/dlq-alarm.js';
 import { MetricsDashboard } from '../constructs/metrics-dashboard.js';
 import { PROJECT_NAME } from '../constructs/tags.js';
 import type { RagStack } from './rag-stack.js';
+import { AGENT_QUEUE_NAME } from './agent-stack.js';
 
 const SERVICE_NAME = 'chief-of-staff-ingest';
 const METRICS_NAMESPACE = 'ChiefOfStaffIngest';
@@ -119,6 +120,17 @@ export class IngestStack extends TaggedStack {
         'No subscriptions wired yet — PagerDuty subscription is production-gated (Task 13).',
     });
 
+    // --- Agent queue references (deterministic name — see AGENT_QUEUE_URL note below) ---------
+
+    // AgentStack owns the queue; ingest only publishes to it. Referencing it by ARN/URL built from
+    // the shared deterministic name (not a construct import) keeps Ingest and Agent free of a
+    // CloudFormation dependency cycle.
+    const agentQueueArn = cdk.Stack.of(this).formatArn({
+      service: 'sqs',
+      resource: AGENT_QUEUE_NAME,
+    });
+    const agentQueueUrl = `https://sqs.${this.region}.amazonaws.com/${this.account}/${AGENT_QUEUE_NAME}`;
+
     // --- Gmail OAuth secrets IAM scope --------------------------------------------------------
 
     // `cos/gmail-oauth-client` (operator-provisioned, shared) + `cos/gmail-token-*` (one per
@@ -209,6 +221,12 @@ export class IngestStack extends TaggedStack {
         DEDUPE_TABLE_NAME: this.dedupeTableName,
         COMMUNICATIONS_TABLE_NAME: this.communicationsTableName,
         RAW_ARTIFACT_BUCKET_NAME: this.rawArtifactBucketName,
+        // Agent trigger (Task 5): the processor publishes {commId, accountId} here after persist.
+        // Built from the deterministic AGENT_QUEUE_NAME, NOT a construct ref to AgentStack — that
+        // would create an Ingest↔Agent CloudFormation cycle (AgentStack already imports this
+        // stack's communications table). AgentStack owns the queue; this is the same
+        // name-then-formatArn pattern used for the Gmail secret ARNs above.
+        AGENT_QUEUE_URL: agentQueueUrl,
         ...(props?.ragStack ? { RAG_DOMAIN_ENDPOINT: props.ragStack.domainEndpoint } : {}),
       },
       bundling: BUNDLING,
@@ -218,6 +236,13 @@ export class IngestStack extends TaggedStack {
     tables.communicationsTable.grantReadWriteData(processorHandler);
     tables.rawArtifactBucket.grantWrite(processorHandler);
     processorHandler.addToRolePolicy(gmailSecretsReadPolicy);
+    // Grant SendMessage on the agent queue by its deterministic ARN (see AGENT_QUEUE_URL note).
+    processorHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['sqs:SendMessage'],
+        resources: [agentQueueArn],
+      }),
+    );
 
     // RAG knowledge-layer wiring (design.md §4, brief constraint 8): grants the processor's
     // execution role `es:ESHttp*` on the domain (identity-side; the domain's own access policy is

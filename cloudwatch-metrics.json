@@ -59,6 +59,42 @@
       "service": "ingest",
       "dimensions": ["channel"],
       "description": "Emitted once per communication whose post-persist embed/index step failed (Bedrock or OpenSearch error). Isolated from message ingestion: the communication record is already persisted (status ingested) by the time this can fire, so a chunk-index failure never fails the message — it is a warn-and-count degradation, not an ingest failure."
+    },
+    {
+      "name": "AgentTriggerFailed",
+      "namespace": "ChiefOfStaffIngest",
+      "unit": "Count",
+      "service": "ingest",
+      "dimensions": ["channel"],
+      "description": "Emitted once per communication whose post-persist agent-trigger publish (SQS SendMessage to the agent queue) failed. Isolated like ChunkIndexFailed: the communication is already persisted by the time this can fire, so it is a warn-and-count degradation, never an ingest failure."
+    },
+    {
+      "name": "RecommendationProduced",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Count",
+      "service": "agent",
+      "description": "Emitted once per communication for which the agent Lambda produced a valid recommendation (action type + confidence + rationale) via the Vercel AI SDK ToolLoopAgent."
+    },
+    {
+      "name": "DraftProduced",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Count",
+      "service": "agent",
+      "description": "Emitted once per communication for which the agent Lambda produced a style-aware reply draft (only on the at/above-confidence-threshold path; the below-threshold needs_context path produces no draft)."
+    },
+    {
+      "name": "AgentTurnFailed",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Count",
+      "service": "agent",
+      "description": "Emitted once per agent turn that threw (model error, invalid structured output, or persistence failure). The failed record is reported back to SQS so only it redelivers, eventually to the agent DLQ, rather than the whole batch retrying."
+    },
+    {
+      "name": "AgentTurnDuration",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Milliseconds",
+      "service": "agent",
+      "description": "Wall-clock time for one agent turn on the agent Lambda, from reading the communication to persisting the recommendation/draft and appending conversation memory."
     }
   ]
 }
