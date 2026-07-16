@@ -69,8 +69,16 @@ export async function processInboundWhatsAppWebhook(
   signatureHeader: string | undefined,
   deps: ProcessInboundDeps,
 ): Promise<InboundOutcome> {
-  const { authToken, webhookUrl, dedupeRepo, communicationsRepo, retrievalIndex, agentTrigger, log, metricsClient } =
-    deps;
+  const {
+    authToken,
+    webhookUrl,
+    dedupeRepo,
+    communicationsRepo,
+    retrievalIndex,
+    agentTrigger,
+    log,
+    metricsClient,
+  } = deps;
   const start = Date.now();
 
   const signatureValid = verifyTwilioSignature({

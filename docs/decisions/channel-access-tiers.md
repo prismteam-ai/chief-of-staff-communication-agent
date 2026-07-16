@@ -63,3 +63,25 @@ include every tier.
 - WhatsApp: completed Meta business verification → move the connector from sandbox to a production
   sender.
 - X: an API tier with DM/mention read access → extend the connector beyond public posts.
+
+## 7. Amendment (Task 9) — SMS deprioritized in favor of WhatsApp sandbox as the second live channel
+
+The Live tier above lists SMS via Twilio as originally planned; at implementation time it was
+deprioritized for the second-channel milestone in favor of WhatsApp (already Sandbox-tier here) —
+the actual delivered basis for README L43's "multiple channels" closure — for one concrete reason:
+
+- **US A2P 10DLC registration is a multi-day-to-multi-week carrier approval process** (campaign
+  registration + brand vetting) before a Twilio SMS number can send/receive traffic reliably in the
+  US. That does not fit the assignment window, and there is no sandbox-equivalent bypass for SMS the
+  way there is for WhatsApp — Twilio's WhatsApp sandbox is immediately usable with the SAME Twilio
+  account, no carrier approval, against a real WhatsApp client.
+- The WhatsApp sandbox is not a lesser proof of the connector architecture: it exercises the same
+  bidirectional protocol (inbound webhook + outbound REST send) through the identical `Connector`
+  interface (`ingest`/`send`/`identity`) every other channel implements, and Twilio's REST API shape
+  (Messages resource, signature-verified webhooks, provider-message-id correlation) is what SMS
+  would have used too — swapping the sandbox WhatsApp sender for a registered SMS number, or for a
+  production WhatsApp sender post-Meta-verification, is a credential/endpoint change, not a
+  connector rewrite (the same "connector swap, not a rebuild" property §3's Rationale claims for
+  every channel here).
+- SMS remains listed above as the originally-scoped Live-tier channel and stays a valid future
+  addition once A2P 10DLC registration completes; it is not implemented in this delivery.

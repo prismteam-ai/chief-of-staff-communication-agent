@@ -36,7 +36,9 @@ function requireEnv(): void {
     throw new Error('COMMUNICATIONS_TABLE_NAME and DEDUPE_TABLE_NAME must be set');
   }
   if (!env.whatsappWebhookUrl) {
-    throw new Error('WHATSAPP_WEBHOOK_URL must be set — required for Twilio signature verification');
+    throw new Error(
+      'WHATSAPP_WEBHOOK_URL must be set — required for Twilio signature verification',
+    );
   }
 }
 
@@ -65,7 +67,9 @@ function retrievalIndex(): RetrievalIndex {
  * Exported for unit testing (same convention as `poller-handler.ts`'s `sendBatchWithRetry`). */
 export function decodeFormBody(event: APIGatewayProxyEventV2): Record<string, string> {
   if (!event.body) return {};
-  const raw = event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString('utf-8') : event.body;
+  const raw = event.isBase64Encoded
+    ? Buffer.from(event.body, 'base64').toString('utf-8')
+    : event.body;
   const params = new URLSearchParams(raw);
   const result: Record<string, string> = {};
   for (const [key, value] of params.entries()) {
@@ -79,8 +83,7 @@ export function getSignatureHeader(event: APIGatewayProxyEventV2): string | unde
   return event.headers?.['x-twilio-signature'];
 }
 
-const TWIML_EMPTY_RESPONSE =
-  '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
+const TWIML_EMPTY_RESPONSE = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 
 async function baseHandler(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   requireEnv();

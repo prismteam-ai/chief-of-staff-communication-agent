@@ -126,9 +126,9 @@ describe('sendTwilioWhatsAppMessage', () => {
     );
 
     const headers = calls[0]?.init.headers as Record<string, string>;
-    const expectedAuth = Buffer.from(`${credentials.account_sid}:${credentials.auth_token}`).toString(
-      'base64',
-    );
+    const expectedAuth = Buffer.from(
+      `${credentials.account_sid}:${credentials.auth_token}`,
+    ).toString('base64');
     expect(headers.Authorization).toBe(`Basic ${expectedAuth}`);
 
     const body = new URLSearchParams(calls[0]?.init.body as string);

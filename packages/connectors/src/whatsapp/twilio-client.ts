@@ -65,10 +65,7 @@ export function verifyTwilioSignature(params: {
   if (!signatureHeader) return false;
 
   const sortedKeys = Object.keys(formParams).sort();
-  const data = sortedKeys.reduce(
-    (acc, key) => acc + key + formParams[key],
-    url,
-  );
+  const data = sortedKeys.reduce((acc, key) => acc + key + formParams[key], url);
 
   const expected = createHmac('sha1', authToken).update(data, 'utf8').digest('base64');
 

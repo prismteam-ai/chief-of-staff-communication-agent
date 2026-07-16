@@ -53,14 +53,12 @@ function makeDeps(
 
   const putIngested: CommunicationsRepo['putIngested'] =
     overrides.putIngested ??
-    vi.fn(
-      async (message): Promise<ApiCommunicationRecord> => ({
-        ...message,
-        commId: `${message.channelType}#${message.externalId}`,
-        status: 'ingested',
-        ingestedAt: new Date().toISOString(),
-      }),
-    );
+    vi.fn(async (message): Promise<ApiCommunicationRecord> => ({
+      ...message,
+      commId: `${message.channelType}#${message.externalId}`,
+      status: 'ingested',
+      ingestedAt: new Date().toISOString(),
+    }));
 
   const communicationsRepo: Pick<CommunicationsRepo, 'putIngested'> = { putIngested };
 
@@ -140,7 +138,10 @@ describe('processInboundWhatsAppWebhook', () => {
 
     const result = await processInboundWhatsAppWebhook(payload, signature, deps);
 
-    expect(result).toEqual({ outcome: 'ingested', commId: 'whatsapp#SM1234567890abcdef1234567890abcdef' });
+    expect(result).toEqual({
+      outcome: 'ingested',
+      commId: 'whatsapp#SM1234567890abcdef1234567890abcdef',
+    });
     expect(deps.dedupeRepo.claim).toHaveBeenCalledWith(
       'whatsapp#SM1234567890abcdef1234567890abcdef',
     );

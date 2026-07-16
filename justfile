@@ -93,3 +93,10 @@ sync-asana:
 # Idempotent — safe to re-run after `just seed-demo` tops up the sent-history corpus.
 build-style-profile:
     pnpm exec tsx scripts/build-style-profile.ts
+
+# Task 9 (WhatsApp connector) brief constraint 2: upserts the single demo WhatsApp sandbox account
+# record (acct-whatsapp-sandbox, userId demo-alex) so ingested/sent WhatsApp messages show up in
+# the same unified inbox as Gmail. No OAuth needed — cos/twilio-whatsapp is already provisioned.
+# Requires IngestStack deployed. Idempotent — safe to re-run.
+whatsapp-connect:
+    pnpm exec tsx scripts/whatsapp-connect.ts

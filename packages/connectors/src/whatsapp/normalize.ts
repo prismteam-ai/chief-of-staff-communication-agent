@@ -1,4 +1,9 @@
-import type { Attachment, ChannelType, NormalizedMessage, Participant } from '@chief-of-staff/shared';
+import type {
+  Attachment,
+  ChannelType,
+  NormalizedMessage,
+  Participant,
+} from '@chief-of-staff/shared';
 
 /**
  * Twilio's inbound WhatsApp webhook payload — form-urlencoded fields POSTed to our webhook
@@ -83,10 +88,7 @@ function extractAttachments(payload: TwilioInboundPayload, messageSid: string): 
  * (per-contact: the From number)") — WhatsApp/Twilio has no separate conversation/thread id, so
  * every message from the same contact naturally groups under one thread.
  */
-export function normalizeTwilioInboundMessage(
-  raw: unknown,
-  accountId: string,
-): NormalizedMessage {
+export function normalizeTwilioInboundMessage(raw: unknown, accountId: string): NormalizedMessage {
   if (!isTwilioInboundPayload(raw)) {
     throw new Error(
       'normalizeTwilioInboundMessage expects a Twilio inbound webhook payload with at least MessageSid and From',

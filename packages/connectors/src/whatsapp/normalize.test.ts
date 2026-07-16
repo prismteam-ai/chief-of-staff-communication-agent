@@ -71,7 +71,10 @@ describe('normalizeTwilioInboundMessage', () => {
   });
 
   it('defaults body to empty string for a media-only message (no Body field)', () => {
-    const payload = inboundPayload({ NumMedia: '1', MediaUrl0: 'https://api.twilio.com/media/ME1' });
+    const payload = inboundPayload({
+      NumMedia: '1',
+      MediaUrl0: 'https://api.twilio.com/media/ME1',
+    });
     delete payload.Body;
 
     const result = normalizeTwilioInboundMessage(payload, ACCOUNT_ID);
