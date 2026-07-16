@@ -72,3 +72,14 @@ export const NormalizedMessageSchema = z.object({
 });
 
 export type NormalizedMessage = z.infer<typeof NormalizedMessageSchema>;
+
+/**
+ * Deterministic communication id from channel + provider `externalId`. The record's identity is
+ * independently derivable (no separate id-generation step), and the RAG layer mirrors this as the
+ * `sourceId` its `chunk_id` is built on, so a chunk always points back at the exact communication
+ * record it came from. Canonicalized here in `shared` (rather than in the ingest app) because both
+ * the ingest processor and the RAG chunker must agree on it.
+ */
+export function commIdFor(channelType: string, externalId: string): string {
+  return `${channelType}#${externalId}`;
+}

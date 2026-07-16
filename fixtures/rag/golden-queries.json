@@ -1,0 +1,69 @@
+{
+  "_comment": "Golden queries replayed by `just rag-replay-local` (Docker OpenSearch, real hybrid kNN+keyword query) and `just rag-replay-aws` (deployed domain, real Bedrock embeddings). Each query embeds fixtures/rag/corpus.jsonl via the pinned Cohere profile at replay time (input_type=search_query) — text is stable, embeddings are computed live, so this proves the actual retrieval decision rather than pre-baked vectors. `expectedTopChunkIds` must appear within the top `topK` results; `mustNotContainChunkIds` enforces the account-isolation and negative-match assertions.",
+  "queries": [
+    {
+      "id": "meridian-contract-timing",
+      "queryText": "When is the Meridian contract review call happening?",
+      "accountId": "acct_alex",
+      "topK": 5,
+      "expectedTopChunkIds": ["gmail#msg-meridian-1#0#aaaaaaaaaaaa", "sms#sms-meridian-2#0#bbbbbbbbbbbb"],
+      "mustNotContainChunkIds": ["gmail#msg-other-acct-1#0#ffffffffffff"],
+      "note": "Cross-channel (gmail + sms) match on the same topic; the same-topic doc in a DIFFERENT account must never appear — this is the primary account-isolation assertion."
+    },
+    {
+      "id": "overdue-invoice",
+      "queryText": "Is there an overdue invoice I need to follow up on?",
+      "accountId": "acct_alex",
+      "topK": 5,
+      "expectedTopChunkIds": ["gmail#msg-invoice-1#0#cccccccccccc", "asana#task-invoice-followup#0#222222222222"],
+      "mustNotContainChunkIds": [],
+      "note": "Cross-source (communication + asana) match — proves Asana context chunks retrieve alongside communications on the same topic."
+    },
+    {
+      "id": "launch-newsletter-timing",
+      "queryText": "What time is the product launch newsletter going out?",
+      "accountId": "acct_alex",
+      "topK": 5,
+      "expectedTopChunkIds": ["gmail#msg-launch-2#0#eeeeeeeeeeee", "sms#sms-launch-1#0#dddddddddddd"],
+      "mustNotContainChunkIds": [],
+      "note": "Cross-channel (sms + gmail) same-project match."
+    },
+    {
+      "id": "brand-voice-style",
+      "queryText": "How should client emails about billing be worded?",
+      "accountId": "acct_alex",
+      "topK": 3,
+      "expectedTopChunkIds": ["org_doc#brand-voice-guide#0#333333333333"],
+      "mustNotContainChunkIds": [],
+      "note": "Seeded org-doc source_type retrieves for a style/voice question."
+    },
+    {
+      "id": "meeting-scheduling-preference",
+      "queryText": "What days does Alex take external meetings?",
+      "accountId": "acct_alex",
+      "topK": 3,
+      "expectedTopChunkIds": ["preference#alex-meeting-hours#0#666666666666"],
+      "mustNotContainChunkIds": [],
+      "note": "Seeded user-preference source_type retrieves for a scheduling question."
+    },
+    {
+      "id": "account-isolation-meridian-other-account",
+      "queryText": "Meridian contract",
+      "accountId": "acct_other",
+      "topK": 5,
+      "expectedTopChunkIds": ["gmail#msg-other-acct-1#0#ffffffffffff"],
+      "mustNotContainChunkIds": ["gmail#msg-meridian-1#0#aaaaaaaaaaaa", "sms#sms-meridian-2#0#bbbbbbbbbbbb"],
+      "note": "Same query scoped to acct_other must return ONLY acct_other's chunk, never acct_alex's — the permission boundary from the other direction."
+    },
+    {
+      "id": "project-filter-meridian",
+      "queryText": "contract status",
+      "accountId": "acct_alex",
+      "topK": 5,
+      "filters": { "project": "Meridian" },
+      "expectedTopChunkIds": ["gmail#msg-meridian-1#0#aaaaaaaaaaaa", "sms#sms-meridian-2#0#bbbbbbbbbbbb"],
+      "mustNotContainChunkIds": ["gmail#msg-invoice-1#0#cccccccccccc"],
+      "note": "Explicit project metadata filter (cross-channel linking, README L28) narrows a generic query to one workstream."
+    }
+  ]
+}

@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { NormalizedMessageSchema, CURRENT_SCHEMA_VERSION } from './normalized-message.js';
+import { NormalizedMessageSchema, CURRENT_SCHEMA_VERSION, commIdFor } from './normalized-message.js';
+
+describe('commIdFor', () => {
+  it('derives a stable id from channel + externalId', () => {
+    expect(commIdFor('gmail', 'msg-1')).toBe('gmail#msg-1');
+  });
+
+  it('is deterministic — same inputs, same id', () => {
+    expect(commIdFor('sms', 'SM123')).toBe(commIdFor('sms', 'SM123'));
+  });
+
+  it('distinguishes different channels sharing an external id', () => {
+    expect(commIdFor('gmail', 'x')).not.toBe(commIdFor('sms', 'x'));
+  });
+});
 
 function validFixture() {
   return {

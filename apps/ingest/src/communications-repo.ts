@@ -1,6 +1,9 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import type { CommunicationState, NormalizedMessage } from '@chief-of-staff/shared';
+import { commIdFor } from '@chief-of-staff/shared';
+
+export { commIdFor };
 
 /**
  * Communications table repository (design.md §5/§7, brief constraint 3). One item per persisted
@@ -12,10 +15,6 @@ export interface CommunicationRecord extends NormalizedMessage {
   commId: string;
   status: CommunicationState;
   ingestedAt: string;
-}
-
-export function commIdFor(channelType: string, externalId: string): string {
-  return `${channelType}#${externalId}`;
 }
 
 let cachedClient: DynamoDBDocumentClient | undefined;

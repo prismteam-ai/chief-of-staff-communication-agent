@@ -1,0 +1,36 @@
+{
+  "name": "@chief-of-staff/rag",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./opensearch": {
+      "types": "./dist/opensearch/index.d.ts",
+      "default": "./dist/opensearch/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1088.0",
+    "@aws-sdk/credential-provider-node": "^3.972.69",
+    "@chief-of-staff/shared": "workspace:*",
+    "@opensearch-project/opensearch": "^2.13.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@chief-of-staff/tsconfig": "workspace:*",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
