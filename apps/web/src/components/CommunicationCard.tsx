@@ -47,6 +47,10 @@ export function CommunicationCard(props: CommunicationCardProps) {
   const [contextText, setContextText] = useState('');
 
   const canApprove = c.status === 'drafted' || c.status === 'awaiting_approval';
+  // `approved` with no `sentMessageId` yet is a record whose send failed after a prior approval
+  // claimed it (approval-service.ts's retry-after-failed-send path) — surfacing a retry action
+  // here is what makes that recovery reachable from the UI, not just the API directly.
+  const canRetrySend = c.status === 'approved' && !c.sentMessageId;
   const canDismiss = c.status === 'drafted' || c.status === 'recommended';
   const needsContext = c.status === 'needs_context';
 
@@ -136,6 +140,11 @@ export function CommunicationCard(props: CommunicationCardProps) {
         {canApprove && !editing && (
           <button disabled={busy} onClick={() => onApprove(c.commId)}>
             Approve &amp; send
+          </button>
+        )}
+        {canRetrySend && (
+          <button disabled={busy} onClick={() => onApprove(c.commId)}>
+            Retry send (previous attempt failed)
           </button>
         )}
         {c.draft && canApprove && !editing && (
