@@ -37,6 +37,7 @@ deploy:
 
 # Build apps/web and push it to the repo-less Amplify app (manual zip deploy — documented adaptation)
 deploy-web:
+    pnpm exec tsx scripts/write-web-env.ts
     pnpm turbo run build --filter=@chief-of-staff/web
     pnpm exec tsx scripts/deploy-web.ts
 
