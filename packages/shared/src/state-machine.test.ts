@@ -23,7 +23,8 @@ const LEGAL_TRANSITIONS: Array<[CommunicationState, CommunicationState]> = [
   ['sent', 'answered'],
   ['edited', 'awaiting_approval'],
   ['rejected', 'drafted'],
-  ['needs_context', 'drafted'],
+  ['needs_context', 'awaiting_reprocess'],
+  ['awaiting_reprocess', 'recommended'],
 ];
 
 describe('COMMUNICATION_STATES', () => {
@@ -40,6 +41,7 @@ describe('COMMUNICATION_STATES', () => {
       'rejected',
       'dismissed',
       'needs_context',
+      'awaiting_reprocess',
     ].sort();
     expect([...COMMUNICATION_STATES].sort()).toEqual(expected);
   });

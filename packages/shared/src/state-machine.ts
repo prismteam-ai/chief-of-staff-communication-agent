@@ -6,14 +6,28 @@
  *                │                        │ edited → awaiting_approval
  *                │                        │ rejected → drafted (re-draft)
  *                │ dismissed (no reply needed — FYI, newsletters)
- *                │ needs_context → drafted (after the user supplies context)
+ *                │ needs_context → awaiting_reprocess → recommended (agent re-run with the
+ *                │                                       supplied context)
  * ```
  *
  * The `recommended → needs_context` edge is the confidence gate's low-confidence outcome (see
  * `confidence.ts`/`routeByConfidence`): once the agent has produced a recommendation but its
  * confidence is below threshold, the communication moves to `needs_context` rather than `drafted`,
- * and the dashboard prompts the user. `needs_context → drafted` is then the recovery edge once the
- * user supplies context. The gate DECISION is always applied in code, never in the prompt.
+ * and the dashboard prompts the user. The gate DECISION is always applied in code, never in the
+ * prompt.
+ *
+ * ## `needs_context → awaiting_reprocess → recommended` (Task 6 fix)
+ * `needs_context` used to exit straight back to `drafted` on `supplyContext` alone — but a
+ * `needs_context` record has NO draft (the agent never got far enough to write one), so that edge
+ * landed a draftless record in `drafted`, where the UI's approve action has nothing to approve.
+ * `supplyContext` now persists the supplied text on the record and re-enqueues the agent turn
+ * (`AGENT_QUEUE_URL`) instead, marking the record `awaiting_reprocess` as a state marker for "context
+ * supplied, agent re-run pending" — a fire-and-forget hand-off mirroring the ingest→agent trigger
+ * (`apps/ingest/src/agent-trigger.ts`). The re-run agent turn re-enters at `awaiting_reprocess →
+ * recommended`, threading the supplied context into the classify/draft prompt, and then proceeds
+ * through the SAME `recommended → drafted` / `recommended → needs_context` fork the first pass used —
+ * so a still-low-confidence re-run correctly lands back in `needs_context` (with the context
+ * preserved) rather than being forced into `drafted` regardless of outcome.
  *
  * Terminal states: `answered` (entered on provider send confirmation) and `dismissed`. Both stop
  * the overdue clock — "answered" tracking counts handled = answered ∪ dismissed (see `isHandled`).
@@ -41,6 +55,7 @@ export const COMMUNICATION_STATES = [
   'rejected',
   'dismissed',
   'needs_context',
+  'awaiting_reprocess',
 ] as const;
 
 export type CommunicationState = (typeof COMMUNICATION_STATES)[number];
@@ -49,8 +64,10 @@ export type CommunicationState = (typeof COMMUNICATION_STATES)[number];
  * Typed transition map: every state is an explicit key (exhaustively), and its value is the
  * exact set of legal destination states. `needs_context` is entered as the confidence gate's
  * low-confidence outcome of the recommend step (`recommended → needs_context`, see `confidence.ts`)
- * — the gate decision is applied in code, not modeled as branch logic in the graph — and exits back
- * to `drafted` once the user supplies the missing context.
+ * — the gate decision is applied in code, not modeled as branch logic in the graph — and exits to
+ * `awaiting_reprocess` once the user supplies the missing context (`supplyContext`), which the
+ * re-triggered agent turn then advances back through `recommended` into either `drafted` or
+ * (still-low-confidence) `needs_context` again — see the doc comment above.
  */
 export const TRANSITIONS: Readonly<Record<CommunicationState, readonly CommunicationState[]>> = {
   ingested: ['recommended'],
@@ -64,7 +81,10 @@ export const TRANSITIONS: Readonly<Record<CommunicationState, readonly Communica
   edited: ['awaiting_approval'],
   rejected: ['drafted'],
   dismissed: [],
-  needs_context: ['drafted'],
+  needs_context: ['awaiting_reprocess'],
+  // Entered only by `supplyContext`; exits once the re-enqueued agent turn re-classifies with the
+  // supplied context (mirrors the `ingested → recommended` first-pass hop).
+  awaiting_reprocess: ['recommended'],
   answered: [],
 };
 
