@@ -80,7 +80,9 @@ function extractAttachments(payload: GmailMessagePart | undefined, messageId: st
       sizeBytes: p.body?.size ?? 0,
       // Populated by the processor once the raw bytes are fetched and persisted to S3; a
       // placeholder key keeps this pure function free of any S3/AWS dependency (brief: Gmail
-      // connector normalization is pure logic, no AWS calls).
+      // connector normalization is pure logic, no AWS calls). The processor overwrites this with
+      // the real key before persisting the communication record — see `attachmentKey` in
+      // `raw-artifact-store.ts` for the actual shape: `raw/<accountId>/<messageId>/attachments/<id>`.
       s3Key: `gmail/${messageId}/attachments/${p.body?.attachmentId}`,
     }));
 }

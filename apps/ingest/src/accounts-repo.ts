@@ -4,6 +4,7 @@ import {
   GetCommand,
   PutCommand,
   ScanCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import type { Account, ChannelType } from '@chief-of-staff/shared';
 
@@ -61,14 +62,18 @@ export function createAccountsRepo(tableName: string): AccountsRepo {
     },
 
     async updateHistoryCursor(accountId, historyCursor) {
-      const existing = await client().send(new GetCommand({ TableName: tableName, Key: { accountId } }));
-      if (!existing.Item) {
-        throw new Error(`Cannot update historyCursor: account ${accountId} does not exist`);
-      }
+      // Single atomic update touching only historyCursor — a prior Get-then-Put here raced with
+      // any concurrent writer of other account fields (e.g. a connect/re-auth flow updating
+      // credentialSecretArn) between the read and the write, silently clobbering it. The
+      // condition also fails closed instead of Putting a fabricated new item for a non-existent
+      // account.
       await client().send(
-        new PutCommand({
+        new UpdateCommand({
           TableName: tableName,
-          Item: { ...(existing.Item as StoredAccount), historyCursor },
+          Key: { accountId },
+          UpdateExpression: 'SET historyCursor = :historyCursor',
+          ConditionExpression: 'attribute_exists(accountId)',
+          ExpressionAttributeValues: { ':historyCursor': historyCursor },
         }),
       );
     },

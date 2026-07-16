@@ -137,6 +137,90 @@ describe('pollAccount', () => {
     expect(accountsRepo.updateHistoryCursor).toHaveBeenCalledWith(account.accountId, '1030');
   });
 
+  it('re-seeds the cursor from getProfile when history.list throws a 404 (expired cursor) and does not crash', async () => {
+    const account = makeAccount({ historyCursor: '1000' });
+    const accountsRepo = makeAccountsRepo();
+    const enqueue = vi.fn<EnqueueFnSig>().mockResolvedValue(undefined);
+    const expiredCursorError = Object.assign(new Error('Requested entity was not found.'), { code: 404 });
+    const gmail = {
+      users: {
+        getProfile: vi.fn().mockResolvedValue({ data: { historyId: '9999' } }),
+        history: { list: vi.fn().mockRejectedValue(expiredCursorError) },
+      },
+    } as unknown as gmail_v1.Gmail;
+    const factory: GmailClientFactory = vi.fn().mockResolvedValue(gmail);
+
+    const result = await pollAccount(account, factory, accountsRepo, enqueue, noopLog);
+
+    expect(result).toEqual({ accountId: account.accountId, seeded: true, enqueuedCount: 0 });
+    expect(gmail.users.getProfile).toHaveBeenCalledWith({ userId: 'me' });
+    expect(accountsRepo.updateHistoryCursor).toHaveBeenCalledWith(account.accountId, '9999');
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(noopLog.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/expired/i),
+      expect.objectContaining({ accountId: account.accountId, staleCursor: '1000' }),
+    );
+  });
+
+  it('detects the expired-cursor 404 via response.status when code/status are absent (client-version defensiveness)', async () => {
+    const account = makeAccount({ historyCursor: '2000' });
+    const accountsRepo = makeAccountsRepo();
+    const enqueue = vi.fn<EnqueueFnSig>().mockResolvedValue(undefined);
+    const expiredCursorError = Object.assign(new Error('Not Found'), { response: { status: 404 } });
+    const gmail = {
+      users: {
+        getProfile: vi.fn().mockResolvedValue({ data: { historyId: '5555' } }),
+        history: { list: vi.fn().mockRejectedValue(expiredCursorError) },
+      },
+    } as unknown as gmail_v1.Gmail;
+    const factory: GmailClientFactory = vi.fn().mockResolvedValue(gmail);
+
+    const result = await pollAccount(account, factory, accountsRepo, enqueue, noopLog);
+
+    expect(result.seeded).toBe(true);
+    expect(accountsRepo.updateHistoryCursor).toHaveBeenCalledWith(account.accountId, '5555');
+  });
+
+  it('re-throws non-404 errors from history.list without touching the cursor', async () => {
+    const account = makeAccount({ historyCursor: '1000' });
+    const accountsRepo = makeAccountsRepo();
+    const enqueue = vi.fn<EnqueueFnSig>().mockResolvedValue(undefined);
+    const serverError = Object.assign(new Error('Internal error'), { code: 500 });
+    const gmail = {
+      users: {
+        getProfile: vi.fn(),
+        history: { list: vi.fn().mockRejectedValue(serverError) },
+      },
+    } as unknown as gmail_v1.Gmail;
+    const factory: GmailClientFactory = vi.fn().mockResolvedValue(gmail);
+
+    await expect(pollAccount(account, factory, accountsRepo, enqueue, noopLog)).rejects.toThrow('Internal error');
+    expect(gmail.users.getProfile).not.toHaveBeenCalled();
+    expect(accountsRepo.updateHistoryCursor).not.toHaveBeenCalled();
+  });
+
+  it('does not advance the cursor when enqueue fails (batch send unrecoverably failed)', async () => {
+    const account = makeAccount({ historyCursor: '1000' });
+    const accountsRepo = makeAccountsRepo();
+    const enqueue = vi.fn<EnqueueFnSig>().mockRejectedValue(new Error('SendMessageBatch: 1/2 entries still failed'));
+    const gmail = {
+      users: {
+        getProfile: vi.fn(),
+        history: {
+          list: vi.fn().mockResolvedValue({
+            data: { historyId: '1050', history: [{ messagesAdded: [{ message: { id: 'msg-1' } }] }] },
+          }),
+        },
+      },
+    } as unknown as gmail_v1.Gmail;
+    const factory: GmailClientFactory = vi.fn().mockResolvedValue(gmail);
+
+    await expect(pollAccount(account, factory, accountsRepo, enqueue, noopLog)).rejects.toThrow(
+      /still failed/,
+    );
+    expect(accountsRepo.updateHistoryCursor).not.toHaveBeenCalled();
+  });
+
   it('does not enqueue or advance the cursor when history.list finds nothing new', async () => {
     const account = makeAccount({ historyCursor: '1000' });
     const accountsRepo = makeAccountsRepo();

@@ -43,12 +43,31 @@ function secretsClient(): SecretsManagerClient {
   return cachedSecretsClient;
 }
 
+/**
+ * Module-level memo for both the OAuth-client secret and every per-account token secret, keyed by
+ * secret id. The poller and processor Lambdas call `createGmailClientForAccount` on every
+ * invocation (poller: once/minute/account; processor: once/message), so without this cache a busy
+ * mailbox re-fetches the same two Secrets Manager values on every single call. `maxAge` bounds
+ * staleness — long enough to cut request volume drastically on a warm container, short enough
+ * that a rotated/updated secret (e.g. re-running `just gmail-auth`) is picked up within one poller
+ * tick without requiring a redeploy or cold start.
+ */
+const SECRET_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+const secretCache = new Map<string, { value: unknown; fetchedAt: number }>();
+
 async function getSecretJson<T>(secretId: string): Promise<T> {
+  const cached = secretCache.get(secretId);
+  if (cached && Date.now() - cached.fetchedAt < SECRET_CACHE_MAX_AGE_MS) {
+    return cached.value as T;
+  }
+
   const result = await secretsClient().send(new GetSecretValueCommand({ SecretId: secretId }));
   if (!result.SecretString) {
     throw new Error(`Secret ${secretId} has no SecretString value`);
   }
-  return JSON.parse(result.SecretString) as T;
+  const value = JSON.parse(result.SecretString) as T;
+  secretCache.set(secretId, { value, fetchedAt: Date.now() });
+  return value;
 }
 
 export async function loadOAuthClientCredentials(): Promise<GmailOAuthClientCredentials> {

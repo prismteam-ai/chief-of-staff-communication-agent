@@ -100,7 +100,15 @@ function encodeMimeMessage(headers: Record<string, string>, body: string): strin
   return Buffer.from(raw).toString('base64url');
 }
 
-async function sendSelfAddressedProbe(gmail: gmail_v1.Gmail, address: string): Promise<string> {
+interface SentProbe {
+  /** The id `messages.send` returns — this is the SENT-mailbox copy's id, NOT what the poller/
+   *  processor will ever see land in the INBOX (Gmail self-send creates two separate Message rows
+   *  sharing one threadId: a SENT copy and an INBOX copy, each with its own immutable `id`). */
+  sentId: string;
+  threadId: string;
+}
+
+async function sendSelfAddressedProbe(gmail: gmail_v1.Gmail, address: string): Promise<SentProbe> {
   const marker = `verify-ingest-${Date.now()}`;
   const raw = encodeMimeMessage(
     { To: address, From: address, Subject: `[verify-ingest] ${marker}` },
@@ -108,18 +116,52 @@ async function sendSelfAddressedProbe(gmail: gmail_v1.Gmail, address: string): P
   );
 
   const response = await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
-  const id = response.data.id;
-  if (!id) fail('messages.send returned no message id');
-  console.log(`[verify-ingest] Sent probe message, Gmail message id = ${id}`);
-  return id;
+  const sentId = response.data.id;
+  const threadId = response.data.threadId;
+  if (!sentId) fail('messages.send returned no message id');
+  if (!threadId) fail('messages.send returned no threadId');
+  console.log(`[verify-ingest] Sent probe message, SENT-copy Gmail message id = ${sentId} (thread ${threadId})`);
+  return { sentId, threadId };
+}
+
+/**
+ * The poller/processor pipeline ingests whatever lands in the account's INBOX — for a
+ * self-addressed send that is a *different* Gmail message id than the one `messages.send`
+ * returned (same thread, distinct id, per Gmail's self-send semantics: SENT copy + INBOX copy).
+ * Polls `users.threads.get` on the returned threadId until a message id other than `sentId`
+ * appears, which is the inbox copy the ingest pipeline will actually process.
+ */
+async function pollForInboxCopyId(
+  gmail: gmail_v1.Gmail,
+  threadId: string,
+  sentId: string,
+  deadline: number,
+): Promise<string> {
+  while (Date.now() < deadline) {
+    const thread = await gmail.users.threads.get({ userId: 'me', id: threadId });
+    const inboxMessage = (thread.data.messages ?? []).find((m) => m.id && m.id !== sentId);
+    if (inboxMessage?.id) {
+      console.log(`[verify-ingest] Inbox copy found, Gmail message id = ${inboxMessage.id}`);
+      return inboxMessage.id;
+    }
+    console.log(
+      `[verify-ingest] Waiting for the inbox copy to appear on thread ${threadId} (self-send delivery lag)...`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
+
+  fail(
+    `Inbox copy of the probe message did not appear on thread ${threadId} within the verify-ingest budget. ` +
+      'Gmail did not deliver the self-addressed message back to the inbox in time.',
+  );
 }
 
 async function pollForCommunicationRecord(
   communicationsTableName: string,
   commId: string,
+  deadline: number,
 ): Promise<Record<string, unknown>> {
   const doc = DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }));
-  const deadline = Date.now() + POLL_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
     const result = await doc.send(new GetCommand({ TableName: communicationsTableName, Key: { commId } }));
@@ -131,7 +173,7 @@ async function pollForCommunicationRecord(
   }
 
   fail(
-    `Communication record ${commId} did not appear within ${POLL_TIMEOUT_MS / 1000}s. ` +
+    `Communication record ${commId} did not appear within the verify-ingest budget. ` +
       'Check the poller/processor Lambda logs and the DLQ.',
   );
 }
@@ -208,10 +250,16 @@ async function main() {
   console.log(`[verify-ingest] Using account ${account.accountId} (${account.address})`);
   const gmail = await createGmailClient(account.accountId);
 
-  const messageId = await sendSelfAddressedProbe(gmail, account.address);
-  const commId = `gmail#${messageId}`;
+  // One shared 90s budget covers both polling stages (inbox-copy delivery, then DynamoDB
+  // ingestion) rather than 90s per stage — Gmail self-send delivery is normally near-instant, so
+  // the bulk of the budget is expected to go to waiting for the once-a-minute poller Lambda tick.
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
 
-  const record = await pollForCommunicationRecord(communicationsTableName, commId);
+  const { sentId, threadId } = await sendSelfAddressedProbe(gmail, account.address);
+  const inboxMessageId = await pollForInboxCopyId(gmail, threadId, sentId, deadline);
+  const commId = `gmail#${inboxMessageId}`;
+
+  const record = await pollForCommunicationRecord(communicationsTableName, commId, deadline);
   console.log(`[verify-ingest] Communication record found: commId=${record.commId} status=${record.status}`);
 
   if (record.status !== 'ingested') {
@@ -220,11 +268,14 @@ async function main() {
 
   await checkMessageIngestedMetric();
 
-  console.log('\n[verify-ingest] Proving conditional-write dedupe: replaying the same message id...');
-  const replayResult = await invokeProcessorDirectly(processorFunctionName, account.accountId, messageId);
+  console.log('\n[verify-ingest] Proving conditional-write dedupe: replaying the inbox-copy message id...');
+  const replayResult = await invokeProcessorDirectly(processorFunctionName, account.accountId, inboxMessageId);
   console.log('[verify-ingest] Replay processor response:', JSON.stringify(replayResult));
 
-  const recordAfterReplay = await pollForCommunicationRecord(communicationsTableName, commId);
+  // The replay must resolve immediately (the record already exists), so give it its own short
+  // budget independent of the now-expired outer deadline rather than failing on a technicality.
+  const replayDeadline = Date.now() + POLL_INTERVAL_MS * 3;
+  const recordAfterReplay = await pollForCommunicationRecord(communicationsTableName, commId, replayDeadline);
   if (recordAfterReplay.ingestedAt !== record.ingestedAt) {
     fail('ingestedAt changed after replay — the record was overwritten instead of deduped.');
   }

@@ -1,4 +1,4 @@
-import { SQSClient, SendMessageBatchCommand } from '@aws-sdk/client-sqs';
+import { SQSClient, SendMessageBatchCommand, type SendMessageBatchCommandOutput } from '@aws-sdk/client-sqs';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 import { logMetrics } from '@aws-lambda-powertools/metrics/middleware';
@@ -17,18 +17,60 @@ const SQS_BATCH_SIZE = 10;
 
 const sqs = new SQSClient({});
 
+export type SendMessageBatchFn = (
+  entries: { Id: string; MessageBody: string }[],
+) => Promise<SendMessageBatchCommandOutput>;
+
+async function sendBatchViaSqs(
+  entries: { Id: string; MessageBody: string }[],
+): Promise<SendMessageBatchCommandOutput> {
+  return sqs.send(new SendMessageBatchCommand({ QueueUrl: INGEST_QUEUE_URL, Entries: entries }));
+}
+
+/**
+ * Sends one batch (<=10 entries) and retries any partially-failed entries once (brief: a
+ * `SendMessageBatch` response can report some entries `Failed` while others succeed — a single
+ * throttled/transient entry should not be silently dropped nor should it fail the whole batch
+ * without a retry). If any entry is still `Failed` after the retry, throws so the caller (one
+ * account's `pollAccount` call) does not advance its history cursor this tick — the next tick's
+ * `history.list` will find the same messages again, and dedupe protects any that already made it
+ * onto the queue.
+ */
+export async function sendBatchWithRetry(
+  entries: { Id: string; MessageBody: string }[],
+  send: SendMessageBatchFn,
+  log: Pick<typeof logger, 'warn' | 'error'>,
+): Promise<void> {
+  const first = await send(entries);
+  const firstFailed = first.Failed ?? [];
+  if (firstFailed.length === 0) return;
+
+  log.warn('SendMessageBatch reported partial failures, retrying failed entries once', {
+    failedCount: firstFailed.length,
+    totalCount: entries.length,
+  });
+
+  const retryEntries = entries.filter((e) => firstFailed.some((f) => f.Id === e.Id));
+  const retry = await send(retryEntries);
+  const stillFailed = retry.Failed ?? [];
+
+  if (stillFailed.length > 0) {
+    log.error('SendMessageBatch entries failed after retry — cursor will not advance this tick', {
+      stillFailedCount: stillFailed.length,
+      totalCount: entries.length,
+      codes: stillFailed.map((f) => f.Code),
+    });
+    throw new Error(
+      `SendMessageBatch: ${stillFailed.length}/${entries.length} entries still failed after one retry`,
+    );
+  }
+}
+
 async function enqueueToSqs(messages: EnqueueMessage[]): Promise<void> {
   for (let i = 0; i < messages.length; i += SQS_BATCH_SIZE) {
     const batch = messages.slice(i, i + SQS_BATCH_SIZE);
-    await sqs.send(
-      new SendMessageBatchCommand({
-        QueueUrl: INGEST_QUEUE_URL,
-        Entries: batch.map((m, index) => ({
-          Id: `${i + index}`,
-          MessageBody: JSON.stringify(m),
-        })),
-      }),
-    );
+    const entries = batch.map((m, index) => ({ Id: `${i + index}`, MessageBody: JSON.stringify(m) }));
+    await sendBatchWithRetry(entries, sendBatchViaSqs, logger);
   }
 }
 

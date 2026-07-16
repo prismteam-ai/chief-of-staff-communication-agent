@@ -29,11 +29,39 @@ export interface PollAccountResult {
 }
 
 /**
+ * True when `error` is the Gmail API's 404 for `users.history.list` called with a `startHistoryId`
+ * that has aged out of Gmail's history retention window (Gmail keeps history records for a
+ * rolling ~1 week; an account left unpolled longer than that — e.g. a paused EventBridge schedule
+ * or a long deploy gap — has a cursor Gmail can no longer resolve). `googleapis`/`gaxios` surfaces
+ * this as a thrown error whose HTTP status shows up under any of `code`, `status`, or
+ * `response.status` depending on client version, so all three are checked defensively.
+ */
+function isExpiredHistoryCursorError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const err = error as { code?: unknown; status?: unknown; response?: { status?: unknown } };
+  return err.code === 404 || err.status === 404 || err.response?.status === 404;
+}
+
+/**
  * Polls one account: seeds the cursor on first run (no messages enqueued — continuous-seeding
  * decision, not backfill), otherwise walks `history.list` (paginating via `nextPageToken`) and
  * enqueues every `messagesAdded` message id found, then advances the stored cursor to the
  * response's `historyId`.
  */
+async function seedHistoryCursor(
+  gmail: gmail_v1.Gmail,
+  account: StoredAccount,
+  accountsRepo: AccountsRepo,
+): Promise<string> {
+  const profile = await gmail.users.getProfile({ userId: 'me' });
+  const historyId = profile.data.historyId;
+  if (!historyId) {
+    throw new Error(`users.getProfile for account ${account.accountId} returned no historyId`);
+  }
+  await accountsRepo.updateHistoryCursor(account.accountId, historyId);
+  return historyId;
+}
+
 export async function pollAccount(
   account: StoredAccount,
   gmailClientFactory: GmailClientFactory,
@@ -44,12 +72,7 @@ export async function pollAccount(
   const gmail = await gmailClientFactory(account.accountId);
 
   if (!account.historyCursor) {
-    const profile = await gmail.users.getProfile({ userId: 'me' });
-    const historyId = profile.data.historyId;
-    if (!historyId) {
-      throw new Error(`users.getProfile for account ${account.accountId} returned no historyId`);
-    }
-    await accountsRepo.updateHistoryCursor(account.accountId, historyId);
+    await seedHistoryCursor(gmail, account, accountsRepo);
     log.info('Seeded Gmail history cursor (no backfill)', { accountId: account.accountId });
     return { accountId: account.accountId, seeded: true, enqueuedCount: 0 };
   }
@@ -58,26 +81,46 @@ export async function pollAccount(
   let pageToken: string | undefined;
   let latestHistoryId = account.historyCursor;
 
-  do {
-    const response = await gmail.users.history.list({
-      userId: 'me',
-      startHistoryId: account.historyCursor,
-      historyTypes: ['messageAdded'],
-      pageToken,
-    });
+  try {
+    do {
+      const response = await gmail.users.history.list({
+        userId: 'me',
+        startHistoryId: account.historyCursor,
+        historyTypes: ['messageAdded'],
+        pageToken,
+      });
 
-    for (const record of response.data.history ?? []) {
-      for (const added of record.messagesAdded ?? []) {
-        const id = added.message?.id;
-        if (id) messageIds.add(id);
+      for (const record of response.data.history ?? []) {
+        for (const added of record.messagesAdded ?? []) {
+          const id = added.message?.id;
+          if (id) messageIds.add(id);
+        }
       }
-    }
 
-    if (response.data.historyId) {
-      latestHistoryId = response.data.historyId;
-    }
-    pageToken = response.data.nextPageToken ?? undefined;
-  } while (pageToken);
+      if (response.data.historyId) {
+        latestHistoryId = response.data.historyId;
+      }
+      pageToken = response.data.nextPageToken ?? undefined;
+    } while (pageToken);
+  } catch (error) {
+    if (!isExpiredHistoryCursorError(error)) throw error;
+
+    // The stored cursor is older than Gmail's history retention window, so `history.list` can
+    // never resolve it again — any messages that arrived in the unpolled gap are unrecoverable
+    // through this endpoint (Gmail does not offer a way to list "everything since a historyId
+    // that no longer exists"). We deliberately accept that gap as lost rather than falling back
+    // to a full backfill (out of scope per the continuous-seeding decision this poller already
+    // follows on first run) and re-seed from the current profile so polling resumes cleanly on
+    // the next tick. This is a real, visible data-loss event, not a silent skip — it is logged at
+    // `warn` (not just `info`) specifically so it is distinguishable from routine ticks.
+    log.warn('Gmail history cursor expired (404) — messages in the unpolled gap are lost; re-seeding cursor', {
+      accountId: account.accountId,
+      staleCursor: account.historyCursor,
+    });
+    await seedHistoryCursor(gmail, account, accountsRepo);
+    // No messages are enqueued for a re-seed, matching the first-run (no-backfill) path above.
+    return { accountId: account.accountId, seeded: true, enqueuedCount: 0 };
+  }
 
   if (messageIds.size > 0) {
     await enqueue(
