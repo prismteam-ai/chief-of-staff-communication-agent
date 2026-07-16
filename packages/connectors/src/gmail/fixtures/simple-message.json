@@ -1,0 +1,50 @@
+{
+  "id": "18f2a1c3d4e5f601",
+  "threadId": "18f2a1c3d4e5f601",
+  "labelIds": ["INBOX", "UNREAD", "IMPORTANT"],
+  "snippet": "Just checking in on the Q3 budget review — can we confirm the meeting slot for Thursday?",
+  "historyId": "1048576",
+  "internalDate": "1752577200000",
+  "payload": {
+    "partId": "",
+    "mimeType": "multipart/alternative",
+    "filename": "",
+    "headers": [
+      { "name": "Delivered-To", "value": "demoalex775@gmail.com" },
+      { "name": "Message-ID", "value": "<CAF+budget-check-001@mail.gmail.com>" },
+      { "name": "Date", "value": "Wed, 15 Jul 2026 09:00:00 -0400" },
+      { "name": "Subject", "value": "Q3 budget review — confirm Thursday?" },
+      { "name": "From", "value": "Priya Natarajan <priya.natarajan@northwind-consulting.com>" },
+      { "name": "To", "value": "Alex Rivera <demoalex775@gmail.com>" },
+      { "name": "Content-Type", "value": "multipart/alternative; boundary=\"000000000000aaa\"" }
+    ],
+    "body": { "size": 0 },
+    "parts": [
+      {
+        "partId": "0",
+        "mimeType": "text/plain",
+        "filename": "",
+        "headers": [
+          { "name": "Content-Type", "value": "text/plain; charset=\"UTF-8\"" }
+        ],
+        "body": {
+          "size": 143,
+          "data": "SGkgQWxleCwNCg0KSnVzdCBjaGVja2luZyBpbiBvbiB0aGUgUTMgYnVkZ2V0IHJldmlldyDigJQgY2FuIHdlIGNvbmZpcm0gdGhlIG1lZXRpbmcgc2xvdCBmb3IgVGh1cnNkYXk_DQoNClRoYW5rcywNClByaXlh"
+        }
+      },
+      {
+        "partId": "1",
+        "mimeType": "text/html",
+        "filename": "",
+        "headers": [
+          { "name": "Content-Type", "value": "text/html; charset=\"UTF-8\"" }
+        ],
+        "body": {
+          "size": 187,
+          "data": "PGRpdj5IaSBBbGV4LDxicj48YnI-SnVzdCBjaGVja2luZyBpbiBvbiB0aGUgUTMgYnVkZ2V0IHJldmlldyDigJQgY2FuIHdlIGNvbmZpcm0gdGhlIG1lZXRpbmcgc2xvdCBmb3IgVGh1cnNkYXk_PGJyPjxicj5UaGFua3MsPGJyPlByaXlhPC9kaXY-"
+        }
+      }
+    ]
+  },
+  "sizeEstimate": 2481
+}

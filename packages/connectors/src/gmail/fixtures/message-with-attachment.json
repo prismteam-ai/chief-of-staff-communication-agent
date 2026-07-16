@@ -1,0 +1,121 @@
+{
+  "id": "18f2c4a9e5f60703",
+  "threadId": "18f2c4a9e5f60703",
+  "labelIds": [
+    "INBOX",
+    "UNREAD"
+  ],
+  "snippet": "Please find attached the signed vendor agreement for your records.",
+  "historyId": "1049112",
+  "internalDate": "1752584400000",
+  "payload": {
+    "partId": "",
+    "mimeType": "multipart/mixed",
+    "filename": "",
+    "headers": [
+      {
+        "name": "Delivered-To",
+        "value": "demoalex775@gmail.com"
+      },
+      {
+        "name": "Message-ID",
+        "value": "<CAF+vendor-agreement-001@mail.gmail.com>"
+      },
+      {
+        "name": "Date",
+        "value": "Wed, 15 Jul 2026 11:00:00 -0400"
+      },
+      {
+        "name": "Subject",
+        "value": "Signed vendor agreement attached"
+      },
+      {
+        "name": "From",
+        "value": "Marta Kowalczyk <marta.kowalczyk@brightpath-vendors.com>"
+      },
+      {
+        "name": "To",
+        "value": "Alex Rivera <demoalex775@gmail.com>"
+      },
+      {
+        "name": "Content-Type",
+        "value": "multipart/mixed; boundary=\"000000000000ddd\""
+      }
+    ],
+    "body": {
+      "size": 0
+    },
+    "parts": [
+      {
+        "partId": "0",
+        "mimeType": "multipart/alternative",
+        "filename": "",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "multipart/alternative; boundary=\"000000000000eee\""
+          }
+        ],
+        "body": {
+          "size": 0
+        },
+        "parts": [
+          {
+            "partId": "0.0",
+            "mimeType": "text/plain",
+            "filename": "",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "text/plain; charset=\"UTF-8\""
+              }
+            ],
+            "body": {
+              "size": 70,
+              "data": "SGkgQWxleCwNCg0KUGxlYXNlIGZpbmQgYXR0YWNoZWQgdGhlIHNpZ25lZCB2ZW5kb3IgYWdyZWVtZW50Lg0KDQpNYXJ0YQ"
+            }
+          },
+          {
+            "partId": "0.1",
+            "mimeType": "text/html",
+            "filename": "",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=\"UTF-8\""
+              }
+            ],
+            "body": {
+              "size": 89,
+              "data": "PGRpdj5IaSBBbGV4LDxicj48YnI-UGxlYXNlIGZpbmQgYXR0YWNoZWQgdGhlIHNpZ25lZCB2ZW5kb3IgYWdyZWVtZW50Ljxicj48YnI-TWFydGE8L2Rpdj4"
+            }
+          }
+        ]
+      },
+      {
+        "partId": "1",
+        "mimeType": "application/pdf",
+        "filename": "vendor-agreement-signed.pdf",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/pdf; name=\"vendor-agreement-signed.pdf\""
+          },
+          {
+            "name": "Content-Disposition",
+            "value": "attachment; filename=\"vendor-agreement-signed.pdf\""
+          },
+          {
+            "name": "Content-Transfer-Encoding",
+            "value": "base64"
+          }
+        ],
+        "body": {
+          "attachmentId": "ANGjdJ_attachment-001-vendor-agreement",
+          "size": 184320
+        }
+      }
+    ]
+  },
+  "sizeEstimate": 189440
+}

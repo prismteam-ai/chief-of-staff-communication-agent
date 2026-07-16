@@ -1,0 +1,53 @@
+{
+  "id": "18f2b8f1b2d3e402",
+  "threadId": "18f2b7e0a1c2d301",
+  "labelIds": ["INBOX"],
+  "snippet": "Following up — are you available tomorrow at 2pm to walk through the two clauses?",
+  "historyId": "1048955",
+  "internalDate": "1752652800000",
+  "payload": {
+    "partId": "",
+    "mimeType": "multipart/alternative",
+    "filename": "",
+    "headers": [
+      { "name": "Delivered-To", "value": "demoalex775@gmail.com" },
+      { "name": "Message-ID", "value": "<CAF+contract-thread-002@mail.gmail.com>" },
+      { "name": "In-Reply-To", "value": "<CAF+contract-thread-001@mail.gmail.com>" },
+      { "name": "References", "value": "<CAF+contract-thread-001@mail.gmail.com>" },
+      { "name": "Date", "value": "Thu, 16 Jul 2026 06:00:00 -0400" },
+      { "name": "Subject", "value": "Re: Meridian rollout contract — two clauses to discuss" },
+      { "name": "From", "value": "Daniel Osei <daniel.osei@meridian-partners.io>" },
+      { "name": "To", "value": "Alex Rivera <demoalex775@gmail.com>" },
+      { "name": "Cc", "value": "Legal <legal@meridian-partners.io>" },
+      { "name": "Content-Type", "value": "multipart/alternative; boundary=\"000000000000ccc\"" }
+    ],
+    "body": { "size": 0 },
+    "parts": [
+      {
+        "partId": "0",
+        "mimeType": "text/plain",
+        "filename": "",
+        "headers": [
+          { "name": "Content-Type", "value": "text/plain; charset=\"UTF-8\"" }
+        ],
+        "body": {
+          "size": 98,
+          "data": "Rm9sbG93aW5nIHVwIOKAlCBhcmUgeW91IGF2YWlsYWJsZSB0b21vcnJvdyBhdCAycG0gdG8gd2FsayB0aHJvdWdoIHRoZSB0d28gY2xhdXNlcz8NCg0KRGFuaWVs"
+        }
+      },
+      {
+        "partId": "1",
+        "mimeType": "text/html",
+        "filename": "",
+        "headers": [
+          { "name": "Content-Type", "value": "text/html; charset=\"UTF-8\"" }
+        ],
+        "body": {
+          "size": 130,
+          "data": "PGRpdj5Gb2xsb3dpbmcgdXAg4oCUIGFyZSB5b3UgYXZhaWxhYmxlIHRvbW9ycm93IGF0IDJwbSB0byB3YWxrIHRocm91Z2ggdGhlIHR3byBjbGF1c2VzPzxicj48YnI-RGFuaWVsPC9kaXY-"
+        }
+      }
+    ]
+  },
+  "sizeEstimate": 2890
+}

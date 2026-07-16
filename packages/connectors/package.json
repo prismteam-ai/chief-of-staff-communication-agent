@@ -13,6 +13,10 @@
     "./testing": {
       "types": "./dist/contract-test.d.ts",
       "default": "./dist/contract-test.js"
+    },
+    "./gmail": {
+      "types": "./dist/gmail/index.d.ts",
+      "default": "./dist/gmail/index.js"
     }
   },
   "scripts": {

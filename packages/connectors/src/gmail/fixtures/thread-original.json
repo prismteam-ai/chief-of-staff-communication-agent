@@ -1,0 +1,86 @@
+{
+  "id": "18f2b7e0a1c2d301",
+  "threadId": "18f2b7e0a1c2d301",
+  "labelIds": [
+    "INBOX",
+    "IMPORTANT"
+  ],
+  "snippet": "We reviewed the draft contract for the Meridian rollout and have two clauses we'd like to discuss before signing.",
+  "historyId": "1048701",
+  "internalDate": "1752580800000",
+  "payload": {
+    "partId": "",
+    "mimeType": "multipart/alternative",
+    "filename": "",
+    "headers": [
+      {
+        "name": "Delivered-To",
+        "value": "demoalex775@gmail.com"
+      },
+      {
+        "name": "Message-ID",
+        "value": "<CAF+contract-thread-001@mail.gmail.com>"
+      },
+      {
+        "name": "Date",
+        "value": "Wed, 15 Jul 2026 10:00:00 -0400"
+      },
+      {
+        "name": "Subject",
+        "value": "Meridian rollout contract \u2014 two clauses to discuss"
+      },
+      {
+        "name": "From",
+        "value": "Daniel Osei <daniel.osei@meridian-partners.io>"
+      },
+      {
+        "name": "To",
+        "value": "Alex Rivera <demoalex775@gmail.com>"
+      },
+      {
+        "name": "Cc",
+        "value": "Legal <legal@meridian-partners.io>"
+      },
+      {
+        "name": "Content-Type",
+        "value": "multipart/alternative; boundary=\"000000000000bbb\""
+      }
+    ],
+    "body": {
+      "size": 0
+    },
+    "parts": [
+      {
+        "partId": "0",
+        "mimeType": "text/plain",
+        "filename": "",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "text/plain; charset=\"UTF-8\""
+          }
+        ],
+        "body": {
+          "size": 159,
+          "data": "SGkgQWxleCwNCg0KV2UgcmV2aWV3ZWQgdGhlIGRyYWZ0IGNvbnRyYWN0IGZvciB0aGUgTWVyaWRpYW4gcm9sbG91dCBhbmQgaGF2ZSB0d28gY2xhdXNlcyB3ZSdkIGxpa2UgdG8gZGlzY3VzcyBiZWZvcmUgc2lnbmluZy4gQ2FuIHdlIGdyYWIgMTUgbWludXRlcz8NCg0KRGFuaWVs"
+        }
+      },
+      {
+        "partId": "1",
+        "mimeType": "text/html",
+        "filename": "",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "text/html; charset=\"UTF-8\""
+          }
+        ],
+        "body": {
+          "size": 154,
+          "data": "PGRpdj5IaSBBbGV4LDxicj48YnI-V2UgcmV2aWV3ZWQgdGhlIGRyYWZ0IGNvbnRyYWN0IGZvciB0aGUgTWVyaWRpYW4gcm9sbG91dCBhbmQgaGF2ZSB0d28gY2xhdXNlcyB3ZSdkIGxpa2UgdG8gZGlzY3VzcyBiZWZvcmUgc2lnbmluZy48YnI-PGJyPkRhbmllbDwvZGl2Pg"
+        }
+      }
+    ]
+  },
+  "sizeEstimate": 3012
+}
