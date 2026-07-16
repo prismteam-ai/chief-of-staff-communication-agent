@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TRPCError } from '@trpc/server';
+import { getHTTPStatusCodeFromError } from '@trpc/server/http';
 import type { ApiCommunicationRecord, CommunicationsRepo } from '../repos/communications-repo.js';
 import type { AccountsRepo } from '../repos/accounts-repo.js';
 import { createMetricsRouter } from './metrics.js';
@@ -114,7 +115,7 @@ describe('metrics router integration', () => {
     expect(metrics.totalVolume).toBe(2);
   });
 
-  it('rejects cross-user access at the router boundary for every metrics procedure', async () => {
+  it('rejects cross-user access at the router boundary for every metrics procedure with a 403, not a 500 (final-review fix)', async () => {
     const records = [fixture({ commId: 'a1', accountId: ACCOUNT_A })];
     const service = new MetricsService({
       communicationsRepo: inMemoryRepo(records),
@@ -127,12 +128,25 @@ describe('metrics router integration', () => {
     );
     // SECURITY (Task 8.5 brief constraint 7): USER_B's own valid token cannot read ACCOUNT_A's
     // metrics — cross-user denial driven end to end through the router.
+    //
+    // Final-review fix: same class of gap as communications.integration.test.ts's cross-user test —
+    // `.rejects.toThrow()` alone passed even when the underlying `AccountAccessDeniedError` was
+    // surfacing as an unmapped `INTERNAL_SERVER_ERROR` (500). Assert the mapped `TRPCError` code and
+    // resulting HTTP status directly, proving `trpc.ts`'s `domainErrorMappingMiddleware` is applied
+    // globally (this router never touches it directly — it inherits it via `publicProcedure`).
     const token = await issueBearerToken(authService, USER_B);
     const caller = router.createCaller(ctxWithToken(token));
 
-    await expect(caller.getDashboardMetrics({ accountId: ACCOUNT_A })).rejects.toThrow();
-    await expect(caller.listRecommendedActions({ accountId: ACCOUNT_A })).rejects.toThrow();
-    await expect(caller.listDraftsAwaitingApproval({ accountId: ACCOUNT_A })).rejects.toThrow();
+    for (const call of [
+      () => caller.getDashboardMetrics({ accountId: ACCOUNT_A }),
+      () => caller.listRecommendedActions({ accountId: ACCOUNT_A }),
+      () => caller.listDraftsAwaitingApproval({ accountId: ACCOUNT_A }),
+    ]) {
+      const error = await call().catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(TRPCError);
+      expect((error as TRPCError).code).toBe('FORBIDDEN');
+      expect(getHTTPStatusCodeFromError(error as TRPCError)).toBe(403);
+    }
   });
 
   it('listDraftsAwaitingApproval and listRecommendedActions return account-scoped records through the router', async () => {

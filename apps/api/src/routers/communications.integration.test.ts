@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { TRPCError } from '@trpc/server';
+import { getHTTPStatusCodeFromError } from '@trpc/server/http';
 import type { ApiCommunicationRecord, CommunicationsRepo } from '../repos/communications-repo.js';
 import { TransitionConflictError, SendAlreadyClaimedError } from '../repos/communications-repo.js';
 import type { AccountsRepo } from '../repos/accounts-repo.js';
@@ -257,7 +258,7 @@ describe('communications router integration — approve -> send -> answered', ()
     expect(sendCallCount).toBe(1);
   });
 
-  it('rejects cross-user access at the router boundary (account guard, end to end)', async () => {
+  it('rejects cross-user access at the router boundary with a 403 FORBIDDEN, not a 500 (final-review fix)', async () => {
     const repo = inMemoryCommunicationsRepo(fixtureDraftedCommunication());
     const service = new ApprovalService({
       communicationsRepo: repo,
@@ -276,10 +277,20 @@ describe('communications router integration — approve -> send -> answered', ()
     // SECURITY (Task 8.5 brief constraint 7): a token issued for a real but non-owning user cannot
     // read/act on another user's communication — cross-user denial, driven end to end through the
     // router, not just the service's own ownership check.
+    //
+    // Final-review fix: this used to only assert `.rejects.toThrow()`, which passed even while the
+    // underlying `AccountAccessDeniedError` propagated as a raw Error and got normalized by tRPC's
+    // AWS Lambda adapter to `INTERNAL_SERVER_ERROR` (HTTP 500) — a permission denial read as a
+    // server crash. `trpc.ts`'s `domainErrorMappingMiddleware` now catches it and rethrows as a
+    // `TRPCError({ code: 'FORBIDDEN' })`, which `getHTTPStatusCodeFromError` (what
+    // `awsLambdaRequestHandler` uses to set the actual response status) maps to 403.
     const token = await issueBearerToken(authService, 'not-the-owner');
     const caller = router.createCaller(ctxWithToken(token));
 
-    await expect(caller.approveDraft({ commId: COMM_ID })).rejects.toThrow();
+    const error = await caller.approveDraft({ commId: COMM_ID }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(TRPCError);
+    expect((error as TRPCError).code).toBe('FORBIDDEN');
+    expect(getHTTPStatusCodeFromError(error as TRPCError)).toBe(403);
     expect(repo.current().status).toBe('drafted');
   });
 
