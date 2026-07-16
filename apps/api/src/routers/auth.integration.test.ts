@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { TRPCError } from '@trpc/server';
 import { createAuthRouter } from './auth.js';
 import { DashboardLoginService, hashCredential } from '../services/dashboard-login-service.js';
 import { fakeAuthService } from '../test-support/fake-auth-service.js';
@@ -45,21 +46,29 @@ describe('auth router — login', () => {
     await expect(authService.verify(result.token)).resolves.toBe(DEMO_USER_ID);
   });
 
-  it('rejects an invalid password', async () => {
+  it('rejects an invalid password with UNAUTHORIZED (401), not a 500', async () => {
     const { router } = buildRouter();
     const caller = router.createCaller({} as Context);
 
-    await expect(
-      caller.login({ username: DEMO_USERNAME, password: 'not-the-password' }),
-    ).rejects.toThrow();
+    try {
+      await caller.login({ username: DEMO_USERNAME, password: 'not-the-password' });
+      expect.fail('expected a TRPCError');
+    } catch (error) {
+      expect(error).toBeInstanceOf(TRPCError);
+      expect((error as TRPCError).code).toBe('UNAUTHORIZED');
+    }
   });
 
-  it('rejects an unknown username', async () => {
+  it('rejects an unknown username with UNAUTHORIZED (401), not a 500', async () => {
     const { router } = buildRouter();
     const caller = router.createCaller({} as Context);
 
-    await expect(
-      caller.login({ username: 'not-a-real-user', password: DEMO_PASSWORD }),
-    ).rejects.toThrow();
+    try {
+      await caller.login({ username: 'not-a-real-user', password: DEMO_PASSWORD });
+      expect.fail('expected a TRPCError');
+    } catch (error) {
+      expect(error).toBeInstanceOf(TRPCError);
+      expect((error as TRPCError).code).toBe('UNAUTHORIZED');
+    }
   });
 });
