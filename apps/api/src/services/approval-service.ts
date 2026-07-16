@@ -12,6 +12,7 @@ import type { Connector } from '@chief-of-staff/connectors';
 import type { logger as LoggerType, metrics as MetricsType } from '../context.js';
 import type { ApiCommunicationRecord, CommunicationsRepo } from '../repos/communications-repo.js';
 import type { AccountsRepo } from '../repos/accounts-repo.js';
+import type { AgentTrigger } from '../agent-trigger.js';
 
 /**
  * The approval loop's business logic (design.md §7/§8, Task 6 brief constraint 3): every
@@ -41,6 +42,14 @@ export interface ApprovalServiceDeps {
   accountsRepo: AccountsRepo;
   /** Resolves the owning connector for a channel — Gmail today; other channels return `undefined`. */
   connectorFor: (channelType: ChannelType) => Connector | undefined;
+  /**
+   * Re-enqueues a communication to the agent queue once `supplyContext` has persisted the user's
+   * supplied text (Task 6 review fix). Same ingest→agent hand-off `apps/ingest/src/agent-trigger.ts`
+   * uses — re-running the agent turn in-process here would pull the whole Bedrock/RAG/AgentCore
+   * Memory dependency graph into the api Lambda, which owns none of it today; re-enqueuing to the
+   * queue the agent Lambda already consumes is the minimal, cleanly-separated fix.
+   */
+  agentTrigger: AgentTrigger;
   log: Pick<typeof LoggerType, 'info' | 'warn' | 'error'>;
   metricsClient: Pick<typeof MetricsType, 'addMetric'>;
   /** Injectable clock for deterministic tests; defaults to the real current time. */
@@ -75,6 +84,7 @@ export class ApprovalService {
   private readonly communicationsRepo: CommunicationsRepo;
   private readonly accountsRepo: AccountsRepo;
   private readonly connectorFor: (channelType: ChannelType) => Connector | undefined;
+  private readonly agentTrigger: AgentTrigger;
   private readonly log: Pick<typeof LoggerType, 'info' | 'warn' | 'error'>;
   private readonly metricsClient: Pick<typeof MetricsType, 'addMetric'>;
   private readonly now: () => Date;
@@ -83,6 +93,7 @@ export class ApprovalService {
     this.communicationsRepo = deps.communicationsRepo;
     this.accountsRepo = deps.accountsRepo;
     this.connectorFor = deps.connectorFor;
+    this.agentTrigger = deps.agentTrigger;
     this.log = deps.log;
     this.metricsClient = deps.metricsClient;
     this.now = deps.now ?? (() => new Date());
@@ -111,7 +122,7 @@ export class ApprovalService {
     record: ApiCommunicationRecord,
     to: CommunicationState,
     actorId: string,
-    patch?: { draft?: Draft },
+    patch?: { draft?: Draft; appendSuppliedContext?: string },
   ): Promise<TransitionRecord> {
     const transition = applyTransition({
       commId: record.commId,
@@ -246,6 +257,11 @@ export class ApprovalService {
         threadKey: record.threadKey,
         inReplyToExternalId: record.externalId,
         inReplyToMessageId: record.providerMessageIdHeader,
+        // The original message's subject (Task 6 review fix) — `undefined` on legacy records
+        // ingested before `subject` was captured, which `ensureReSubject`/`build-outbound-mime.ts`
+        // already falls back to `(no subject)` for. A freshly ingested message carries the real
+        // subject captured by `normalize.ts`, so the reply correctly threads as `Re: <original>`.
+        subject: record.subject,
         to: replyRecipients,
         body: draft.body,
         idempotencyKey: record.commId,
@@ -368,9 +384,33 @@ export class ApprovalService {
     return { ...record, status: 'dismissed' };
   }
 
-  /** `needs_context → drafted` — recovery edge once the user supplies missing context. The
-   * context TEXT itself is not persisted on the communication record by this task (Task 5's
-   * re-run seam is out of scope here); the transition + audit trail is what Task 6 owns. */
+  /**
+   * `needs_context → awaiting_reprocess` — recovery edge once the user supplies missing context
+   * (Task 6 review fix). A `needs_context` record has NO draft (the agent never got far enough to
+   * write one); the previous `needs_context → drafted` shortcut discarded the supplied text and
+   * landed a draftless record in `drafted`, where the UI's Approve action had nothing to approve
+   * (`IllegalActionError('no draft to approve')`, always). This now:
+   *
+   *   1. persists the supplied text onto the record (`suppliedContext`, appended — never dropped)
+   *   2. transitions `needs_context → awaiting_reprocess` (a state marker: "context supplied,
+   *      agent re-run pending" — not a terminal outcome)
+   *   3. re-enqueues `{commId, accountId}` to the agent queue, the SAME hand-off the ingest
+   *      processor uses (`apps/ingest/src/agent-trigger.ts`) — the agent Lambda already consumes
+   *      this queue, so no new consumer is needed
+   *
+   * The re-triggered agent turn (`run-agent-turn.ts`) re-enters at `awaiting_reprocess →
+   * recommended`, threads `suppliedContext` into the classify/draft prompt as additional history,
+   * and proceeds through the same confidence-gated fork the first pass used — landing in `drafted`
+   * WITH a draft, or back in `needs_context` if still below threshold. Server-side, account-guarded
+   * (via `loadAuthorized` above), and idempotent: `communicationsRepo.transition`'s conditional
+   * write only lets ONE call move a given record off `needs_context`, so a retried request either
+   * lands the same append-and-enqueue exactly once or fails closed with `TransitionConflictError`.
+   *
+   * Fully re-running the agent in-process in this Lambda was considered and rejected: it would pull
+   * Bedrock, the RAG retrieval index, and AgentCore Memory conversation state into the api Lambda,
+   * none of which it owns today (see `ApprovalServiceDeps.agentTrigger`'s doc comment). Re-enqueuing
+   * to the existing agent queue is the clean, minimally-invasive choice given the current wiring.
+   */
   async supplyContext(input: SupplyContextInput): Promise<ApiCommunicationRecord> {
     const record = await this.loadAuthorized(input.commId, input.userId);
     const trimmed = input.text.trim();
@@ -384,9 +424,33 @@ export class ApprovalService {
       );
     }
 
-    await this.move(record, 'drafted', input.userId);
-    this.log.info('Context supplied — back to drafted', { commId: record.commId });
+    await this.move(record, 'awaiting_reprocess', input.userId, {
+      appendSuppliedContext: trimmed,
+    });
 
-    return { ...record, status: 'drafted' };
+    // Isolated the same way the ingest processor treats its agent-trigger publish (see
+    // `agent-trigger.ts`): the context is already durably persisted and the state transition
+    // already committed above — that IS the successful outcome of this call. A publish failure
+    // (or an unwired AGENT_QUEUE_URL) must never roll back or fail the user-visible action; it
+    // degrades to a warn + metric, leaving the record at `awaiting_reprocess` for operator visibility
+    // rather than silently claiming a re-run that didn't actually get enqueued.
+    try {
+      await this.agentTrigger.publish({ commId: record.commId, accountId: record.accountId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.warn('Failed to re-enqueue agent turn after supplyContext — context still saved', {
+        commId: record.commId,
+        error: message,
+      });
+      this.metricsClient.addMetric('AgentReprocessTriggerFailed', MetricUnit.Count, 1);
+    }
+
+    this.log.info('Context supplied — re-enqueued for agent re-run', { commId: record.commId });
+
+    return {
+      ...record,
+      status: 'awaiting_reprocess',
+      suppliedContext: [...(record.suppliedContext ?? []), trimmed],
+    };
   }
 }

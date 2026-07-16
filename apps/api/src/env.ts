@@ -7,6 +7,13 @@ export interface ApiRuntimeEnv {
   readonly region: string;
   readonly communicationsTableName: string;
   readonly accountsTableName: string;
+  /**
+   * The agent queue `supplyContext` re-enqueues a communication to after persisting supplied
+   * context (Task 6 review fix — see `agent-trigger.ts` and `approval-service.ts#supplyContext`).
+   * Empty when the agent stack isn't wired for this deploy; `ApprovalService` degrades to a clear
+   * `IllegalActionError` rather than a crash, same posture as `connectorFor` returning `undefined`.
+   */
+  readonly agentQueueUrl: string;
 }
 
 export function loadApiRuntimeEnv(source: NodeJS.ProcessEnv = process.env): ApiRuntimeEnv {
@@ -14,5 +21,6 @@ export function loadApiRuntimeEnv(source: NodeJS.ProcessEnv = process.env): ApiR
     region: source.AWS_REGION?.trim() || 'us-east-2',
     communicationsTableName: source.COMMUNICATIONS_TABLE_NAME?.trim() ?? '',
     accountsTableName: source.ACCOUNTS_TABLE_NAME?.trim() ?? '',
+    agentQueueUrl: source.AGENT_QUEUE_URL?.trim() ?? '',
   };
 }

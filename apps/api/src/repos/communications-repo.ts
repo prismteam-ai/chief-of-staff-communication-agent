@@ -36,6 +36,14 @@ export interface ApiCommunicationRecord extends NormalizedMessage {
   sendClaimedAt?: string;
   /** Set on provider send confirmation (Gmail's returned message id) — proof the send happened. */
   sentMessageId?: string;
+  /**
+   * Free-text context supplied by the user via `supplyContext` (Task 6 review fix), appended to
+   * (never replacing) any prior entries — a `needs_context` record can be re-supplied more than
+   * once across re-runs. Threaded into the re-triggered agent turn's classify/draft prompt as
+   * additional history so the re-classification is actually grounded in what the user provided,
+   * not discarded.
+   */
+  suppliedContext?: string[];
 }
 
 let cachedClient: DynamoDBDocumentClient | undefined;
@@ -78,11 +86,15 @@ export interface CommunicationsRepo {
    * Applies one already-validated `TransitionRecord` (the caller runs it through
    * `applyTransition` first — this repo does not re-derive legality, only persists it): sets
    * `status` to `record.to`, appends the record to the audit trail, optionally merges `draft`
-   * (the `editDraft` case). The `ConditionExpression` guards against a concurrent/duplicate
-   * writer having already moved the record off `record.from` — fails closed with
-   * `TransitionConflictError` rather than silently double-applying.
+   * (the `editDraft` case) and/or appends one entry to `suppliedContext` (the `supplyContext` case,
+   * Task 6 review fix — see `ApiCommunicationRecord.suppliedContext`). The `ConditionExpression`
+   * guards against a concurrent/duplicate writer having already moved the record off `record.from`
+   * — fails closed with `TransitionConflictError` rather than silently double-applying.
    */
-  transition(record: TransitionRecord, patch?: { draft?: Draft }): Promise<void>;
+  transition(
+    record: TransitionRecord,
+    patch?: { draft?: Draft; appendSuppliedContext?: string },
+  ): Promise<void>;
 
   /**
    * Send-idempotency claim (Task 6 brief constraint 2): a conditional write that only succeeds
@@ -144,6 +156,14 @@ export function createCommunicationsRepo(tableName: string): CommunicationsRepo 
       if (patch?.draft) {
         setClauses.push('draft = :draft');
         values[':draft'] = patch.draft;
+      }
+
+      if (patch?.appendSuppliedContext) {
+        setClauses.push(
+          'suppliedContext = list_append(if_not_exists(suppliedContext, :emptyContext), :newContext)',
+        );
+        values[':emptyContext'] = [] as string[];
+        values[':newContext'] = [patch.appendSuppliedContext];
       }
 
       try {

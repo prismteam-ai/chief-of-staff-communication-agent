@@ -7,6 +7,7 @@ import { ApprovalService } from '../services/approval-service.js';
 import { createCommunicationsRepo } from '../repos/communications-repo.js';
 import { createAccountsRepo } from '../repos/accounts-repo.js';
 import { createRealGmailConnector } from '../gmail-send.js';
+import { createAgentTrigger, noopAgentTrigger } from '../agent-trigger.js';
 import { loadApiRuntimeEnv } from '../env.js';
 import { logger, metrics } from '../context.js';
 
@@ -35,6 +36,10 @@ function approvalService(): ApprovalService {
       communicationsRepo: createCommunicationsRepo(env.communicationsTableName),
       accountsRepo: createAccountsRepo(env.accountsTableName),
       connectorFor,
+      // Unset AGENT_QUEUE_URL (agent stack not wired for this deploy) degrades to a clear
+      // IllegalActionError-free warn+metric inside supplyContext, never a crash — same posture as
+      // `connectorFor` returning `undefined` for a channel with no sendable connector.
+      agentTrigger: env.agentQueueUrl ? createAgentTrigger(env.agentQueueUrl) : noopAgentTrigger,
       log: logger,
       metricsClient: metrics,
     });

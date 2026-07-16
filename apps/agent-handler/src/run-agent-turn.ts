@@ -24,15 +24,28 @@ import type { logger as LoggerType, metrics as MetricsType } from './context.js'
  * integration test drives it with a fake model, an in-memory retrieval index, and fake repos — no
  * AWS, no Bedrock. The orchestration:
  *
- *   1. read the communication record (must be in `ingested`)
- *   2. load conversation history from the ConversationEventStore (session = threadKey)
+ *   1. read the communication record (must be in `ingested` — the first-ever turn — OR
+ *      `awaiting_reprocess` — a `supplyContext` re-run, Task 6 review fix, see below)
+ *   2. load conversation history from the ConversationEventStore (session = threadKey), with any
+ *      `suppliedContext` entries appended as additional history for a re-run turn
  *   3. classify via the AgentRunner (retrieveContext available as a tool) → Recommendation
  *   4. apply the confidence GATE IN CODE (`routeByConfidence`) — never a prompt instruction
- *   5a. below threshold → transition ingested→recommended→needs_context, persist, STOP (no draft)
- *   5b. at/above       → draft, transition ingested→recommended→drafted, persist recommendation+draft
+ *   5a. below threshold → transition <entryState>→recommended→needs_context, persist, STOP (no draft)
+ *   5b. at/above       → draft, transition <entryState>→recommended→drafted, persist recommendation+draft
  *   6. append the turn to the ConversationEventStore (idempotent tokens from the provider msg id),
  *      isolated (`appendTurnIsolated`) so a memory-write failure never flips an already-persisted
  *      outcome to 'failed' — see the helper's doc comment for why that matters for redelivery
+ *
+ * ## Re-run entry point: `awaiting_reprocess` (Task 6 review fix)
+ * `needs_context` communications used to have no way back to a real re-classification — the api
+ * Lambda's `supplyContext` just flipped status to `drafted` directly, discarding the supplied text
+ * and landing a draftless record where the UI's Approve action had nothing to approve. `supplyContext`
+ * now persists the text (`suppliedContext`) and transitions to `awaiting_reprocess`, then re-enqueues
+ * this commId to the SAME agent queue the ingest processor publishes to. This turn treats
+ * `awaiting_reprocess` as an equally-legal ENTRY state to `ingested` (see `resolveEntryState` below)
+ * — everything downstream (classify, gate, draft, transitions, memory append) is identical; only the
+ * first transition's `from` differs (`awaiting_reprocess→recommended` instead of
+ * `ingested→recommended`) and the prompt gains the supplied context as extra history.
  *
  * Logging/metrics carry ids, action type, confidence, and route only — NEVER the message body,
  * participant addresses, or draft text (mirrors `processor-logic.ts`'s discipline; Task 5
@@ -69,6 +82,14 @@ function senderId(record: AgentCommunicationRecord): string {
   return from?.id ?? 'unknown';
 }
 
+/** The two legal entry states for a turn (see the module doc comment's "Re-run entry point"). */
+const ENTRY_STATES = ['ingested', 'awaiting_reprocess'] as const;
+type EntryState = (typeof ENTRY_STATES)[number];
+
+function isEntryState(status: AgentCommunicationRecord['status']): status is EntryState {
+  return (ENTRY_STATES as readonly string[]).includes(status);
+}
+
 export async function runAgentTurn(
   input: RunAgentTurnInput,
   deps: RunAgentTurnDeps,
@@ -93,20 +114,29 @@ export async function runAgentTurn(
       log.warn('Communication not found for agent turn — skipping', { commId });
       return { outcome: 'skipped', commId, reason: 'not_found' };
     }
-    if (record.status !== 'ingested') {
+    if (!isEntryState(record.status)) {
       // Idempotency: a redelivery of an already-processed communication is a no-op, not a re-run.
-      log.info('Communication not in ingested state — skipping agent turn', {
+      // `ingested` is the first-ever turn; `awaiting_reprocess` is the `supplyContext` re-run entry
+      // point (Task 6 review fix — see the module doc comment). Any other status means this turn
+      // already ran (or is mid-flight) for this commId.
+      log.info('Communication not in an entry state — skipping agent turn', {
         commId,
         status: record.status,
       });
       return { outcome: 'skipped', commId, reason: `status_${record.status}` };
     }
+    const entryState: EntryState = record.status;
 
     const sessionId = record.threadKey;
     const actorId = senderId(record);
 
     const history = await conversationStore.loadSessionEvents(sessionId, actorId);
     const historyText = history.map((e) => `[${e.kind}] ${e.text}`);
+    // Supplied context (Task 6 review fix) is appended as additional history, most-recent-supplied
+    // last — same "oldest first" ordering `buildPrompt` (agent.ts) already assumes for `history`.
+    for (const supplied of record.suppliedContext ?? []) {
+      historyText.push(`[user_supplied_context] ${supplied}`);
+    }
 
     const retrieveContextTool = createRetrieveContextTool({ retrievalIndex, accountId });
 
@@ -138,6 +168,7 @@ export async function runAgentTurn(
       const transitions = twoHopTransitions({
         commId,
         accountId,
+        from: entryState,
         to: 'needs_context',
         now,
       });
@@ -180,7 +211,13 @@ export async function runAgentTurn(
     const draft: Draft = shapeDraft({ commId, accountId }, draftOutput);
     metricsClient.addMetric('DraftProduced', MetricUnit.Count, 1);
 
-    const transitions = twoHopTransitions({ commId, accountId, to: 'drafted', now });
+    const transitions = twoHopTransitions({
+      commId,
+      accountId,
+      from: entryState,
+      to: 'drafted',
+      now,
+    });
     await communicationsRepo.persistOutcome({
       commId,
       status: 'drafted',
@@ -220,22 +257,25 @@ export async function runAgentTurn(
 }
 
 /**
- * Builds the two transition records for one agent turn: `ingested → recommended` then
- * `recommended → <to>` (`drafted` or `needs_context`). Both are validated by `applyTransition`
- * against the shared state machine, so an illegal move throws (and the turn fails visibly) rather
- * than persisting an impossible state.
+ * Builds the two transition records for one agent turn: `<from> → recommended` then
+ * `recommended → <to>` (`drafted` or `needs_context`). `from` is the turn's entry state — `ingested`
+ * for the first-ever turn, `awaiting_reprocess` for a `supplyContext` re-run (Task 6 review fix; see
+ * the module doc comment). Both hops are validated by `applyTransition` against the shared state
+ * machine, so an illegal move throws (and the turn fails visibly) rather than persisting an
+ * impossible state.
  */
 function twoHopTransitions(params: {
   commId: string;
   accountId: string;
+  from: EntryState;
   to: 'drafted' | 'needs_context';
   now: () => Date;
 }): TransitionRecord[] {
-  const { commId, accountId, to, now } = params;
+  const { commId, accountId, from, to, now } = params;
   const first = applyTransition({
     commId,
     accountId,
-    from: 'ingested',
+    from,
     to: 'recommended',
     actorId: 'system',
     now,

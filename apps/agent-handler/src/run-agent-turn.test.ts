@@ -240,8 +240,22 @@ describe('runAgentTurn — memory append is isolated from the turn outcome', () 
 });
 
 describe('runAgentTurn — idempotency / skip paths', () => {
-  it('skips a communication that is not in ingested state', async () => {
+  it('skips a communication that is not in an entry state (ingested or awaiting_reprocess)', async () => {
     const { repo, persisted } = fakeRepo(baseRecord({ status: 'drafted' }));
+    const runner = fakeRunner(
+      { actionType: 'reply_needed', confidence: 0.9, rationale: 'r' },
+      { body: 'b', confidence: 0.9 },
+    );
+    const result = await runAgentTurn(
+      { commId: 'gmail#ext-1', accountId: 'acct-1' },
+      { ...commonDeps, agentRunner: runner, communicationsRepo: repo },
+    );
+    expect(result.outcome).toBe('skipped');
+    expect(persisted).toHaveLength(0);
+  });
+
+  it('also skips a needs_context communication directly (must go through awaiting_reprocess first)', async () => {
+    const { repo, persisted } = fakeRepo(baseRecord({ status: 'needs_context' }));
     const runner = fakeRunner(
       { actionType: 'reply_needed', confidence: 0.9, rationale: 'r' },
       { body: 'b', confidence: 0.9 },
@@ -282,5 +296,100 @@ describe('runAgentTurn — idempotency / skip paths', () => {
     );
     expect(result.outcome).toBe('failed');
     expect(metricsClient.addMetric).toHaveBeenCalledWith('AgentTurnFailed', expect.anything(), 1);
+  });
+});
+
+describe('runAgentTurn — awaiting_reprocess re-run (Task 6 review fix: supplyContext no longer a dead-end)', () => {
+  it('re-classifies from awaiting_reprocess and lands in drafted WITH a draft when confidence clears the gate', async () => {
+    const { repo, persisted } = fakeRepo(
+      baseRecord({
+        status: 'awaiting_reprocess',
+        suppliedContext: ['The renewal deadline is Friday.'],
+      }),
+    );
+    const runner = fakeRunner(
+      { actionType: 'reply_needed', confidence: 0.85, rationale: 'Deadline now known.' },
+      { body: 'Confirmed — renewal will be handled by Friday.', confidence: 0.8 },
+    );
+
+    const result = await runAgentTurn(
+      { commId: 'gmail#ext-1', accountId: 'acct-1' },
+      { ...commonDeps, agentRunner: runner, communicationsRepo: repo },
+    );
+
+    expect(result.outcome).toBe('recommended_and_drafted');
+    const outcome = persisted[0]!;
+    expect(outcome.status).toBe('drafted');
+    expect(outcome.draft?.body).toContain('Friday');
+    // First hop starts from awaiting_reprocess, not ingested — the re-run's real entry state.
+    expect(outcome.transitions.map((t) => `${t.from}->${t.to}`)).toEqual([
+      'awaiting_reprocess->recommended',
+      'recommended->drafted',
+    ]);
+    for (const t of outcome.transitions) {
+      expect(canTransition(t.from, t.to)).toBe(true);
+    }
+  });
+
+  it('threads suppliedContext into the classify/draft prompt as additional history', async () => {
+    const { repo } = fakeRepo(
+      baseRecord({
+        status: 'awaiting_reprocess',
+        suppliedContext: ['The renewal deadline is Friday.'],
+      }),
+    );
+    let classifyHistory: string[] = [];
+    let draftHistory: string[] = [];
+    const runner: AgentRunner = {
+      classify: async (input) => {
+        classifyHistory = input.history;
+        return { actionType: 'reply_needed', confidence: 0.85, rationale: 'r' };
+      },
+      draft: async (input) => {
+        draftHistory = input.history;
+        return { body: 'b', confidence: 0.8 };
+      },
+    };
+
+    await runAgentTurn(
+      { commId: 'gmail#ext-1', accountId: 'acct-1' },
+      { ...commonDeps, agentRunner: runner, communicationsRepo: repo },
+    );
+
+    expect(classifyHistory.some((h) => h.includes('The renewal deadline is Friday.'))).toBe(true);
+    expect(draftHistory.some((h) => h.includes('The renewal deadline is Friday.'))).toBe(true);
+  });
+
+  it('routes back to needs_context (still no draft) if the re-run is still below threshold', async () => {
+    const { repo, persisted } = fakeRepo(
+      baseRecord({ status: 'awaiting_reprocess', suppliedContext: ['Vague context.'] }),
+    );
+    const draftSpy = vi.fn(async () => ({ body: 'should not be produced', confidence: 0.4 }));
+    const runner: AgentRunner = {
+      classify: async () => ({
+        actionType: 'reply_needed',
+        confidence: 0.35,
+        rationale: 'Still unsure.',
+      }),
+      draft: draftSpy,
+    };
+
+    const result = await runAgentTurn(
+      { commId: 'gmail#ext-1', accountId: 'acct-1' },
+      { ...commonDeps, agentRunner: runner, communicationsRepo: repo },
+    );
+
+    expect(result.outcome).toBe('needs_context');
+    expect(draftSpy).not.toHaveBeenCalled();
+    const outcome = persisted[0]!;
+    expect(outcome.status).toBe('needs_context');
+    expect(outcome.draft).toBeUndefined();
+    expect(outcome.transitions.map((t) => `${t.from}->${t.to}`)).toEqual([
+      'awaiting_reprocess->recommended',
+      'recommended->needs_context',
+    ]);
+    for (const t of outcome.transitions) {
+      expect(canTransition(t.from, t.to)).toBe(true);
+    }
   });
 });

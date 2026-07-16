@@ -26,6 +26,14 @@ export interface AgentCommunicationRecord extends NormalizedMessage {
   recommendation?: Recommendation;
   draft?: Draft;
   transitions?: TransitionRecord[];
+  /**
+   * Free-text context the user supplied via the api Lambda's `supplyContext` (Task 6 review fix —
+   * see `apps/api/src/services/approval-service.ts#supplyContext`), present when this turn is a
+   * re-run of a `needs_context` communication. `run-agent-turn.ts` threads every entry into the
+   * classify/draft prompt as additional history so the re-classification is actually grounded in
+   * it, not just re-run blind against the original message.
+   */
+  suppliedContext?: string[];
 }
 
 let cachedClient: DynamoDBDocumentClient | undefined;

@@ -5,6 +5,7 @@ import type { AccountsRepo } from '../repos/accounts-repo.js';
 import type { Connector } from '@chief-of-staff/connectors';
 import { createCommunicationsRouter } from './communications.js';
 import { ApprovalService } from '../services/approval-service.js';
+import type { AgentTrigger } from '../agent-trigger.js';
 import type { Context } from '../context.js';
 
 /**
@@ -39,6 +40,7 @@ function fixtureDraftedCommunication(): ApiCommunicationRecord {
       },
     ],
     ts: '2026-07-16T12:55:24.000Z',
+    subject: 'Reorg heads up — routing intros going forward',
     body: "Hi Renee,\n\nThanks for the heads up on the reorg — I'll route future intros through the new structure.\n\nBest,\nAlex",
     attachments: [],
     status: 'drafted',
@@ -110,6 +112,10 @@ function inMemoryCommunicationsRepo(
   };
 }
 
+function noopAgentTrigger(): AgentTrigger {
+  return { publish: async () => {} };
+}
+
 function inMemoryAccountsRepo(): AccountsRepo {
   return {
     async getOwner(accountId) {
@@ -144,6 +150,7 @@ describe('communications router integration — approve -> send -> answered', ()
       communicationsRepo: repo,
       accountsRepo: inMemoryAccountsRepo(),
       connectorFor: () => fakeGmailConnector,
+      agentTrigger: noopAgentTrigger(),
       log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       metricsClient: { addMetric: vi.fn() },
       now: () => new Date('2026-07-16T18:00:00.000Z'),
@@ -166,6 +173,7 @@ describe('communications router integration — approve -> send -> answered', ()
       threadKey: string;
       inReplyToExternalId?: string;
       inReplyToMessageId?: string;
+      subject?: string;
       to: string[];
       body: string;
     };
@@ -173,6 +181,8 @@ describe('communications router integration — approve -> send -> answered', ()
     expect(sent.threadKey).toBe('19f6aff00ee81d98');
     expect(sent.inReplyToExternalId).toBe('19f6aff00ee81d98');
     expect(sent.inReplyToMessageId).toBe('<CAF+reorg-thread-001@mail.gmail.com>');
+    // Task 6 review fix: the captured subject reaches connector.send end to end through the router.
+    expect(sent.subject).toBe('Reorg heads up — routing intros going forward');
     expect(sent.to).toEqual(['renee.castellano@harborline-partners.com']);
     expect(sent.body).toContain('Thanks for confirming, Alex');
   });
@@ -199,6 +209,7 @@ describe('communications router integration — approve -> send -> answered', ()
       communicationsRepo: repo,
       accountsRepo: inMemoryAccountsRepo(),
       connectorFor: () => fakeGmailConnector,
+      agentTrigger: noopAgentTrigger(),
       log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       metricsClient: { addMetric: vi.fn() },
       now: () => new Date('2026-07-16T18:00:00.000Z'),
@@ -221,6 +232,7 @@ describe('communications router integration — approve -> send -> answered', ()
       communicationsRepo: repo,
       accountsRepo: inMemoryAccountsRepo(),
       connectorFor: () => undefined,
+      agentTrigger: noopAgentTrigger(),
       log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       metricsClient: { addMetric: vi.fn() },
     });

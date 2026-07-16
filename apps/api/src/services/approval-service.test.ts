@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AccountAccessDeniedError } from '@chief-of-staff/shared';
-import type { Connector, SendResult } from '@chief-of-staff/connectors';
+import type { Connector, OutboundMessage, SendResult } from '@chief-of-staff/connectors';
 import {
   SendAlreadyClaimedError,
   TransitionConflictError,
@@ -8,6 +8,7 @@ import {
   type CommunicationsRepo,
 } from '../repos/communications-repo.js';
 import type { AccountsRepo } from '../repos/accounts-repo.js';
+import type { AgentTrigger } from '../agent-trigger.js';
 import {
   ApprovalService,
   CommunicationNotFoundError,
@@ -80,6 +81,14 @@ function fakeCommunicationsRepo(
         status: record.to,
         transitions: [...(state.record.transitions ?? []), record],
         ...(patch?.draft ? { draft: patch.draft } : {}),
+        ...(patch?.appendSuppliedContext
+          ? {
+              suppliedContext: [
+                ...(state.record.suppliedContext ?? []),
+                patch.appendSuppliedContext,
+              ],
+            }
+          : {}),
       };
     },
     async claimSend(commId, priorClaimedAt) {
@@ -112,7 +121,7 @@ function fakeAccountsRepo(
   };
 }
 
-function fakeConnector(sendImpl?: () => Promise<SendResult>): Connector {
+function fakeConnector(sendImpl?: (message: OutboundMessage) => Promise<SendResult>): Connector {
   return {
     channelType: 'gmail',
     async ingest() {
@@ -125,13 +134,32 @@ function fakeConnector(sendImpl?: () => Promise<SendResult>): Connector {
   };
 }
 
+function fakeAgentTrigger(): AgentTrigger & { published: { commId: string; accountId: string }[] } {
+  const published: { commId: string; accountId: string }[] = [];
+  return {
+    published,
+    async publish(input) {
+      published.push(input);
+    },
+  };
+}
+
 function makeService(
   record: ApiCommunicationRecord,
-  opts: { sendImpl?: () => Promise<SendResult>; ownership?: Record<string, string> } = {},
+  opts: {
+    sendImpl?: (message: OutboundMessage) => Promise<SendResult>;
+    ownership?: Record<string, string>;
+    agentTrigger?: AgentTrigger;
+  } = {},
 ) {
   const repo = fakeCommunicationsRepo(record);
   const accountsRepo = fakeAccountsRepo(opts.ownership ?? { [ACCOUNT_ID]: OWNER_USER_ID });
   const connector = fakeConnector(opts.sendImpl);
+  // Default is the richer fake (exposes `.published` for assertions); an explicit override (e.g. a
+  // throwing trigger) narrows to plain `AgentTrigger`, which callers needing `.published` avoid
+  // overriding.
+  const agentTrigger: AgentTrigger & { published?: { commId: string; accountId: string }[] } =
+    opts.agentTrigger ?? fakeAgentTrigger();
   const metricsClient = { addMetric: vi.fn() };
   const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
@@ -139,12 +167,13 @@ function makeService(
     communicationsRepo: repo,
     accountsRepo,
     connectorFor: () => connector,
+    agentTrigger,
     now: NOW,
     log,
     metricsClient,
   });
 
-  return { service, repo, metricsClient, log };
+  return { service, repo, metricsClient, log, agentTrigger };
 }
 
 describe('ApprovalService — account permission guard', () => {
@@ -251,6 +280,37 @@ describe('ApprovalService — approveDraft (drafted -> awaiting_approval -> appr
     }
   });
 
+  it("passes the communication's captured subject through to connector.send (Task 6 review fix)", async () => {
+    let capturedSubject: string | undefined;
+    const { service } = makeService(
+      fixtureRecord({ status: 'drafted', subject: 'Q3 renewal — action needed' }),
+      {
+        sendImpl: async (message) => {
+          capturedSubject = message.subject;
+          return { providerMessageId: 'sent-with-subject' };
+        },
+      },
+    );
+
+    await service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID });
+
+    expect(capturedSubject).toBe('Q3 renewal — action needed');
+  });
+
+  it('passes undefined subject through for a legacy record with none captured (safe fallback downstream)', async () => {
+    let capturedSubject: string | undefined = 'not-yet-set';
+    const { service } = makeService(fixtureRecord({ status: 'drafted', subject: undefined }), {
+      sendImpl: async (message) => {
+        capturedSubject = message.subject;
+        return { providerMessageId: 'sent-no-subject' };
+      },
+    });
+
+    await service.approveDraft({ commId: COMM_ID, userId: OWNER_USER_ID });
+
+    expect(capturedSubject).toBeUndefined();
+  });
+
   it('sends to the counterpart, not back to the account\'s own mailbox, even when that message tagged the account as "from"', async () => {
     // Regression case, confirmed against live seeded data: some persisted communications are the
     // account's OWN sent mail replayed through ingestion, so `demoalex775@gmail.com` ends up
@@ -282,6 +342,7 @@ describe('ApprovalService — approveDraft (drafted -> awaiting_approval -> appr
           return { providerMessageId: 'sent-1' };
         },
       }),
+      agentTrigger: fakeAgentTrigger(),
       now: NOW,
       log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       metricsClient: { addMetric: vi.fn() },
@@ -326,6 +387,7 @@ describe('ApprovalService — approveDraft (drafted -> awaiting_approval -> appr
           return { providerMessageId: 'sent-1' };
         },
       }),
+      agentTrigger: fakeAgentTrigger(),
       now: NOW,
       log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       metricsClient: { addMetric: vi.fn() },
@@ -490,6 +552,7 @@ describe('ApprovalService — approveDraft (drafted -> awaiting_approval -> appr
       },
       accountsRepo,
       connectorFor: () => connector,
+      agentTrigger: fakeAgentTrigger(),
       now: NOW,
       log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       metricsClient: { addMetric: vi.fn() },
@@ -585,19 +648,89 @@ describe('ApprovalService — dismiss', () => {
   });
 });
 
-describe('ApprovalService — supplyContext (needs_context -> drafted)', () => {
-  it('transitions needs_context back to drafted after context is supplied', async () => {
-    const { service, repo } = makeService(fixtureRecord({ status: 'needs_context' }));
+describe('ApprovalService — supplyContext (needs_context -> awaiting_reprocess, Task 6 review fix)', () => {
+  // A real `needs_context` record has NO draft — the agent never got far enough to write one.
+  // Fixed regression: `supplyContext` used to transition straight to `drafted`, discarding the
+  // text and landing a draftless record where the UI's Approve action had nothing to approve.
+  const needsContextRecord = () => fixtureRecord({ status: 'needs_context', draft: undefined });
+
+  it('persists the supplied text and transitions needs_context -> awaiting_reprocess (not drafted)', async () => {
+    const { service, repo } = makeService(needsContextRecord());
     const result = await service.supplyContext({
       commId: COMM_ID,
       userId: OWNER_USER_ID,
       text: 'The renewal deadline is Friday.',
     });
 
-    expect(result.status).toBe('drafted');
+    expect(result.status).toBe('awaiting_reprocess');
+    expect(repo.record.status).toBe('awaiting_reprocess');
+    // No draft was fabricated — a real re-run through the agent is what produces one.
+    expect(repo.record.draft).toBeUndefined();
+    expect(repo.record.suppliedContext).toEqual(['The renewal deadline is Friday.']);
     expect(repo.record.transitions?.map((t) => `${t.from}->${t.to}`)).toEqual([
-      'needs_context->drafted',
+      'needs_context->awaiting_reprocess',
     ]);
+  });
+
+  it('re-enqueues the communication to the agent queue for a real re-run', async () => {
+    const { service, agentTrigger } = makeService(needsContextRecord());
+    await service.supplyContext({
+      commId: COMM_ID,
+      userId: OWNER_USER_ID,
+      text: 'The renewal deadline is Friday.',
+    });
+
+    expect(agentTrigger.published ?? []).toEqual([{ commId: COMM_ID, accountId: ACCOUNT_ID }]);
+  });
+
+  it('appends to (never replaces) prior supplied context across repeated calls', async () => {
+    const { repo } = makeService(needsContextRecord());
+    // supplyContext only accepts needs_context; simulate a second needs_context round by resetting
+    // status after the first call persists its context, mirroring a re-run that came back
+    // low-confidence again.
+    const trigger = fakeAgentTrigger();
+    const accountsRepo = fakeAccountsRepo({ [ACCOUNT_ID]: OWNER_USER_ID });
+    const service = new ApprovalService({
+      communicationsRepo: repo,
+      accountsRepo,
+      connectorFor: () => fakeConnector(),
+      agentTrigger: trigger,
+      now: NOW,
+      log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      metricsClient: { addMetric: vi.fn() },
+    });
+
+    await service.supplyContext({ commId: COMM_ID, userId: OWNER_USER_ID, text: 'First detail.' });
+    repo.record.status = 'needs_context'; // simulate the agent re-run coming back low-confidence
+    await service.supplyContext({ commId: COMM_ID, userId: OWNER_USER_ID, text: 'Second detail.' });
+
+    expect(repo.record.suppliedContext).toEqual(['First detail.', 'Second detail.']);
+  });
+
+  it('does not fail the caller when the agent-trigger publish throws (context still saved)', async () => {
+    const throwingTrigger: AgentTrigger = {
+      publish: async () => {
+        throw new Error('SQS unavailable');
+      },
+    };
+    const { service, repo, metricsClient, log } = makeService(needsContextRecord(), {
+      agentTrigger: throwingTrigger,
+    });
+
+    const result = await service.supplyContext({
+      commId: COMM_ID,
+      userId: OWNER_USER_ID,
+      text: 'Still saved even if the queue is down.',
+    });
+
+    expect(result.status).toBe('awaiting_reprocess');
+    expect(repo.record.suppliedContext).toEqual(['Still saved even if the queue is down.']);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('re-enqueue'),
+      expect.objectContaining({ commId: COMM_ID }),
+    );
+    const metricNames = metricsClient.addMetric.mock.calls.map((call) => call[0]);
+    expect(metricNames).toContain('AgentReprocessTriggerFailed');
   });
 
   it('rejects supplyContext on a communication not in needs_context', async () => {
@@ -608,7 +741,7 @@ describe('ApprovalService — supplyContext (needs_context -> drafted)', () => {
   });
 
   it('rejects empty supplied context text', async () => {
-    const { service } = makeService(fixtureRecord({ status: 'needs_context' }));
+    const { service } = makeService(needsContextRecord());
     await expect(
       service.supplyContext({ commId: COMM_ID, userId: OWNER_USER_ID, text: '  ' }),
     ).rejects.toThrow(IllegalActionError);
