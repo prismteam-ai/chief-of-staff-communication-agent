@@ -150,6 +150,48 @@ export class ApprovalService {
   }
 
   /**
+   * Final-review fix (multi-hop transition atomicity): applies a whole SEQUENCE of hops — each
+   * validated via `applyTransition` exactly like `move` does — as ONE atomic conditional write via
+   * `communicationsRepo.transitionChain`. Use this instead of multiple `move` calls whenever a
+   * single user action's settled outcome legitimately passes through an intermediate audit-trail
+   * state (`editDraft`'s `edited`, `rejectDraft`'s `rejected`): those intermediate states are real,
+   * intentional edges in the state machine (design.md §7) and stay in the persisted `transitions`
+   * history, but must never be independently observable as the record's `status` — a crash between
+   * what used to be two/three separate `move` calls left the record stuck at that intermediate
+   * status with no legal way back into the action that produced it (`editDraft`/`rejectDraft` only
+   * accept `drafted`/`awaiting_approval` as a starting state). Routing the whole hop sequence
+   * through one `UpdateCommand` removes that window entirely: either nothing happened (retry from
+   * the top) or the action fully settled — never anything in between.
+   */
+  private async moveChain(
+    record: ApiCommunicationRecord,
+    hops: readonly CommunicationState[],
+    actorId: string,
+    patch?: { draft?: Draft; appendSuppliedContext?: string },
+  ): Promise<TransitionRecord[]> {
+    if (hops.length === 0) {
+      throw new Error('moveChain requires at least one hop');
+    }
+    const transitions: TransitionRecord[] = [];
+    let from = record.status;
+    for (const to of hops) {
+      transitions.push(
+        applyTransition({
+          commId: record.commId,
+          accountId: record.accountId,
+          from,
+          to,
+          actorId,
+          now: this.now,
+        }),
+      );
+      from = to;
+    }
+    await this.communicationsRepo.transitionChain(transitions, patch);
+    return transitions;
+  }
+
+  /**
    * Resolves who the reply should go to: every `to`/`cc` participant EXCLUDING the account's own
    * mailbox address, falling back to the `from` participant if that set is empty.
    *
@@ -366,10 +408,13 @@ export class ApprovalService {
   /**
    * `[drafted →] awaiting_approval → edited → awaiting_approval` (design.md §7). The two-hop
    * `edited` detour is the state machine's real edge (not a shortcut) — the audit trail records
-   * the user's edit as its own transition, distinct from the original draft.
+   * the user's edit as its own transition, distinct from the original draft. Final-review fix: the
+   * whole hop sequence (including the `drafted → awaiting_approval` lead-in, when applicable) is
+   * persisted as ONE atomic write via `moveChain` — `edited` is recorded in the audit trail but is
+   * never independently observable as `record.status` (see `moveChain`'s doc comment).
    */
   async editDraft(input: EditDraftInput): Promise<ApiCommunicationRecord> {
-    let record = await this.loadAuthorized(input.commId, input.userId);
+    const record = await this.loadAuthorized(input.commId, input.userId);
     const trimmed = input.newBody.trim();
     if (!trimmed) {
       throw new IllegalActionError('editDraft requires a non-empty newBody.');
@@ -382,46 +427,45 @@ export class ApprovalService {
     if (!record.draft) {
       throw new IllegalActionError(`Communication "${record.commId}" has no draft to edit.`);
     }
-    const existingDraft: Draft = record.draft;
+    const editedDraft: Draft = { ...record.draft, body: trimmed };
 
-    if (record.status === 'drafted') {
-      await this.move(record, 'awaiting_approval', input.userId);
-      record = { ...record, status: 'awaiting_approval' };
-    }
+    const hops: CommunicationState[] =
+      record.status === 'drafted'
+        ? ['awaiting_approval', 'edited', 'awaiting_approval']
+        : ['edited', 'awaiting_approval'];
+    await this.moveChain(record, hops, input.userId, { draft: editedDraft });
 
-    const editedDraft: Draft = { ...existingDraft, body: trimmed };
-    await this.move(record, 'edited', input.userId);
-    record = { ...record, status: 'edited' };
-
-    await this.move(record, 'awaiting_approval', input.userId, { draft: editedDraft });
-    record = { ...record, status: 'awaiting_approval', draft: editedDraft };
-
-    this.log.info('Draft edited', { commId: record.commId, status: record.status });
-    return record;
+    const updated: ApiCommunicationRecord = {
+      ...record,
+      status: 'awaiting_approval',
+      draft: editedDraft,
+    };
+    this.log.info('Draft edited', { commId: updated.commId, status: updated.status });
+    return updated;
   }
 
-  /** `[drafted →] awaiting_approval → rejected → drafted` — re-draft (design.md §7). */
+  /**
+   * `[drafted →] awaiting_approval → rejected → drafted` — re-draft (design.md §7). Final-review
+   * fix: persisted as ONE atomic write via `moveChain`, same rationale as `editDraft` above —
+   * `rejected` stays in the audit trail without ever being an independently observable `status`.
+   */
   async rejectDraft(input: ByIdAndUserInput): Promise<ApiCommunicationRecord> {
-    let record = await this.loadAuthorized(input.commId, input.userId);
+    const record = await this.loadAuthorized(input.commId, input.userId);
     if (record.status !== 'drafted' && record.status !== 'awaiting_approval') {
       throw new IllegalActionError(
         `Cannot reject communication "${record.commId}" in state "${record.status}".`,
       );
     }
 
-    if (record.status === 'drafted') {
-      await this.move(record, 'awaiting_approval', input.userId);
-      record = { ...record, status: 'awaiting_approval' };
-    }
+    const hops: CommunicationState[] =
+      record.status === 'drafted'
+        ? ['awaiting_approval', 'rejected', 'drafted']
+        : ['rejected', 'drafted'];
+    await this.moveChain(record, hops, input.userId);
 
-    await this.move(record, 'rejected', input.userId);
-    record = { ...record, status: 'rejected' };
-
-    await this.move(record, 'drafted', input.userId);
-    record = { ...record, status: 'drafted' };
-
-    this.log.info('Draft rejected — back to drafted for re-draft', { commId: record.commId });
-    return record;
+    const updated: ApiCommunicationRecord = { ...record, status: 'drafted' };
+    this.log.info('Draft rejected — back to drafted for re-draft', { commId: updated.commId });
+    return updated;
   }
 
   /**

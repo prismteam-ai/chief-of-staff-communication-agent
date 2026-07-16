@@ -109,11 +109,16 @@ function inMemoryCommunicationsRepo(
       throw new Error('not used in communications integration tests');
     },
     async transition(t, patch) {
-      if (record.status !== t.from) throw new TransitionConflictError(t.commId, t.from);
+      await this.transitionChain([t], patch);
+    },
+    async transitionChain(records, patch) {
+      const first = records[0];
+      if (!first) throw new Error('transitionChain requires at least one TransitionRecord');
+      if (record.status !== first.from) throw new TransitionConflictError(first.commId, first.from);
       record = {
         ...record,
-        status: t.to,
-        transitions: [...(record.transitions ?? []), t],
+        status: records[records.length - 1]!.to,
+        transitions: [...(record.transitions ?? []), ...records],
         ...(patch?.draft ? { draft: patch.draft } : {}),
       };
     },

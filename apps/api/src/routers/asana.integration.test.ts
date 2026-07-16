@@ -69,6 +69,7 @@ function inMemoryCommunicationsRepo(
       throw new Error('not used in asana integration tests');
     },
     async transition() {},
+    async transitionChain() {},
     async claimSend() {},
     async recordSent() {},
     async linkAsanaTask(commId, taskGid, permalink) {

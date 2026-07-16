@@ -67,10 +67,17 @@ function fakeCommunicationsRepo(
       throw new Error('not used in asana-service tests');
     },
     async transition(record) {
-      if (state.record.status !== record.from) {
-        throw new TransitionConflictError(record.commId, record.from);
+      await this.transitionChain([record]);
+    },
+    async transitionChain(records) {
+      const first = records[0];
+      if (!first) {
+        throw new Error('transitionChain requires at least one TransitionRecord');
       }
-      state.record = { ...state.record, status: record.to };
+      if (state.record.status !== first.from) {
+        throw new TransitionConflictError(first.commId, first.from);
+      }
+      state.record = { ...state.record, status: records[records.length - 1]!.to };
     },
     async claimSend(commId, priorClaimedAt) {
       const isRetry = priorClaimedAt !== undefined;

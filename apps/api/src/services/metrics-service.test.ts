@@ -49,6 +49,9 @@ function inMemoryRepo(records: ApiCommunicationRecord[]): CommunicationsRepo {
     async transition() {
       throw new Error('not used in metrics tests');
     },
+    async transitionChain() {
+      throw new Error('not used in metrics tests');
+    },
     async claimSend() {
       throw new Error('not used in metrics tests');
     },

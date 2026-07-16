@@ -60,6 +60,9 @@ function inMemoryRepo(records: ApiCommunicationRecord[]): CommunicationsRepo {
     async transition() {
       throw new Error('not used');
     },
+    async transitionChain() {
+      throw new Error('not used');
+    },
     async claimSend() {
       throw new Error('not used');
     },

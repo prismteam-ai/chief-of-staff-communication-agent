@@ -118,9 +118,34 @@ export interface CommunicationsRepo {
    * Task 6 review fix — see `ApiCommunicationRecord.suppliedContext`). The `ConditionExpression`
    * guards against a concurrent/duplicate writer having already moved the record off `record.from`
    * — fails closed with `TransitionConflictError` rather than silently double-applying.
+   *
+   * A thin wrapper over `transitionChain([record], patch)` — see that method's doc comment for why
+   * a single-record chain is exactly this same write.
    */
   transition(
     record: TransitionRecord,
+    patch?: { draft?: Draft; appendSuppliedContext?: string },
+  ): Promise<void>;
+
+  /**
+   * Final-review fix (multi-hop transition atomicity): applies an ordered chain of
+   * already-validated `TransitionRecord`s — each `records[i].to` must equal `records[i + 1].from`
+   * — in ONE conditional DynamoDB write. `status` is set straight from `records[0].from` to
+   * `records[records.length - 1].to`; every intermediate hop is preserved in the `transitions`
+   * audit trail (so, e.g., `editDraft`'s `awaiting_approval -> edited -> awaiting_approval` still
+   * records the `edited` hop for the audit log) but is NEVER independently persisted as the item's
+   * `status`.
+   *
+   * This is what makes `editDraft`/`rejectDraft` atomic: before this method existed, those actions
+   * called `transition` two-to-three times in sequence, so a crash between calls left the record's
+   * `status` sitting at an intermediate value (`edited`/`rejected`) that neither action's own
+   * precondition check accepted as a valid starting state — a permanently stuck record. Routing the
+   * whole hop sequence through one `UpdateCommand` means a crash before this call leaves `status`
+   * completely unchanged (safe to retry from the top) and a crash after leaves it fully at the
+   * settled final state — there is no DynamoDB-observable state in between.
+   */
+  transitionChain(
+    records: readonly TransitionRecord[],
     patch?: { draft?: Draft; appendSuppliedContext?: string },
   ): Promise<void>;
 
@@ -191,15 +216,34 @@ export function createCommunicationsRepo(tableName: string): CommunicationsRepo 
     },
 
     async transition(record, patch) {
+      await this.transitionChain([record], patch);
+    },
+
+    async transitionChain(records, patch) {
+      if (records.length === 0) {
+        throw new Error('transitionChain requires at least one TransitionRecord');
+      }
+      const first = records[0]!;
+      const last = records[records.length - 1]!;
+      for (let i = 1; i < records.length; i++) {
+        const prev = records[i - 1]!;
+        const curr = records[i]!;
+        if (curr.from !== prev.to || curr.commId !== first.commId) {
+          throw new Error(
+            `transitionChain received a non-contiguous transition chain for "${first.commId}"`,
+          );
+        }
+      }
+
       const setClauses = [
         '#status = :status',
-        'transitions = list_append(if_not_exists(transitions, :empty), :newTransition)',
+        'transitions = list_append(if_not_exists(transitions, :empty), :newTransitions)',
       ];
       const values: Record<string, unknown> = {
-        ':status': record.to,
-        ':newTransition': [record],
+        ':status': last.to,
+        ':newTransitions': records,
         ':empty': [] as TransitionRecord[],
-        ':expectedFrom': record.from,
+        ':expectedFrom': first.from,
       };
 
       if (patch?.draft) {
@@ -219,7 +263,7 @@ export function createCommunicationsRepo(tableName: string): CommunicationsRepo 
         await client().send(
           new UpdateCommand({
             TableName: tableName,
-            Key: { commId: record.commId },
+            Key: { commId: first.commId },
             UpdateExpression: `SET ${setClauses.join(', ')}`,
             ConditionExpression: '#status = :expectedFrom',
             ExpressionAttributeNames: { '#status': 'status' },
@@ -228,7 +272,7 @@ export function createCommunicationsRepo(tableName: string): CommunicationsRepo 
         );
       } catch (error) {
         if (error instanceof ConditionalCheckFailedException) {
-          throw new TransitionConflictError(record.commId, record.from);
+          throw new TransitionConflictError(first.commId, first.from);
         }
         throw error;
       }

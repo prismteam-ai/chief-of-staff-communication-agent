@@ -80,6 +80,99 @@ describe('communications-repo.transition', () => {
   });
 });
 
+describe('communications-repo.transitionChain (final-review fix — multi-hop atomicity)', () => {
+  it('issues exactly ONE UpdateCommand for a multi-hop chain, setting status straight to the LAST hop\'s "to"', async () => {
+    ddbMock.on(UpdateCommand).resolves({});
+    const repo = createCommunicationsRepo(TABLE);
+    const records = [
+      fixtureTransition({ from: 'awaiting_approval', to: 'edited' }),
+      fixtureTransition({ from: 'edited', to: 'awaiting_approval' }),
+    ];
+
+    await repo.transitionChain(records);
+
+    const calls = ddbMock.commandCalls(UpdateCommand);
+    expect(calls).toHaveLength(1);
+    const input = calls[0]?.args[0].input;
+    // The item's `status` attribute is set straight to the chain's final state — the
+    // intermediate `edited` value is never independently written as `status`.
+    expect(input?.ExpressionAttributeValues?.[':status']).toBe('awaiting_approval');
+    // But the FULL hop sequence is preserved in the audit trail.
+    expect(input?.ExpressionAttributeValues?.[':newTransitions']).toEqual(records);
+    // The condition still guards on the CHAIN'S starting state, not any intermediate hop.
+    expect(input?.ConditionExpression).toBe('#status = :expectedFrom');
+    expect(input?.ExpressionAttributeValues?.[':expectedFrom']).toBe('awaiting_approval');
+  });
+
+  it('throws TransitionConflictError (anchored on the FIRST hop) when the conditional write fails', async () => {
+    ddbMock
+      .on(UpdateCommand)
+      .rejects(new ConditionalCheckFailedException({ message: 'conflict', $metadata: {} }));
+    const repo = createCommunicationsRepo(TABLE);
+    const records = [
+      fixtureTransition({ from: 'drafted', to: 'awaiting_approval' }),
+      fixtureTransition({ from: 'awaiting_approval', to: 'rejected' }),
+      fixtureTransition({ from: 'rejected', to: 'drafted' }),
+    ];
+
+    await expect(repo.transitionChain(records)).rejects.toThrow(TransitionConflictError);
+    await expect(repo.transitionChain(records)).rejects.toMatchObject({ expectedFrom: 'drafted' });
+  });
+
+  it('merges an optional draft patch into the same single atomic write', async () => {
+    ddbMock.on(UpdateCommand).resolves({});
+    const repo = createCommunicationsRepo(TABLE);
+    const records = [
+      fixtureTransition({ from: 'awaiting_approval', to: 'edited' }),
+      fixtureTransition({ from: 'edited', to: 'awaiting_approval' }),
+    ];
+
+    await repo.transitionChain(records, {
+      draft: { commId: 'gmail#abc123', accountId: 'acct-1', body: 'edited body', confidence: 0.9 },
+    });
+
+    const input = ddbMock.commandCalls(UpdateCommand)[0]?.args[0].input;
+    expect(input?.UpdateExpression).toContain('draft = :draft');
+    expect(input?.ExpressionAttributeValues?.[':draft']).toEqual({
+      commId: 'gmail#abc123',
+      accountId: 'acct-1',
+      body: 'edited body',
+      confidence: 0.9,
+    });
+  });
+
+  it('rejects a non-contiguous chain (hop N.to !== hop N+1.from) before ever calling DynamoDB', async () => {
+    ddbMock.on(UpdateCommand).resolves({});
+    const repo = createCommunicationsRepo(TABLE);
+    const records = [
+      fixtureTransition({ from: 'awaiting_approval', to: 'edited' }),
+      // Broken chain: this hop's `from` doesn't match the prior hop's `to`.
+      fixtureTransition({ from: 'drafted', to: 'awaiting_approval' }),
+    ];
+
+    await expect(repo.transitionChain(records)).rejects.toThrow(/non-contiguous/);
+    expect(ddbMock.commandCalls(UpdateCommand)).toHaveLength(0);
+  });
+
+  it('rejects an empty chain', async () => {
+    const repo = createCommunicationsRepo(TABLE);
+    await expect(repo.transitionChain([])).rejects.toThrow(
+      'transitionChain requires at least one TransitionRecord',
+    );
+  });
+
+  it('a single-record chain produces the IDENTICAL write `transition` produces (transition is a thin wrapper)', async () => {
+    ddbMock.on(UpdateCommand).resolves({});
+    const repo = createCommunicationsRepo(TABLE);
+
+    await repo.transition(fixtureTransition());
+
+    const input = ddbMock.commandCalls(UpdateCommand)[0]?.args[0].input;
+    expect(input?.ExpressionAttributeValues?.[':newTransitions']).toEqual([fixtureTransition()]);
+    expect(input?.ExpressionAttributeValues?.[':status']).toBe('awaiting_approval');
+  });
+});
+
 describe('communications-repo.claimSend — idempotency', () => {
   it('issues a conditional write requiring sendClaimedAt not already set', async () => {
     ddbMock.on(UpdateCommand).resolves({});

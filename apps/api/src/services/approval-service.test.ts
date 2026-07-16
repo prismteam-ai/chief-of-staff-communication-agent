@@ -77,13 +77,21 @@ function fakeCommunicationsRepo(
       throw new Error('not used in approval-service tests');
     },
     async transition(record, patch) {
-      if (state.record.status !== record.from) {
-        throw new TransitionConflictError(record.commId, record.from);
+      await this.transitionChain([record], patch);
+    },
+    async transitionChain(records, patch) {
+      const first = records[0];
+      if (!first) {
+        throw new Error('transitionChain requires at least one TransitionRecord');
       }
+      if (state.record.status !== first.from) {
+        throw new TransitionConflictError(first.commId, first.from);
+      }
+      const last = records[records.length - 1]!;
       state.record = {
         ...state.record,
-        status: record.to,
-        transitions: [...(state.record.transitions ?? []), record],
+        status: last.to,
+        transitions: [...(state.record.transitions ?? []), ...records],
         ...(patch?.draft ? { draft: patch.draft } : {}),
         ...(patch?.appendSuppliedContext
           ? {
@@ -730,6 +738,83 @@ describe('ApprovalService — rejectDraft (-> drafted, re-draft)', () => {
       'awaiting_approval->rejected',
       'rejected->drafted',
     ]);
+  });
+});
+
+describe('ApprovalService — editDraft/rejectDraft transition atomicity (final-review fix)', () => {
+  it('editDraft persists the whole hop sequence via ONE transitionChain call, never the single-hop transition', async () => {
+    const { service, repo } = makeService(fixtureRecord({ status: 'awaiting_approval' }));
+    const transitionSpy = vi.spyOn(repo, 'transition');
+    const transitionChainSpy = vi.spyOn(repo, 'transitionChain');
+
+    await service.editDraft({ commId: COMM_ID, userId: OWNER_USER_ID, newBody: 'Updated.' });
+
+    expect(transitionChainSpy).toHaveBeenCalledTimes(1);
+    expect(transitionSpy).not.toHaveBeenCalled();
+    const [records] = transitionChainSpy.mock.calls[0]!;
+    expect(records.map((r) => `${r.from}->${r.to}`)).toEqual([
+      'awaiting_approval->edited',
+      'edited->awaiting_approval',
+    ]);
+  });
+
+  it('rejectDraft persists the whole hop sequence via ONE transitionChain call, never the single-hop transition', async () => {
+    const { service, repo } = makeService(fixtureRecord({ status: 'awaiting_approval' }));
+    const transitionSpy = vi.spyOn(repo, 'transition');
+    const transitionChainSpy = vi.spyOn(repo, 'transitionChain');
+
+    await service.rejectDraft({ commId: COMM_ID, userId: OWNER_USER_ID });
+
+    expect(transitionChainSpy).toHaveBeenCalledTimes(1);
+    expect(transitionSpy).not.toHaveBeenCalled();
+    const [records] = transitionChainSpy.mock.calls[0]!;
+    expect(records.map((r) => `${r.from}->${r.to}`)).toEqual([
+      'awaiting_approval->rejected',
+      'rejected->drafted',
+    ]);
+  });
+
+  it('editDraft starting from "drafted" still collapses the 3-hop lead-in into ONE atomic write', async () => {
+    const { service, repo } = makeService(fixtureRecord({ status: 'drafted' }));
+    const transitionChainSpy = vi.spyOn(repo, 'transitionChain');
+
+    await service.editDraft({ commId: COMM_ID, userId: OWNER_USER_ID, newBody: 'Updated.' });
+
+    expect(transitionChainSpy).toHaveBeenCalledTimes(1);
+    const [records] = transitionChainSpy.mock.calls[0]!;
+    expect(records.map((r) => `${r.from}->${r.to}`)).toEqual([
+      'drafted->awaiting_approval',
+      'awaiting_approval->edited',
+      'edited->awaiting_approval',
+    ]);
+  });
+
+  it('editDraft: when the atomic write fails, the record stays at its ORIGINAL status — never observable at the intermediate "edited" state', async () => {
+    const { service, repo } = makeService(fixtureRecord({ status: 'awaiting_approval' }));
+    vi.spyOn(repo, 'transitionChain').mockRejectedValueOnce(new Error('DynamoDB throttled'));
+
+    await expect(
+      service.editDraft({ commId: COMM_ID, userId: OWNER_USER_ID, newBody: 'Updated.' }),
+    ).rejects.toThrow('DynamoDB throttled');
+
+    // Before this fix, editDraft issued 2-3 separate `transition` writes — a crash/failure
+    // partway through could leave `status` durably at the intermediate `edited` value, which
+    // editDraft/rejectDraft's own precondition check does not accept as a starting state (a
+    // permanently stuck record). With one atomic `transitionChain` call, a failure leaves the
+    // record completely unchanged — safe to retry.
+    expect(repo.record.status).toBe('awaiting_approval');
+    expect(repo.record.draft?.body).not.toBe('Updated.');
+  });
+
+  it('rejectDraft: when the atomic write fails, the record stays at its ORIGINAL status — never observable at the intermediate "rejected" state', async () => {
+    const { service, repo } = makeService(fixtureRecord({ status: 'awaiting_approval' }));
+    vi.spyOn(repo, 'transitionChain').mockRejectedValueOnce(new Error('DynamoDB throttled'));
+
+    await expect(service.rejectDraft({ commId: COMM_ID, userId: OWNER_USER_ID })).rejects.toThrow(
+      'DynamoDB throttled',
+    );
+
+    expect(repo.record.status).toBe('awaiting_approval');
   });
 });
 
