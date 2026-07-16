@@ -128,6 +128,9 @@ importers:
       '@chief-of-staff/shared':
         specifier: workspace:*
         version: link:../shared
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)
     devDependencies:
       '@chief-of-staff/tsconfig':
         specifier: workspace:*
@@ -135,11 +138,12 @@ importers:
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
-      vitest:
-        specifier: ^2.1.8
-        version: 2.1.9(@types/node@22.20.1)
 
   packages/shared:
+    dependencies:
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       '@chief-of-staff/tsconfig':
         specifier: workspace:*

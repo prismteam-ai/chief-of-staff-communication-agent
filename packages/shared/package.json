@@ -17,6 +17,9 @@
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests"
   },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
   "devDependencies": {
     "@chief-of-staff/tsconfig": "workspace:*",
     "typescript": "^5.7.2",
