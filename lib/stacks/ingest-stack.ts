@@ -264,11 +264,14 @@ export class IngestStack extends TaggedStack {
 
     // --- Dashboard -----------------------------------------------------------------------------
 
+    // RAG chunk-indexing metrics (design.md §4, brief constraint 4) ride the same "processed vs
+    // failed" graph as the message-ingest metrics — `MetricsDashboard` already takes an array of
+    // metric names per side, so ChunkIndexed/ChunkIndexFailed need no new dashboard construct.
     const { dashboard } = new MetricsDashboard(this, 'IngestMetricsDashboard', {
       dashboardName: `${PROJECT_NAME}-ingest`,
       namespace: METRICS_NAMESPACE,
-      processedMetricNames: ['MessageIngested'],
-      failedMetricNames: ['MessageFailed'],
+      processedMetricNames: ['MessageIngested', 'ChunkIndexed'],
+      failedMetricNames: ['MessageFailed', 'ChunkIndexFailed'],
       titlePrefix: 'Ingest',
     });
 
