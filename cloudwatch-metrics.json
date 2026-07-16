@@ -1,0 +1,25 @@
+{
+  "metrics": [
+    {
+      "name": "RequestProcessed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per successfully handled tRPC request on the API Lambda."
+    },
+    {
+      "name": "RequestFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per tRPC procedure that throws or returns an error on the API Lambda."
+    },
+    {
+      "name": "ProcessingDuration",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Milliseconds",
+      "service": "api",
+      "description": "Wall-clock time to handle one API Gateway invocation of the API Lambda, from request in to response out."
+    }
+  ]
+}
