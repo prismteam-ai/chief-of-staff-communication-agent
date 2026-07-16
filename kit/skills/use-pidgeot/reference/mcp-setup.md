@@ -30,7 +30,7 @@ server via `CallMcpTool` (`server`: `pidgeot`, `toolName`: e.g. `retrieveContext
      "mcpServers": {
        "pidgeot": {
          "command": "bash",
-         "args": ["-c", "exec npx -y --package=github:jzubielik/chief-of-staff-communication-agent mcp"],
+         "args": ["-c", "exec npx -y --package=github:jzubielik/chief-of-staff-communication-agent#path:mcp chief-of-staff-mcp"],
          "env": {
            "COS_API_URL": "https://klxrwe0sa3.execute-api.us-east-2.amazonaws.com",
            "COS_API_TOKEN": "cos_mcp_<paste the token you minted in step 3>"
@@ -59,7 +59,7 @@ Smoke-test the server directly in a terminal (Ctrl+C to stop):
 ```bash
 COS_API_URL="https://klxrwe0sa3.execute-api.us-east-2.amazonaws.com" \
 COS_API_TOKEN="cos_mcp_<your token>" \
-npx -y --package=github:jzubielik/chief-of-staff-communication-agent mcp
+npx -y --package=github:jzubielik/chief-of-staff-communication-agent#path:mcp chief-of-staff-mcp
 ```
 
 A working server logs `[pidgeot-mcp] connected over stdio` to stderr and then waits on stdin for
