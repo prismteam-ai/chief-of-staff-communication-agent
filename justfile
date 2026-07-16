@@ -43,3 +43,19 @@ deploy-web:
 # Curl the API health route and the Amplify URL; non-zero exit on failure
 smoke:
     pnpm exec tsx scripts/smoke.ts
+
+# One-time-per-mailbox Gmail OAuth: mints a refresh token, stores it in Secrets Manager,
+# upserts the account record. Requires IngestStack deployed; operator clicks Allow once.
+gmail-auth:
+    pnpm exec tsx scripts/gmail-auth.ts
+
+# Seeds realistic inbox threads + a sent-history corpus into the connected Gmail mailbox.
+# Requires just gmail-auth first; degrades with a clear message if no account is connected.
+seed-demo:
+    pnpm exec tsx scripts/seed-demo.ts
+
+# Live proof: sends a self-addressed probe message, polls until it is persisted as an
+# `ingested` communication record, checks the MessageIngested metric, then proves
+# conditional-write dedupe by replaying the same message id against the processor Lambda.
+verify-ingest:
+    pnpm exec tsx scripts/verify-ingest.ts
