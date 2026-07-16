@@ -63,6 +63,62 @@ export function chunkNormalizedMessage(message: NormalizedMessage): Chunk[] {
 }
 
 /**
+ * The minimal shape `chunkSentReply` needs (Task 10, design.md §6 "embedded exemplars"). A sent
+ * reply is either one of the seeded `sent-history` fixture entries or a just-approved/edited draft
+ * fed back by the feedback loop (`apps/api`'s `ApprovalService`) — both shapes reduce to "this text,
+ * sent by this user, at this time" before reaching this function, so `chunkSentReply` stays
+ * source-agnostic the same way `chunkAsanaTask` stays connector-agnostic.
+ */
+export interface SentReplyChunkInput {
+  /** Stable id for this sent reply — a fixture-derived id for seeded exemplars, or the source
+   * commId for a feedback-loop exemplar (each commId can only feed back once — see the repo's
+   * idempotency note). */
+  sourceId: string;
+  body: string;
+  /** ISO-8601 timestamp of the sent reply. */
+  ts: string;
+  /** The account this exemplar belongs to (permission boundary — style exemplars are account-scoped
+   * exactly like every other retrieval, design.md §10). */
+  accountId: string;
+  /** The reply's recipient, when known — carried into `participants` so exemplar retrieval can
+   * filter/boost by recipient similarity (brief constraint 2(b): "by topic/recipient similarity"). */
+  recipient?: string;
+}
+
+/**
+ * v1 sent-reply chunking (Task 10): one chunk per sent reply, the whole body, `sourceType:
+ * 'sent_style'`. Mirrors `chunkNormalizedMessage`'s whole-body-chunk v1 shape and its empty-body
+ * handling so all source types flow through the exact same index/retrieval path.
+ */
+export function chunkSentReply(input: SentReplyChunkInput): Chunk[] {
+  const text = input.body.trim();
+  if (text.length === 0) {
+    return [];
+  }
+
+  const sourceId = `sent#${input.sourceId}`;
+  const chunkIndex = 0;
+  const chunkId = chunkIdFor(sourceId, chunkIndex, text);
+
+  return [
+    {
+      chunkId,
+      sourceId,
+      chunkIndex,
+      textForEmbedding: text,
+      textForContext: text,
+      metadata: {
+        channel: 'sent_style',
+        accountId: input.accountId,
+        participants: input.recipient ? [input.recipient] : [],
+        ts: input.ts,
+        sourceType: 'sent_style',
+      },
+    },
+  ];
+}
+
+/**
  * The minimal shape `chunkAsanaTask` needs from an Asana task (Task 7, design.md §4 "Asana tasks/
  * projects/milestones/comments"). Deliberately a STRUCTURAL subset, not `AsanaTask` from
  * `@chief-of-staff/connectors` — `packages/rag` stays dependency-light (see this module's/

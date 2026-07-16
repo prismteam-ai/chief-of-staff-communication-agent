@@ -17,9 +17,14 @@ import { CHANNEL_TYPES } from '@chief-of-staff/shared';
 /**
  * Where a chunk came from. `communication` = a NormalizedMessage; `asana` = Asana task/project/
  * comment context (shape ready now, populated in Task 7); `org_doc` = seeded organizational
- * knowledge; `preference` = a seeded/edited user preference or style note.
+ * knowledge; `preference` = a seeded/edited user preference or style note; `sent_style` = one of
+ * the user's own SENT replies, indexed as a style EXEMPLAR (Task 10, design.md §6: "embedded
+ * exemplars retrieved at draft time"). Distinct from `communication` even though a sent reply IS a
+ * communication, because `sent_style` chunks are retrieved for a different purpose (voice-matching
+ * at draft time, filtered to the drafting user's own account) and must never be conflated with the
+ * general cross-channel retrieval `retrieveContext` performs.
  */
-export const SOURCE_TYPES = ['communication', 'asana', 'org_doc', 'preference'] as const;
+export const SOURCE_TYPES = ['communication', 'asana', 'org_doc', 'preference', 'sent_style'] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
 
 export const ChunkMetadataSchema = z.object({

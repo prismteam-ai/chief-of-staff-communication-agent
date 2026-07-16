@@ -12,3 +12,4 @@ export * from './confidence.js';
 export * from './account.js';
 export * from './permissions.js';
 export * from './asana.js';
+export * from './style-profile.js';

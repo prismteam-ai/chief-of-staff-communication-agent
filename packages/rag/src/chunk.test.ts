@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { chunkIdFor, chunkNormalizedMessage, chunkAsanaTask } from './chunk.js';
-import type { AsanaTaskChunkInput } from './chunk.js';
+import { chunkIdFor, chunkNormalizedMessage, chunkAsanaTask, chunkSentReply } from './chunk.js';
+import type { AsanaTaskChunkInput, SentReplyChunkInput } from './chunk.js';
 import type { NormalizedMessage } from '@chief-of-staff/shared';
 
 function message(overrides: Partial<NormalizedMessage> = {}): NormalizedMessage {
@@ -146,5 +146,55 @@ describe('chunkAsanaTask', () => {
     const renamed = chunkAsanaTask(asanaTask({ name: 'Renamed follow-up' }))[0]!;
     expect(renamed.chunkId).not.toBe(original.chunkId);
     expect(renamed.sourceId).toBe(original.sourceId);
+  });
+});
+
+function sentReply(overrides: Partial<SentReplyChunkInput> = {}): SentReplyChunkInput {
+  return {
+    sourceId: 'gmail-sent-1',
+    body: 'Hi Priya,\n\nThanks for sending this over. Happy to sign as is.\n\nBest,\nAlex',
+    ts: '2026-07-10T14:30:00.000Z',
+    accountId: 'acct_alex',
+    recipient: 'priya.natarajan@northwind-consulting.com',
+    ...overrides,
+  };
+}
+
+describe('chunkSentReply (Task 10 style exemplars)', () => {
+  it('produces one whole-body chunk tagged sourceType/channel sent_style', () => {
+    const chunks = chunkSentReply(sentReply());
+    expect(chunks).toHaveLength(1);
+    const chunk = chunks[0]!;
+    expect(chunk.textForEmbedding).toContain('Best,\nAlex');
+    expect(chunk.metadata.sourceType).toBe('sent_style');
+    expect(chunk.metadata.channel).toBe('sent_style');
+    expect(chunk.metadata.accountId).toBe('acct_alex');
+  });
+
+  it('derives a deterministic chunk id namespaced under sent# and the source id', () => {
+    const chunk = chunkSentReply(sentReply())[0]!;
+    expect(chunk.sourceId).toBe('sent#gmail-sent-1');
+    expect(chunk.chunkId).toBe(chunkIdFor('sent#gmail-sent-1', 0, chunk.textForEmbedding));
+  });
+
+  it('carries the recipient into participants for recipient-similarity retrieval', () => {
+    const chunk = chunkSentReply(sentReply())[0]!;
+    expect(chunk.metadata.participants).toEqual(['priya.natarajan@northwind-consulting.com']);
+  });
+
+  it('carries no participants when recipient is unknown', () => {
+    const chunk = chunkSentReply(sentReply({ recipient: undefined }))[0]!;
+    expect(chunk.metadata.participants).toEqual([]);
+  });
+
+  it('produces an empty chunk list for an empty body', () => {
+    expect(chunkSentReply(sentReply({ body: '   ' }))).toHaveLength(0);
+  });
+
+  it('changes the chunk id when the body changes but keeps the same source id', () => {
+    const original = chunkSentReply(sentReply())[0]!;
+    const edited = chunkSentReply(sentReply({ body: `${sentReply().body} Edited.` }))[0]!;
+    expect(edited.chunkId).not.toBe(original.chunkId);
+    expect(edited.sourceId).toBe(original.sourceId);
   });
 });
