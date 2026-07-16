@@ -14,7 +14,12 @@ import type {
  * initial `putIngested` write (`apps/ingest/src/communications-repo.ts`); the agent reads that
  * record back and advances it with the recommendation, the draft, the new `status`, and an appended
  * transition audit trail — persisted with `marshallOptions.removeUndefinedValues` for the same
- * nested-`undefined` reason documented in the ingest repo (a participant with no `displayName`).
+ * nested-`undefined` reason documented in the ingest repo (a participant with no `displayName`), e.g.
+ * inside `recommendation`/`draft` themselves. A bare `undefined` passed as a whole top-level
+ * `ExpressionAttributeValues` entry in `persistOutcome`'s `UpdateCommand` below behaves differently
+ * (silently dropped from the map, but NOT from the `UpdateExpression` that references it, which
+ * DynamoDB then rejects) — see that function's doc comment for why `draft` is conditionally included
+ * instead.
  *
  * `getById`/the record shape mirror the ingest repo so both packages agree on the one item per
  * `commId`; the agent adds the optional `recommendation`/`draft`/`transitions` fields (Task 6 reads
@@ -84,6 +89,26 @@ export function createAgentCommunicationsRepo(tableName: string): AgentCommunica
      * asserts the record was still in the FIRST transition's `from` state, so a double-fire of the
      * agent for the same commId fails the condition rather than re-recommending. Transitions are
      * appended to the audit list, not overwritten.
+     *
+     * `draft` is only ever included in the `SET` clause (and `ExpressionAttributeValues`) when it is
+     * actually present. It is deliberately NOT handled the way `putIngested`
+     * (`apps/ingest/src/communications-repo.ts`) handles an `undefined`-valued field: that repo's
+     * `removeUndefinedValues: true` works because `Item` is marshalled as ONE top-level map, so the
+     * SDK's marshaller can walk in and drop a nested `undefined` key. `ExpressionAttributeValues` is
+     * different: the SDK silently DROPS a bare top-level `undefined` entry from the outgoing map
+     * without marshalling it (no client-side throw) — but it does NOT also strip the corresponding
+     * reference out of `UpdateExpression`. The previous version of this function unconditionally
+     * included `draft = :draft` in the SET clause with `:draft` set to `undefined` on the
+     * needs_context path (no draft is ever produced below the confidence threshold), which produced a
+     * wire payload where `UpdateExpression` referenced `:draft` but `ExpressionAttributeValues` had no
+     * such key — DynamoDB itself rejects that with `ValidationException: "Invalid UpdateExpression: An
+     * expression attribute value used in expression is not defined; attribute value: :draft"`
+     * (confirmed live against the deployed table while diagnosing this bug). Every real
+     * `needs_context` outcome failed here, after the recommendation had already been produced, so the
+     * whole turn errored and the outcome was lost. See `communications-repo.test.ts`'s marshalling
+     * regression suite for the reproduction. Omitting the clause entirely for the needs_context path
+     * means the record simply has no `draft` attribute, which is the same end state the field's doc
+     * comment always intended.
      */
     async persistOutcome({
       commId,
@@ -97,9 +122,11 @@ export function createAgentCommunicationsRepo(tableName: string): AgentCommunica
       const setClauses = [
         '#status = :status',
         'recommendation = :recommendation',
-        'draft = :draft',
         'transitions = list_append(if_not_exists(transitions, :empty), :newTransitions)',
       ];
+      if (draft) {
+        setClauses.push('draft = :draft');
+      }
       if (suggestedAsanaAction) {
         setClauses.push('suggestedAsanaAction = :suggestedAsanaAction');
       }
@@ -115,11 +142,9 @@ export function createAgentCommunicationsRepo(tableName: string): AgentCommunica
           ExpressionAttributeValues: {
             ':status': status,
             ':recommendation': recommendation,
-            // `draft` is left as `undefined` on the needs_context path; removeUndefinedValues drops
-            // the attribute rather than writing a null, so the record simply has no draft.
-            ':draft': draft,
             ':newTransitions': transitions,
             ':empty': [] as TransitionRecord[],
+            ...(draft ? { ':draft': draft } : {}),
             ...(expectedFrom ? { ':expectedFrom': expectedFrom } : {}),
             ...(suggestedAsanaAction ? { ':suggestedAsanaAction': suggestedAsanaAction } : {}),
           },
