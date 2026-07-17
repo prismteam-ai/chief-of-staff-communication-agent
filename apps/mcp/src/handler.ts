@@ -15,9 +15,11 @@ const headers = {
   'content-type': 'application/json; charset=utf-8',
 };
 
-export function handler(
+// The managed Lambda runtime requires a Promise-returning handler contract.
+// eslint-disable-next-line @typescript-eslint/require-await
+export async function handler(
   event: APIGatewayProxyEventV2,
-): APIGatewayProxyResultV2 {
+): Promise<APIGatewayProxyResultV2> {
   if (
     event.requestContext.http.method === 'GET' &&
     event.rawPath.endsWith('/health')
