@@ -68,6 +68,14 @@ verify-ingest:
 seed-needs-context:
     pnpm exec tsx scripts/seed-needs-context.ts
 
+# Pre-demo fix 1a: finds every fyi_no_reply/escalate communication still sitting in drafted/
+# awaiting_approval with a stale pre-confidence-gate-fix draft, and legally corrects it (via
+# applyTransition) to the no-draft outcome the fixed pipeline would have produced — dismissed for
+# fyi_no_reply, needs_context for escalate — removing the stale draft. Account-scoped, idempotent,
+# safe to re-run (a corrected record naturally drops out of the query).
+reclassify-nodraft:
+    pnpm exec tsx scripts/reclassify-nodraft.ts
+
 # Local-first RAG proof (brief constraint 2): starts Docker OpenSearch, embeds+indexes
 # fixtures/rag/corpus.jsonl via real Bedrock, replays fixtures/rag/golden-queries.json against
 # the SAME index mapping + query code the deployed adapter uses, tears the container down.

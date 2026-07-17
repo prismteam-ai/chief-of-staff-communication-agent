@@ -16,6 +16,7 @@ const LEGAL_TRANSITIONS: Array<[CommunicationState, CommunicationState]> = [
   ['recommended', 'needs_context'],
   ['drafted', 'awaiting_approval'],
   ['drafted', 'dismissed'],
+  ['drafted', 'needs_context'],
   ['awaiting_approval', 'approved'],
   ['awaiting_approval', 'edited'],
   ['awaiting_approval', 'rejected'],

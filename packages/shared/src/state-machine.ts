@@ -41,6 +41,20 @@
  * reviewing the approval queue needs a way to dismiss a communication that reached `drafted` but
  * turns out not to need a reply (exactly the `fyi_no_reply` case) — the additive edge below is that
  * escape hatch. It does not remove or replace `recommended → dismissed`; both remain legal.
+ *
+ * ## `drafted → needs_context` (pre-demo backfill fix)
+ * The gap the previous section named ("always drafts ... regardless of actionType") was later
+ * closed in code (`confidence.ts`'s `routeRecommendation`/`NO_DRAFT_ACTION_TYPES`,
+ * `run-agent-turn.ts`) — but that fix was not retroactive: every `escalate` communication drafted
+ * by the OLD routing before the fix shipped is still sitting in `drafted`/`awaiting_approval` with
+ * a fabricated auto-reply, exactly the "no draft" outcome `escalate` was always supposed to produce
+ * (surfaced to a human, never an auto-drafted reply). This edge is the symmetric backfill
+ * counterpart to `drafted → dismissed` above — same shape, `escalate`'s destination instead of
+ * `fyi_no_reply`'s — so `scripts/reclassify-nodraft.ts` can legally correct those existing records
+ * without hand-poking `status` outside the state machine. A record already at `awaiting_approval`
+ * reaches `drafted` first via the existing `awaiting_approval → rejected → drafted` re-draft chain
+ * (no new edge needed there — being drafted before landing in `needs_context` is, in an audit-trail
+ * sense, exactly what "rejected" already means: the draft was wrong and is being withdrawn).
  */
 
 export const COMMUNICATION_STATES = [
@@ -73,8 +87,10 @@ export const TRANSITIONS: Readonly<Record<CommunicationState, readonly Communica
   ingested: ['recommended'],
   recommended: ['drafted', 'dismissed', 'needs_context'],
   // `dismissed` here is the Task 6 addition documented above — a human dismissing an
-  // already-drafted communication that turns out not to need a reply.
-  drafted: ['awaiting_approval', 'dismissed'],
+  // already-drafted communication that turns out not to need a reply. `needs_context` is the
+  // pre-demo backfill fix documented above — correcting an already-drafted `escalate`
+  // communication back to the no-draft, human-must-act outcome it should have produced.
+  drafted: ['awaiting_approval', 'dismissed', 'needs_context'],
   awaiting_approval: ['approved', 'edited', 'rejected'],
   approved: ['sent'],
   sent: ['answered'],
