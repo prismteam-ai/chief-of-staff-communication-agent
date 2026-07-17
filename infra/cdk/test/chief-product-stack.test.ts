@@ -66,6 +66,46 @@ function allPolicyStatements(): Array<{
   );
 }
 
+function workerPolicyStatements(
+  functionId: 'ExecutionWorker' | 'IngestionWorker',
+): Array<{
+  readonly Action?: string | string[];
+  readonly Resource?: unknown;
+}> {
+  const policies = Object.entries(
+    template.findResources('AWS::IAM::Policy'),
+  ).filter(([logicalId]) =>
+    logicalId.includes(`${functionId}ServiceRoleDefaultPolicy`),
+  ) as Array<
+    [
+      string,
+      {
+        readonly Properties?: {
+          readonly PolicyDocument?: {
+            readonly Statement?: Array<{
+              readonly Action?: string | string[];
+              readonly Resource?: unknown;
+            }>;
+          };
+        };
+      },
+    ]
+  >;
+  expect(policies).toHaveLength(1);
+  return policies[0]?.[1].Properties?.PolicyDocument?.Statement ?? [];
+}
+
+function expectCdkReference(value: unknown): void {
+  expect(value).toBeTypeOf('object');
+  expect(value).not.toBeNull();
+  if (typeof value !== 'object' || value === null)
+    throw new Error('Expected a synthesized CloudFormation reference.');
+  expect(
+    'Ref' in value ||
+      ('Fn::GetAtt' in value && Array.isArray(value['Fn::GetAtt'])),
+  ).toBe(true);
+}
+
 describe('Chief product stack', () => {
   it('creates exactly three on-demand, KMS-encrypted, PITR domain tables', () => {
     template.resourceCountIs('AWS::DynamoDB::Table', 3);
@@ -124,6 +164,24 @@ describe('Chief product stack', () => {
       FactualHeadIndex: { ProjectionType: 'KEYS_ONLY' },
       StyleHeadIndex: { ProjectionType: 'KEYS_ONLY' },
       AuthorizationEpochIndex: { ProjectionType: 'KEYS_ONLY' },
+      ThreadLookupIndex: {
+        ProjectionType: 'INCLUDE',
+        NonKeyAttributes: [
+          'deleted',
+          'direction',
+          'messageId',
+          'revisionId',
+          'sourceTimestamp',
+        ],
+      },
+      IdentityLookupIndex: {
+        ProjectionType: 'INCLUDE',
+        NonKeyAttributes: ['accountId', 'personId', 'revisionId'],
+      },
+      AsanaTopicLookupIndex: {
+        ProjectionType: 'INCLUDE',
+        NonKeyAttributes: ['dedupeKey', 'providerObjectId'],
+      },
     });
   });
 
@@ -167,6 +225,7 @@ describe('Chief product stack', () => {
       'AWS::SQS::Queue',
       {
         RedrivePolicy: Match.objectLike({ maxReceiveCount: 5 }),
+        MaximumMessageSize: 262_144,
         VisibilityTimeout: 360,
       },
       2,
@@ -248,7 +307,7 @@ describe('Chief product stack', () => {
     });
   });
 
-  it('binds both workers to shared resources with effects disabled', () => {
+  it('binds the production ingestion composition explicitly and keeps all effects disabled', () => {
     template.resourcePropertiesCountIs(
       'AWS::Lambda::Function',
       {
@@ -264,11 +323,12 @@ describe('Chief product stack', () => {
             CONNECTOR_RUNTIME_TABLE_NAME: Match.anyValue(),
             RETRIEVAL_TABLE_NAME: Match.anyValue(),
             SNAPSHOT_BUCKET_NAME: Match.anyValue(),
-            INGESTION_QUEUE_URL: Match.anyValue(),
-            OUTBOX_QUEUE_URL: Match.anyValue(),
-            PRODUCT_EVENT_BUS_NAME: Match.anyValue(),
-            DIGEST_KEY_SECRET_ARN: Match.anyValue(),
           }),
+        },
+        LoggingConfig: {
+          ApplicationLogLevel: 'INFO',
+          LogFormat: 'JSON',
+          SystemLogLevel: 'WARN',
         },
         Timeout: 60,
       },
@@ -278,12 +338,75 @@ describe('Chief product stack', () => {
       template.findResources('AWS::Lambda::Function'),
     ) as SynthesizedWorkerResource[];
     expect(workers).toHaveLength(2);
+    const workerEnvironments = workers.map(
+      ({ Properties }) =>
+        (
+          Properties as {
+            Environment?: { Variables?: Record<string, unknown> };
+          }
+        )?.Environment?.Variables ?? {},
+    );
+    const ingestionEnvironment = workerEnvironments.find(
+      (environment) =>
+        environment.POWERTOOLS_SERVICE_NAME === 'chief-ingestion-worker',
+    );
+    const executionEnvironment = workerEnvironments.find(
+      (environment) =>
+        environment.POWERTOOLS_SERVICE_NAME === 'chief-execution-worker',
+    );
+    expect(ingestionEnvironment).toMatchObject({
+      INGESTION_ASANA_TOPIC_LOOKUP_INDEX_NAME: 'AsanaTopicLookupIndex',
+      INGESTION_CONNECTOR_BINDINGS:
+        'gmail=gmail@1.0.0,microsoft_graph=microsoft-graph@1.0.0-wave1a,imap=imap-smtp@1.0.0-protocol,twilio_sms=twilio-sms@1.0.0,twilio_whatsapp=twilio-whatsapp@1.0.0,x=x_legacy_dm@1.0.0,linkedin_archive=linkedin-communications@1.0.0-scaffold,asana=asana-work-management@1.0.0',
+      INGESTION_IDENTITY_LOOKUP_INDEX_NAME: 'IdentityLookupIndex',
+      INGESTION_RUNTIME_MODE: 'production',
+      INGESTION_THREAD_LOOKUP_INDEX_NAME: 'ThreadLookupIndex',
+    });
+    for (const referenceName of [
+      'CONNECTOR_RUNTIME_TABLE_NAME',
+      'CORE_TABLE_NAME',
+      'DIGEST_KEY_SECRET_ARN',
+      'PRODUCT_DATA_KEY_ARN',
+      'RETRIEVAL_TABLE_NAME',
+      'SNAPSHOT_BUCKET_NAME',
+    ]) {
+      expectCdkReference(ingestionEnvironment?.[referenceName]);
+    }
+    expect(ingestionEnvironment).not.toHaveProperty('INGESTION_QUEUE_URL');
+    expect(ingestionEnvironment).not.toHaveProperty('OUTBOX_QUEUE_URL');
+    expect(ingestionEnvironment).not.toHaveProperty('PRODUCT_EVENT_BUS_NAME');
+    expect(ingestionEnvironment?.INGESTION_CONNECTOR_BINDINGS).not.toContain(
+      'demo=',
+    );
+    for (const referenceName of [
+      'INGESTION_QUEUE_URL',
+      'OUTBOX_QUEUE_URL',
+      'PRODUCT_EVENT_BUS_NAME',
+    ]) {
+      expectCdkReference(executionEnvironment?.[referenceName]);
+    }
+    const ingestionWorker = workers.find(
+      ({ Properties }) =>
+        (
+          Properties as {
+            Environment?: { Variables?: Record<string, unknown> };
+          }
+        )?.Environment?.Variables?.POWERTOOLS_SERVICE_NAME ===
+        'chief-ingestion-worker',
+    );
+    const executionWorker = workers.find(
+      ({ Properties }) =>
+        (
+          Properties as {
+            Environment?: { Variables?: Record<string, unknown> };
+          }
+        )?.Environment?.Variables?.POWERTOOLS_SERVICE_NAME ===
+        'chief-execution-worker',
+    );
+    expect(ingestionWorker?.Properties?.ReservedConcurrentExecutions).toBe(2);
     expect(
-      workers.every(
-        ({ Properties }) =>
-          Properties?.ReservedConcurrentExecutions === undefined,
-      ),
-    ).toBe(true);
+      executionWorker?.Properties?.ReservedConcurrentExecutions,
+    ).toBeUndefined();
     template.resourceCountIs('AWS::Lambda::EventSourceMapping', 2);
     template.resourcePropertiesCountIs(
       'AWS::Lambda::EventSourceMapping',
@@ -301,23 +424,16 @@ describe('Chief product stack', () => {
       { RetentionInDays: 90 },
       2,
     );
-    const environments = Object.values(
-      template.findResources('AWS::Lambda::Function'),
-    ).map(
-      (resource) =>
-        (resource as { Properties: { Environment: { Variables: object } } })
-          .Properties.Environment.Variables,
-    );
+    const environments = workerEnvironments;
     expect(environments).toHaveLength(2);
     expect(
       environments.every((environment) => {
-        const switches = environment as Record<string, unknown>;
         return [
           'EXTERNAL_EFFECTS',
           'MODEL_EFFECTS',
           'PROVIDER_EFFECTS',
           'WORK_MANAGEMENT_EFFECTS',
-        ].every((key) => switches[key] === 'disabled');
+        ].every((key) => environment[key] === 'disabled');
       }),
     ).toBe(true);
     expect(JSON.stringify(environments)).not.toMatch(
@@ -325,9 +441,64 @@ describe('Chief product stack', () => {
     );
   });
 
-  it('grants a queue producer and consumer without mutable-fact or scan permissions', () => {
+  it('gives ingestion only resource-scoped persistence and secret-reference authority', () => {
+    const statements = workerPolicyStatements('IngestionWorker');
+    const actions = statements.flatMap(({ Action }) =>
+      Array.isArray(Action) ? Action : Action === undefined ? [] : [Action],
+    );
+
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        'dynamodb:Query',
+        'dynamodb:TransactWriteItems',
+        's3:GetObject*',
+        's3:PutObject',
+        'secretsmanager:GetSecretValue',
+        'sqs:ReceiveMessage',
+      ]),
+    );
+    expect(actions).not.toEqual(
+      expect.arrayContaining([
+        'bedrock:InvokeModel',
+        'events:PutEvents',
+        'lambda:InvokeFunction',
+        'ses:SendEmail',
+        'sns:Publish',
+        'sqs:SendMessage',
+      ]),
+    );
+    const dataPlaneStatements = statements.filter(({ Action }) => {
+      const values = Array.isArray(Action)
+        ? Action
+        : Action === undefined
+          ? []
+          : [Action];
+      return values.some((action) =>
+        /^(?:dynamodb|kms|s3|secretsmanager|sqs):/u.test(action),
+      );
+    });
+    expect(dataPlaneStatements).not.toHaveLength(0);
+    expect(
+      dataPlaneStatements.every(({ Resource }) => {
+        if (Array.isArray(Resource)) return !Resource.includes('*');
+        return Resource !== '*';
+      }),
+    ).toBe(true);
+
+    const secretStatements = statements.filter(({ Action }) => {
+      const values = Array.isArray(Action)
+        ? Action
+        : Action === undefined
+          ? []
+          : [Action];
+      return values.some((action) => action.startsWith('secretsmanager:'));
+    });
+    expect(secretStatements).toHaveLength(1);
+    expect(JSON.stringify(secretStatements)).toContain('DigestKeySecret');
+  });
+
+  it('grants queue consumers without mutable-fact or scan permissions', () => {
     const actions = allActions();
-    expect(actions).toContain('sqs:SendMessage');
     expect(actions).toContain('sqs:ReceiveMessage');
     expect(actions).toContain('sqs:DeleteMessage');
     expect(actions).toContain('dynamodb:TransactWriteItems');

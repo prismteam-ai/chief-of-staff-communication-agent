@@ -25,15 +25,21 @@ const PROJECT_NAME = 'chief-communications';
 const REPOSITORY_NAME = 'chief-of-staff-communication-agent';
 
 const coreIndexes = {
-  workQueue: 'WorkQueueIndex',
+  asanaTopicLookup: 'AsanaTopicLookupIndex',
   correlation: 'CorrelationIndex',
+  identityLookup: 'IdentityLookupIndex',
   sla: 'SlaIndex',
+  threadLookup: 'ThreadLookupIndex',
+  workQueue: 'WorkQueueIndex',
 } as const;
 
 const connectorIndexes = {
   outbox: 'OutboxIndex',
   leaseRenewal: 'LeaseRenewalIndex',
 } as const;
+
+const ingestionConnectorBindings =
+  'gmail=gmail@1.0.0,microsoft_graph=microsoft-graph@1.0.0-wave1a,imap=imap-smtp@1.0.0-protocol,twilio_sms=twilio-sms@1.0.0,twilio_whatsapp=twilio-whatsapp@1.0.0,x=x_legacy_dm@1.0.0,linkedin_archive=linkedin-communications@1.0.0-scaffold,asana=asana-work-management@1.0.0';
 
 export class ChiefProductStack extends cdk.Stack {
   public constructor(scope: Construct, id: string, props: cdk.StackProps) {
@@ -82,6 +88,39 @@ export class ChiefProductStack extends cdk.Stack {
       partitionKey: { name: 'gsiSlaPk', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'gsiSlaSk', type: dynamodb.AttributeType.STRING },
       projectionType: dynamodb.ProjectionType.KEYS_ONLY,
+    });
+    coreTable.addGlobalSecondaryIndex({
+      indexName: coreIndexes.threadLookup,
+      partitionKey: {
+        name: 'threadLookupKey',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.INCLUDE,
+      nonKeyAttributes: [
+        'deleted',
+        'direction',
+        'messageId',
+        'revisionId',
+        'sourceTimestamp',
+      ],
+    });
+    coreTable.addGlobalSecondaryIndex({
+      indexName: coreIndexes.identityLookup,
+      partitionKey: {
+        name: 'identityLookupKey',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.INCLUDE,
+      nonKeyAttributes: ['accountId', 'personId', 'revisionId'],
+    });
+    coreTable.addGlobalSecondaryIndex({
+      indexName: coreIndexes.asanaTopicLookup,
+      partitionKey: {
+        name: 'asanaTopicLookupKey',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.INCLUDE,
+      nonKeyAttributes: ['dedupeKey', 'providerObjectId'],
     });
 
     const connectorRuntimeTable = this.createTable(
@@ -241,6 +280,12 @@ export class ChiefProductStack extends cdk.Stack {
       },
     });
 
+    const effectDisabledEnvironment = {
+      EXTERNAL_EFFECTS: 'disabled',
+      MODEL_EFFECTS: 'disabled',
+      PROVIDER_EFFECTS: 'disabled',
+      WORK_MANAGEMENT_EFFECTS: 'disabled',
+    } as const;
     const commonEnvironment = {
       CORE_TABLE_NAME: coreTable.tableName,
       CONNECTOR_RUNTIME_TABLE_NAME: connectorRuntimeTable.tableName,
@@ -250,18 +295,31 @@ export class ChiefProductStack extends cdk.Stack {
       OUTBOX_QUEUE_URL: outboxQueue.queueUrl,
       PRODUCT_EVENT_BUS_NAME: productBus.eventBusName,
       DIGEST_KEY_SECRET_ARN: digestKeySecret.secretArn,
-      EXTERNAL_EFFECTS: 'disabled',
-      MODEL_EFFECTS: 'disabled',
-      PROVIDER_EFFECTS: 'disabled',
-      WORK_MANAGEMENT_EFFECTS: 'disabled',
+      ...effectDisabledEnvironment,
       POWERTOOLS_METRICS_NAMESPACE: 'ChiefProduct',
+    };
+    const ingestionEnvironment = {
+      CONNECTOR_RUNTIME_TABLE_NAME: connectorRuntimeTable.tableName,
+      CORE_TABLE_NAME: coreTable.tableName,
+      DIGEST_KEY_SECRET_ARN: digestKeySecret.secretArn,
+      ...effectDisabledEnvironment,
+      INGESTION_ASANA_TOPIC_LOOKUP_INDEX_NAME: coreIndexes.asanaTopicLookup,
+      INGESTION_CONNECTOR_BINDINGS: ingestionConnectorBindings,
+      INGESTION_IDENTITY_LOOKUP_INDEX_NAME: coreIndexes.identityLookup,
+      INGESTION_RUNTIME_MODE: 'production',
+      INGESTION_THREAD_LOOKUP_INDEX_NAME: coreIndexes.threadLookup,
+      POWERTOOLS_METRICS_NAMESPACE: 'ChiefProduct',
+      PRODUCT_DATA_KEY_ARN: dataKey.keyArn,
+      RETRIEVAL_TABLE_NAME: retrievalTable.tableName,
+      SNAPSHOT_BUCKET_NAME: snapshotBucket.bucketName,
     };
 
     const ingestionWorker = this.createWorker(
       'IngestionWorker',
       'apps/ingestion-worker/src/handler.ts',
       'chief-ingestion-worker',
-      commonEnvironment,
+      ingestionEnvironment,
+      2,
     );
     ingestionWorker.addEventSource(
       new eventSources.SqsEventSource(ingestionQueue, {
@@ -292,8 +350,6 @@ export class ChiefProductStack extends cdk.Stack {
     snapshotBucket.grantRead(ingestionWorker);
     snapshotBucket.grantPut(ingestionWorker);
     ingestionQueue.grantConsumeMessages(ingestionWorker);
-    outboxQueue.grantSendMessages(ingestionWorker);
-    productBus.grantPutEventsTo(ingestionWorker);
     digestKeySecret.grantRead(ingestionWorker);
 
     this.grantTableData(executionWorker, coreTable, 'read-write');
@@ -419,6 +475,7 @@ export class ChiefProductStack extends cdk.Stack {
       encryptionMasterKey: dataKey,
       visibilityTimeout: cdk.Duration.minutes(6),
       retentionPeriod: cdk.Duration.days(4),
+      maxMessageSizeBytes: 256 * 1024,
       enforceSSL: true,
       deadLetterQueue: { queue: deadLetterQueue, maxReceiveCount: 5 },
     });
@@ -499,6 +556,7 @@ export class ChiefProductStack extends cdk.Stack {
     relativeEntry: string,
     serviceName: string,
     environment: Record<string, string>,
+    reservedConcurrentExecutions?: number,
   ): nodejs.NodejsFunction {
     const logGroup = new logs.LogGroup(this, `${id}LogGroup`, {
       retention: logs.RetentionDays.THREE_MONTHS,
@@ -511,7 +569,11 @@ export class ChiefProductStack extends cdk.Stack {
       architecture: lambda.Architecture.ARM_64,
       memorySize: 512,
       timeout: cdk.Duration.seconds(60),
+      reservedConcurrentExecutions,
       tracing: lambda.Tracing.ACTIVE,
+      applicationLogLevelV2: lambda.ApplicationLogLevel.INFO,
+      loggingFormat: lambda.LoggingFormat.JSON,
+      systemLogLevelV2: lambda.SystemLogLevel.WARN,
       logGroup,
       environment: {
         ...environment,

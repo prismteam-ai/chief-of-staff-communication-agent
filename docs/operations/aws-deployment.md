@@ -27,6 +27,45 @@ CloudFront API/MCP endpoints.
 No OpenSearch resource is created. The assessment profile uses the bounded
 DynamoDB/S3 retrieval contract.
 
+### Production ingestion composition
+
+`ChiefProductStack` invokes the ingestion worker only through its SQS event
+source. The exported Lambda handler consumes `SQSEvent` and returns partial
+batch failures by SQS `messageId`; the deterministic direct
+`IngestionEvent` handler remains a test/fixture constructor and is not the
+deployed entry point.
+
+The queue accepts only EventBridge envelopes whose source is
+`chief.connectors` and whose detail type is
+`communication.ingest.requested`. The detail carries one server-derived
+tenant/account/brand/authorization scope and the canonical ingestion event.
+The runtime rejects a work item that does not match that authority or the
+deployment-owned connector/version binding. `demo` and fixture/disabled
+runtime modes are not admitted by the production composition.
+
+The worker receives this explicit configuration:
+
+| Environment variable | Bound value class |
+|---|---|
+| `INGESTION_RUNTIME_MODE` | Literal `production`; missing or different fails closed |
+| `CORE_TABLE_NAME` | CDK token for the core table |
+| `CONNECTOR_RUNTIME_TABLE_NAME` | CDK token for the fenced checkpoint/runtime table |
+| `RETRIEVAL_TABLE_NAME` | CDK token for the bounded retrieval table |
+| `SNAPSHOT_BUCKET_NAME` | CDK token for the private immutable body/snapshot bucket |
+| `DIGEST_KEY_SECRET_ARN` | ARN reference to the generated `{version,key}` digest secret; never secret material |
+| `PRODUCT_DATA_KEY_ARN` | ARN reference to the customer-managed data key |
+| `INGESTION_THREAD_LOOKUP_INDEX_NAME` | `ThreadLookupIndex` |
+| `INGESTION_IDENTITY_LOOKUP_INDEX_NAME` | `IdentityLookupIndex` |
+| `INGESTION_ASANA_TOPIC_LOOKUP_INDEX_NAME` | `AsanaTopicLookupIndex` |
+| `INGESTION_CONNECTOR_BINDINGS` | Fixed `source=connector@descriptor-version` deployment allowlist |
+
+The three lookup indexes have partition keys only and bounded `INCLUDE`
+projections containing exactly the fields consumed by the Dynamo persistence
+adapter. The worker can read/write the three product tables, read/write the
+private bucket, consume its queue, and read the exact digest secret. It has no
+outbox-send, EventBridge-publish, Bedrock, Lambda-invoke, SES, SNS-publish, or
+provider credential authority.
+
 ## Safety defaults
 
 Every Lambda receives four independent disabled switches:
@@ -106,6 +145,9 @@ Review both generated templates. Required invariants include:
 - two KMS-encrypted work queues, two KMS-encrypted DLQs, and redrive policies;
 - two SQS event-source mappings with partial-batch failure reporting and
   concurrency `2`;
+- a 256 KiB message ceiling on both work queues, ingestion reserved concurrency
+  `2`, JSON Lambda system logs at `WARN`, and Powertools application logs
+  filtered at `INFO`;
 - one encrypted EventBridge bus and bounded ingestion route;
 - one stateful non-empty alarm per DLQ, with both ALARM and OK actions;
 - 90-day logs, active tracing, bounded timeouts, and SQS event-source maximum
@@ -117,6 +159,9 @@ Review both generated templates. Required invariants include:
   security-header policy; there is no distribution-wide custom error response
   that could turn an API/MCP or missing-asset error into `index.html` with 200;
 - no OpenSearch resource and no credential value.
+- the three production ingestion lookup GSIs, the exact connector/version
+  allowlist with no `demo` source, secret/key ARN references, and no wildcard
+  ingestion data-plane policy resource.
 
 ## Deploy an exact snapshot
 
@@ -183,6 +228,11 @@ Also verify:
 
 - both DLQs are empty;
 - both event-source mappings are enabled;
+- the ingestion mapping reports partial batch failures, maximum concurrency
+  `2`, and the function has reserved concurrency `2`;
+- a deliberately malformed, fixture-mode, wrong-authority, or wrong connector
+  version queue record is returned in `batchItemFailures` and produces no
+  canonical write;
 - all four effect switches are `disabled` on all four Lambdas;
 - API access logs and Lambda log groups retain 90 days;
 - the public fixture UI labels fixture/recorded/blocked capabilities truthfully;
