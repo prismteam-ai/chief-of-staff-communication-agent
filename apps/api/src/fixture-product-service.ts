@@ -468,6 +468,12 @@ function draftFor(
   });
 }
 
+function initialDraftBody(recommendation: ActionRecommendation): string {
+  return recommendation.actionType === 'request_context'
+    ? 'I am confirming the approved figures and will follow up with a sourced update.'
+    : 'Thanks for the note. QA ownership is confirmed, and I will send the final launch update today.';
+}
+
 function decodeCursor(cursor: string | undefined, status: string | undefined) {
   if (cursor === undefined) return 0;
   try {
@@ -541,8 +547,6 @@ export class FixtureProductService implements ProductService {
   readonly #connectors: readonly ConnectorStatusView[];
   readonly #recommendationsByMessage: ReadonlyMap<string, ActionRecommendation>;
   readonly #recommendationsById: ReadonlyMap<string, ActionRecommendation>;
-  readonly #drafts = new Map<string, CitedDraftResult>();
-  readonly #currentDraftByDraftId = new Map<string, string>();
   readonly #proposals = new Map<
     string,
     {
@@ -871,24 +875,10 @@ export class FixtureProductService implements ProductService {
         'Recommendation revision is stale.',
       );
     }
-    const draftId = `draft-${recommendation.recommendationId}`;
-    const currentRevisionId = this.#currentDraftByDraftId.get(draftId);
-    const existing =
-      currentRevisionId === undefined
-        ? undefined
-        : this.#drafts.get(currentRevisionId);
-    if (existing !== undefined) return { result: existing };
     const result = draftFor(
       recommendation,
       1,
-      recommendation.actionType === 'request_context'
-        ? 'I am confirming the approved figures and will follow up with a sourced update.'
-        : 'Thanks for the note. QA ownership is confirmed, and I will send the final launch update today.',
-    );
-    this.#drafts.set(result.draft.draftRevisionId, result);
-    this.#currentDraftByDraftId.set(
-      result.draft.draftId,
-      result.draft.draftRevisionId,
+      initialDraftBody(recommendation),
     );
     return { result };
   }
@@ -902,44 +892,37 @@ export class FixtureProductService implements ProductService {
     },
   ) {
     this.#assertContext(context);
-    const current = this.#drafts.get(input.draftRevisionId);
-    if (current === undefined) {
+    const match =
+      /^draft-(recommendation-[a-zA-Z0-9_-]+)-revision-(\d+)$/u.exec(
+        input.draftRevisionId,
+      );
+    const recommendation =
+      match === null
+        ? undefined
+        : this.#recommendationsById.get(match[1] ?? '');
+    if (match === null || recommendation === undefined) {
       throw new ProductServiceError(
         'NOT_FOUND',
         'Draft revision was not found.',
       );
     }
-    if (current.draft.revision !== input.expectedDraftRevision) {
+    const revision = Number(match[2]);
+    if (revision !== input.expectedDraftRevision || revision !== 1) {
       throw new ProductServiceError(
         'STALE_REVISION',
-        'Draft revision is stale.',
+        'Only the deterministic first fixture revision can be revised.',
       );
     }
-    if (
-      this.#currentDraftByDraftId.get(current.draft.draftId) !==
-      current.draft.draftRevisionId
-    ) {
-      throw new ProductServiceError(
-        'STALE_REVISION',
-        'Draft revision has already been superseded.',
-      );
-    }
-    const recommendation = this.#recommendationsByMessage.get(
-      current.draft.sourceMessageRevisionId,
+    const current = draftFor(
+      recommendation,
+      1,
+      initialDraftBody(recommendation),
     );
-    if (recommendation === undefined) {
-      throw new ProductServiceError('NOT_FOUND', 'Draft source was not found.');
-    }
     const result = draftFor(
       recommendation,
-      current.draft.revision + 1,
+      2,
       `${current.draft.body}\n\nRevision note: ${input.revisionInstruction}`,
       current.draft.draftRevisionId,
-    );
-    this.#drafts.set(result.draft.draftRevisionId, result);
-    this.#currentDraftByDraftId.set(
-      result.draft.draftId,
-      result.draft.draftRevisionId,
     );
     return { result };
   }

@@ -161,7 +161,7 @@ describe('typed product router', () => {
       }),
     ).result;
     const revised = reviseDraftResultSchema.parse(
-      await caller.agent.reviseDraft({
+      await createCaller().agent.reviseDraft({
         draftRevisionId: draft.draft.draftRevisionId,
         expectedDraftRevision: draft.draft.revision,
         revisionInstruction: 'Make the commitment more concise.',
@@ -171,13 +171,15 @@ describe('typed product router', () => {
     expect(revised.draft.supersedesRevisionId).toBe(
       draft.draft.draftRevisionId,
     );
-    await expect(
-      caller.agent.reviseDraft({
+    const replayed = reviseDraftResultSchema.parse(
+      await createCaller().agent.reviseDraft({
         draftRevisionId: draft.draft.draftRevisionId,
         expectedDraftRevision: draft.draft.revision,
-        revisionInstruction: 'Try to edit the superseded revision.',
+        revisionInstruction: 'Make the commitment more concise.',
       }),
-    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    ).result;
+    expect(replayed.draft.draftRevisionId).toBe(revised.draft.draftRevisionId);
+    expect(replayed.draft.contentHash).toBe(revised.draft.contentHash);
     expect(
       requestContextResultSchema.parse(
         await caller.agent.requestContext({
