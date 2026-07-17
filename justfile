@@ -61,6 +61,13 @@ seed-demo:
 verify-ingest:
     pnpm exec tsx scripts/verify-ingest.ts
 
+# Seeds one synthetic communication already in the needs_context state (low-confidence
+# recommendation, no draft) so the supply-context flow is demonstrable without depending on the
+# real agent returning a low-confidence score for some fixture. Idempotent — fixed commId, safe to
+# re-run. Requires just gmail-auth first (seeds into the connected mailbox's account).
+seed-needs-context:
+    pnpm exec tsx scripts/seed-needs-context.ts
+
 # Local-first RAG proof (brief constraint 2): starts Docker OpenSearch, embeds+indexes
 # fixtures/rag/corpus.jsonl via real Bedrock, replays fixtures/rag/golden-queries.json against
 # the SAME index mapping + query code the deployed adapter uses, tears the container down.
