@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { ChiefFoundationStack } from '../lib/chief-foundation-stack.js';
 import { ChiefProductStack } from '../lib/chief-product-stack.js';
 
-function createProductTemplate(): Template {
-  const app = new cdk.App();
+function createProductTemplate(ingestionGsiStage?: number): Template {
+  const app = new cdk.App({
+    context: ingestionGsiStage === undefined ? {} : { ingestionGsiStage },
+  });
   const stack = new ChiefProductStack(app, 'TestChiefProduct', {
     env: { account: '417242953053', region: 'us-east-2' },
   });
@@ -107,6 +109,38 @@ function expectCdkReference(value: unknown): void {
 }
 
 describe('Chief product stack', () => {
+  it('supports one-index-at-a-time production GSI migration waves', () => {
+    const newIndexes = [
+      'ThreadLookupIndex',
+      'IdentityLookupIndex',
+      'AsanaTopicLookupIndex',
+    ];
+    for (const stage of [1, 2, 3]) {
+      const stageTemplate = createProductTemplate(stage);
+      const tables = Object.values(
+        stageTemplate.findResources('AWS::DynamoDB::Table'),
+      ) as Array<{
+        readonly Properties?: {
+          readonly GlobalSecondaryIndexes?: readonly SynthesizedIndex[];
+        };
+      }>;
+      const names = tables.flatMap(({ Properties }) =>
+        (Properties?.GlobalSecondaryIndexes ?? []).map(
+          ({ IndexName }) => IndexName,
+        ),
+      );
+      expect(names.filter((name) => newIndexes.includes(name))).toEqual(
+        newIndexes.slice(0, stage),
+      );
+    }
+  }, 30_000);
+
+  it('rejects invalid production GSI migration stages', () => {
+    expect(() => createProductTemplate(0)).toThrow(
+      'ingestionGsiStage must be 1, 2, or 3',
+    );
+  });
+
   it('creates exactly three on-demand, KMS-encrypted, PITR domain tables', () => {
     template.resourceCountIs('AWS::DynamoDB::Table', 3);
     template.resourcePropertiesCountIs(

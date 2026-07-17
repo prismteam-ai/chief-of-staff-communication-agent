@@ -191,6 +191,27 @@ pnpm exec cdk deploy ChiefProductStack ChiefFoundationStack `
 Pop-Location
 ```
 
+When the three production ingestion GSIs are new to an existing table, AWS
+permits only one GSI creation or deletion per table update. Deploy the product
+stack in three resumable waves before the final full-stack command above:
+
+```powershell
+foreach ($Stage in 1..3) {
+  pnpm exec cdk deploy ChiefProductStack `
+    --app "node --enable-source-maps dist/bin/app.js" `
+    --context account=417242953053 `
+    --context region=us-east-2 `
+    --context ingestionGsiStage=$Stage `
+    --profile $ChiefAwsProfile `
+    --require-approval never
+}
+```
+
+Each wave is monotonic: stage 1 adds `ThreadLookupIndex`, stage 2 adds
+`IdentityLookupIndex`, and stage 3 adds `AsanaTopicLookupIndex`. The default is
+stage 3, so normal synths and every later deployment retain the complete schema.
+Do not skip directly to stage 3 when more than one of these indexes is absent.
+
 `--require-approval never` suppresses only the CDK CLI prompt; it does not
 weaken the repository's human authorization rules. The exact deployment action
 must already be authorized.

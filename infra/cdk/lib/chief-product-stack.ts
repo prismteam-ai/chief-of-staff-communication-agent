@@ -45,6 +45,13 @@ export class ChiefProductStack extends cdk.Stack {
   public constructor(scope: Construct, id: string, props: cdk.StackProps) {
     super(scope, id, props);
 
+    const ingestionGsiStage = Number(
+      this.node.tryGetContext('ingestionGsiStage') ?? 3,
+    );
+    if (![1, 2, 3].includes(ingestionGsiStage)) {
+      throw new TypeError('ingestionGsiStage must be 1, 2, or 3');
+    }
+
     cdk.Tags.of(this).add('project_name', PROJECT_NAME);
     cdk.Tags.of(this).add('repository', REPOSITORY_NAME);
     cdk.Tags.of(this).add('external_effects', 'disabled');
@@ -89,39 +96,45 @@ export class ChiefProductStack extends cdk.Stack {
       sortKey: { name: 'gsiSlaSk', type: dynamodb.AttributeType.STRING },
       projectionType: dynamodb.ProjectionType.KEYS_ONLY,
     });
-    coreTable.addGlobalSecondaryIndex({
-      indexName: coreIndexes.threadLookup,
-      partitionKey: {
-        name: 'threadLookupKey',
-        type: dynamodb.AttributeType.STRING,
-      },
-      projectionType: dynamodb.ProjectionType.INCLUDE,
-      nonKeyAttributes: [
-        'deleted',
-        'direction',
-        'messageId',
-        'revisionId',
-        'sourceTimestamp',
-      ],
-    });
-    coreTable.addGlobalSecondaryIndex({
-      indexName: coreIndexes.identityLookup,
-      partitionKey: {
-        name: 'identityLookupKey',
-        type: dynamodb.AttributeType.STRING,
-      },
-      projectionType: dynamodb.ProjectionType.INCLUDE,
-      nonKeyAttributes: ['accountId', 'personId', 'revisionId'],
-    });
-    coreTable.addGlobalSecondaryIndex({
-      indexName: coreIndexes.asanaTopicLookup,
-      partitionKey: {
-        name: 'asanaTopicLookupKey',
-        type: dynamodb.AttributeType.STRING,
-      },
-      projectionType: dynamodb.ProjectionType.INCLUDE,
-      nonKeyAttributes: ['dedupeKey', 'providerObjectId'],
-    });
+    if (ingestionGsiStage >= 1) {
+      coreTable.addGlobalSecondaryIndex({
+        indexName: coreIndexes.threadLookup,
+        partitionKey: {
+          name: 'threadLookupKey',
+          type: dynamodb.AttributeType.STRING,
+        },
+        projectionType: dynamodb.ProjectionType.INCLUDE,
+        nonKeyAttributes: [
+          'deleted',
+          'direction',
+          'messageId',
+          'revisionId',
+          'sourceTimestamp',
+        ],
+      });
+    }
+    if (ingestionGsiStage >= 2) {
+      coreTable.addGlobalSecondaryIndex({
+        indexName: coreIndexes.identityLookup,
+        partitionKey: {
+          name: 'identityLookupKey',
+          type: dynamodb.AttributeType.STRING,
+        },
+        projectionType: dynamodb.ProjectionType.INCLUDE,
+        nonKeyAttributes: ['accountId', 'personId', 'revisionId'],
+      });
+    }
+    if (ingestionGsiStage >= 3) {
+      coreTable.addGlobalSecondaryIndex({
+        indexName: coreIndexes.asanaTopicLookup,
+        partitionKey: {
+          name: 'asanaTopicLookupKey',
+          type: dynamodb.AttributeType.STRING,
+        },
+        projectionType: dynamodb.ProjectionType.INCLUDE,
+        nonKeyAttributes: ['dedupeKey', 'providerObjectId'],
+      });
+    }
 
     const connectorRuntimeTable = this.createTable(
       'ConnectorRuntimeTable',
