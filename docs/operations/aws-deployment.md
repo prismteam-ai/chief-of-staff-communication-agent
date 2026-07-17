@@ -108,7 +108,9 @@ Review both generated templates. Required invariants include:
   concurrency `2`;
 - one encrypted EventBridge bus and bounded ingestion route;
 - one stateful non-empty alarm per DLQ, with both ALARM and OK actions;
-- 90-day logs, active tracing, bounded timeouts, and reserved concurrency;
+- 90-day logs, active tracing, bounded timeouts, and SQS event-source maximum
+  concurrency `2`; workers deliberately use the account's unreserved pool so
+  low-quota assessment accounts retain Lambda's required unreserved capacity;
 - private-S3 CloudFront origin, a default-behavior-only viewer-request rewrite
   for extensionless UI navigation, non-cached API/MCP behaviors, and the
   security-header policy; there is no distribution-wide custom error response

@@ -511,7 +511,6 @@ export class ChiefProductStack extends cdk.Stack {
       architecture: lambda.Architecture.ARM_64,
       memorySize: 512,
       timeout: cdk.Duration.seconds(60),
-      reservedConcurrentExecutions: 2,
       tracing: lambda.Tracing.ACTIVE,
       logGroup,
       environment: {

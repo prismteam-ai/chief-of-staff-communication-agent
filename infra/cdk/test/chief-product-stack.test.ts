@@ -22,6 +22,12 @@ interface SynthesizedIndex {
   };
 }
 
+interface SynthesizedWorkerResource {
+  readonly Properties?: {
+    readonly ReservedConcurrentExecutions?: number;
+  };
+}
+
 function allActions(): readonly string[] {
   const policies = Object.values(
     template.findResources('AWS::IAM::Policy'),
@@ -264,11 +270,20 @@ describe('Chief product stack', () => {
             DIGEST_KEY_SECRET_ARN: Match.anyValue(),
           }),
         },
-        ReservedConcurrentExecutions: 2,
         Timeout: 60,
       },
       2,
     );
+    const workers = Object.values(
+      template.findResources('AWS::Lambda::Function'),
+    ) as SynthesizedWorkerResource[];
+    expect(workers).toHaveLength(2);
+    expect(
+      workers.every(
+        ({ Properties }) =>
+          Properties?.ReservedConcurrentExecutions === undefined,
+      ),
+    ).toBe(true);
     template.resourceCountIs('AWS::Lambda::EventSourceMapping', 2);
     template.resourcePropertiesCountIs(
       'AWS::Lambda::EventSourceMapping',
