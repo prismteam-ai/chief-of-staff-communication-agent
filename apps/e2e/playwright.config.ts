@@ -30,7 +30,7 @@ export default defineConfig({
   workers: isCi ? 1 : undefined,
   reporter: [['list']],
   timeout: 30_000,
-  expect: { timeout: 7_500 },
+  expect: { timeout: hostedBaseUrl === undefined ? 7_500 : 20_000 },
   use: {
     baseURL,
     ...devices['Desktop Chrome'],

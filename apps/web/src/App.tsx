@@ -787,6 +787,8 @@ function ProjectionThreadPage({
   const [state, setState] = useState<HostedThreadState>({ kind: 'loading' });
   const [contextOutcome, setContextOutcome] = useState<string>();
   const [proposalOutcome, setProposalOutcome] = useState<string>();
+  const [draftInput, setDraftInput] = useState('');
+  const [submittedDraft, setSubmittedDraft] = useState<string>();
 
   useEffect(() => {
     if (communication === undefined) {
@@ -839,6 +841,7 @@ function ProjectionThreadPage({
           // have no current recommendation or draft projection.
         }
         if (active) {
+          if (draft !== undefined) setDraftInput(draft.draft.body);
           setState({
             kind: 'ready',
             detail,
@@ -886,6 +889,7 @@ function ProjectionThreadPage({
 
   const reviseDraft = () => {
     if (state.draft === undefined) return;
+    setSubmittedDraft(draftInput);
     void api
       .reviseDraft({
         draftRevisionId: state.draft.draft.draftRevisionId,
@@ -896,6 +900,7 @@ function ProjectionThreadPage({
       .then(
         (draft) => {
           setState((current) => ({ ...current, draft }));
+          setDraftInput(draft.draft.body);
           setWorkflow('revised');
         },
         () => {
@@ -1058,6 +1063,9 @@ function ProjectionThreadPage({
         <section
           className="surface projection-action"
           aria-label="Recommendation and proposals"
+          data-testid={
+            state.recommendation === undefined ? undefined : 'recommendation'
+          }
         >
           <div className="section-heading">
             <div>
@@ -1129,10 +1137,20 @@ function ProjectionThreadPage({
               <textarea
                 id="hosted-draft-editor"
                 data-testid="draft-editor"
-                readOnly
                 rows={7}
-                value={state.draft.draft.body}
+                value={draftInput}
+                onChange={(event) => {
+                  setDraftInput(event.target.value);
+                  setWorkflow('draft');
+                }}
               />
+              <div className="draft-meta">
+                <span>Style profile · concise · direct</span>
+                <span>
+                  {state.draft.factualCitationCount} factual citations
+                </span>
+                <span>Hosted fixture proposal</span>
+              </div>
               <button
                 className="button button--secondary button--full"
                 type="button"
@@ -1140,6 +1158,17 @@ function ProjectionThreadPage({
               >
                 <PencilLine aria-hidden="true" size={16} /> Revise for brevity
               </button>
+            </div>
+          )}
+
+          {workflow === 'draft' || submittedDraft === undefined ? null : (
+            <div className="diff-card" data-testid="revision-diff">
+              <strong>Local immutable ceremony revision</strong>
+              <p>{submittedDraft}</p>
+              <span>
+                The hosted API prepared the cited revision; no provider effect
+                is authorized.
+              </span>
             </div>
           )}
 

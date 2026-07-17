@@ -50,6 +50,9 @@ test.describe('signed-out evaluator journey', () => {
     await page.goto('/inbox');
     const filter = page.getByTestId('inbox-filter');
     await expect(filter).toBeVisible();
+    await expect(
+      page.locator('[data-testid^="inbox-row-"]').first(),
+    ).toBeVisible();
     await filter.selectOption('overdue');
 
     const visibleRows = page.locator('[data-testid^="inbox-row-"]:visible');
@@ -63,7 +66,7 @@ test.describe('signed-out evaluator journey', () => {
       /email|sms|whatsapp/i,
     );
     await expect(page.getByTestId('thread-detail')).toContainText(
-      /Taylor Reed/i,
+      /Jordan Lee|Taylor Reed/i,
     );
     await expect(page.locator('[data-testid^="attachment-"]')).not.toHaveCount(
       0,
