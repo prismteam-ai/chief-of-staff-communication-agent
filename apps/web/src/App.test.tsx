@@ -118,7 +118,12 @@ describe('executive evaluator application', () => {
 
     expect(await screen.findByText('Hosted assessment fixture.')).toBeTruthy();
     expect(screen.getByTestId('metric-volume').textContent).toContain('1');
-    expect(screen.getByText('Friday launch decision')).toBeTruthy();
+    expect(
+      screen
+        .getByText('Friday launch decision')
+        .closest('a')
+        ?.getAttribute('href'),
+    ).toBe('/inbox/thread-q3-launch');
     expect(screen.queryByText('Taylor Reed')).toBeNull();
   });
 

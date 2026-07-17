@@ -95,6 +95,11 @@ type WorkflowState = 'draft' | 'revised' | 'approved';
 type InboxFilter = 'all' | CommunicationStatus;
 type ProjectionSource = 'checking' | 'hosted_fixture' | 'local_fallback';
 
+const hostedEvaluatorRoutes: Readonly<Record<string, string>> = Object.freeze({
+  'message-revision-1-1': 'thread-q3-launch',
+  'message-revision-2-1': 'thread-board-packet',
+});
+
 interface ProductProjection {
   readonly source: ProjectionSource;
   readonly metrics?: BrowserDashboardMetrics;
@@ -125,7 +130,9 @@ function hostedCommunicationToView(
   const channel = communication.threadId === 'thread-3' ? 'SMS' : 'Email';
 
   return {
-    id: `${communication.threadId}--${communication.messageRevisionId}`,
+    id:
+      hostedEvaluatorRoutes[communication.messageRevisionId] ??
+      `${communication.threadId}--${communication.messageRevisionId}`,
     threadId: communication.threadId,
     messageRevisionId: communication.messageRevisionId,
     sender: communication.senderDisplayName ?? 'Unknown sender',
