@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "channelType": "gmail",
+  "accountId": "acct-demo-alex",
+  "externalId": "e2e-ambiguous-1",
+  "threadKey": "thread-ambiguous-1",
+  "participants": [
+    { "id": "unknown.sender@example.com", "role": "from" },
+    { "id": "demoalex775@gmail.com", "displayName": "Alex Demo", "role": "to" }
+  ],
+  "ts": "2026-07-16T13:37:00.000Z",
+  "body": "re: that thing",
+  "attachments": []
+}

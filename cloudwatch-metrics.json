@@ -1,0 +1,326 @@
+{
+  "metrics": [
+    {
+      "name": "RequestProcessed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per successfully handled tRPC request on the API Lambda."
+    },
+    {
+      "name": "RequestFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per tRPC procedure that throws or returns an error on the API Lambda."
+    },
+    {
+      "name": "ProcessingDuration",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Milliseconds",
+      "service": "api",
+      "description": "Wall-clock time to handle one API Gateway invocation of the API Lambda, from request in to response out."
+    },
+    {
+      "name": "MessageIngested",
+      "namespace": "ChiefOfStaffIngest",
+      "unit": "Count",
+      "service": "ingest",
+      "dimensions": ["channel"],
+      "description": "Emitted once per inbound message successfully normalized, deduped, and persisted by the ingest processor Lambda, dimensioned by channel (gmail, sms, ...)."
+    },
+    {
+      "name": "MessageFailed",
+      "namespace": "ChiefOfStaffIngest",
+      "unit": "Count",
+      "service": "ingest",
+      "dimensions": ["channel"],
+      "description": "Emitted once per inbound message the poller or processor Lambda could not fetch, normalize, or persist, dimensioned by channel."
+    },
+    {
+      "name": "ProcessingDuration",
+      "namespace": "ChiefOfStaffIngest",
+      "unit": "Milliseconds",
+      "service": "ingest",
+      "description": "Wall-clock time for one poller tick (all accounts) or one processor invocation (one message) on the ingest Lambdas."
+    },
+    {
+      "name": "ChunkIndexed",
+      "namespace": "ChiefOfStaffIngest",
+      "unit": "Count",
+      "service": "ingest",
+      "dimensions": ["channel"],
+      "description": "Emitted once per communication chunk successfully embedded (Bedrock Cohere Embed v4) and indexed into the communications-chunks OpenSearch index by the processor Lambda, dimensioned by channel."
+    },
+    {
+      "name": "ChunkIndexFailed",
+      "namespace": "ChiefOfStaffIngest",
+      "unit": "Count",
+      "service": "ingest",
+      "dimensions": ["channel"],
+      "description": "Emitted once per communication whose post-persist embed/index step failed (Bedrock or OpenSearch error). Isolated from message ingestion: the communication record is already persisted (status ingested) by the time this can fire, so a chunk-index failure never fails the message — it is a warn-and-count degradation, not an ingest failure."
+    },
+    {
+      "name": "AgentTriggerFailed",
+      "namespace": "ChiefOfStaffIngest",
+      "unit": "Count",
+      "service": "ingest",
+      "dimensions": ["channel"],
+      "description": "Emitted once per communication whose post-persist agent-trigger publish (SQS SendMessage to the agent queue) failed. Isolated like ChunkIndexFailed: the communication is already persisted by the time this can fire, so it is a warn-and-count degradation, never an ingest failure."
+    },
+    {
+      "name": "RecommendationProduced",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Count",
+      "service": "agent",
+      "description": "Emitted once per communication for which the agent Lambda produced a valid recommendation (action type + confidence + rationale) via the Vercel AI SDK ToolLoopAgent."
+    },
+    {
+      "name": "DraftProduced",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Count",
+      "service": "agent",
+      "description": "Emitted once per communication for which the agent Lambda produced a style-aware reply draft (only on the at/above-confidence-threshold path; the below-threshold needs_context path produces no draft)."
+    },
+    {
+      "name": "StyleDraftProduced",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Count",
+      "service": "agent",
+      "description": "Emitted once per DraftProduced whose prompt carried a real learned style profile (design.md §6) rather than the generic v0 executive-assistant voice — i.e. accountId resolved to a userId with a style card already built via just build-style-profile. Never fires for a user with no profile yet; distinguishes a style-matched draft from a generic one at a glance."
+    },
+    {
+      "name": "StyleProfileBuilt",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Count",
+      "service": "agent",
+      "description": "Emitted once per successful just build-style-profile run (Task 10, design.md §6): a style card (tone, length band, sign-off, formality, greeting) was extracted from a sample of the user's sent replies via one Bedrock generateObject call and persisted to the style-profiles table. Published from both the agent Lambda's buildStyleProfile orchestration (apps/agent-handler/src/style/build-style-profile.ts) and, since that script is not a Lambda, via a direct PutMetricDataCommand from scripts/build-style-profile.ts under this same namespace."
+    },
+    {
+      "name": "StyleExemplarAdded",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Count",
+      "service": "agent",
+      "description": "Emitted per sent-reply exemplar indexed into the account-scoped RAG index as a sent_style chunk during just build-style-profile (Task 10, design.md §6 'embedded exemplars') — the (re)build of the sent-history corpus."
+    },
+    {
+      "name": "StyleExemplarAdded",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per approveDraft call whose Task 10 feedback-loop hook successfully indexed the final (approved or edited) sent body as a new sent_style exemplar (design.md §6, alakazam prior-decision-reuse pattern) — the SAME metric name as the agent service's build-time emission (see ChiefOfStaffAgent's StyleExemplarAdded entry), distinguished by namespace, since both represent 'one more retrievable style exemplar indexed' just from two different triggers."
+    },
+    {
+      "name": "StyleProfileBuildDuration",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Milliseconds",
+      "service": "agent",
+      "description": "Wall-clock time for one buildStyleProfile run: extracting the style card and chunking/embedding/indexing every sampled sent reply as an exemplar."
+    },
+    {
+      "name": "StyleFeedbackFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per approveDraft call whose post-send Task 10 feedback-loop hook (indexing the sent reply as a new style exemplar) threw. Isolated like SendFailed's counterparts on the ingest/agent services: the send is already durably confirmed (status answered) by the time this can fire, so a feedback-loop failure never fails the approval — it is a warn-and-count degradation only."
+    },
+    {
+      "name": "AgentTurnFailed",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Count",
+      "service": "agent",
+      "description": "Emitted once per agent turn that threw (model error, invalid structured output, or persistence failure). The failed record is reported back to SQS so only it redelivers, eventually to the agent DLQ, rather than the whole batch retrying."
+    },
+    {
+      "name": "AgentTurnDuration",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Milliseconds",
+      "service": "agent",
+      "description": "Wall-clock time for one agent turn on the agent Lambda, from reading the communication to persisting the recommendation/draft and appending conversation memory."
+    },
+    {
+      "name": "MemoryAppendFailed",
+      "namespace": "ChiefOfStaffAgent",
+      "unit": "Count",
+      "service": "agent",
+      "description": "Emitted once per agent turn whose post-persist AgentCore Memory append (CreateEvent) failed. Isolated like ChunkIndexFailed/AgentTriggerFailed on the ingest service: the recommendation/draft is already persisted by the time this can fire, so a memory-append failure never fails the turn or triggers SQS redelivery — it is a warn-and-count degradation only."
+    },
+    {
+      "name": "DraftApproved",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per communication whose draft is approved via the approveDraft tRPC procedure (design.md §7), immediately before the send handoff to the owning connector."
+    },
+    {
+      "name": "ReplySent",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per communication that reaches answered after a successful provider send confirmation (design.md §7 'sent -> answered activity closure') — the approval loop's terminal success signal."
+    },
+    {
+      "name": "SendFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per approveDraft call whose connector send (e.g. Gmail messages.send) threw. The communication is left at status 'approved' (not 'sent'), never silently marked answered — a retried approveDraft call re-attempts the send."
+    },
+    {
+      "name": "SendDuration",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Milliseconds",
+      "service": "api",
+      "description": "Wall-clock time for one connector send call (approveDraft's send handoff), from just before calling connector.send to its resolution or rejection."
+    },
+    {
+      "name": "CommunicationDismissed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per communication transitioned to dismissed via the dismiss tRPC procedure (design.md §7 'no reply needed') — a terminal state that stops the overdue clock alongside answered."
+    },
+    {
+      "name": "AsanaTaskCreated",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per Asana follow-up task successfully created via the createAsanaFollowup tRPC procedure (Task 7, design.md §9) — always created inside the client's scoped project_gid."
+    },
+    {
+      "name": "AsanaTaskLinked",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per communication successfully linked to an existing Asana task via the linkAsana tRPC procedure (Task 7, design.md §9) — a provenance/back-reference comment is posted on the task and the task gid/permalink is persisted on the communication record."
+    },
+    {
+      "name": "AsanaApiFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per createAsanaFollowup/linkAsana call whose underlying AsanaClient request threw (Task 7). The communication record is left without an asanaTaskGid — never marked linked on a failed write — and a retried call re-attempts."
+    },
+    {
+      "name": "AsanaSyncCompleted",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per successful just sync-asana run (Task 7, design.md §4): the CoS Communication Agent Asana project's tasks were read (paginated, project-scoped only) and upserted into the communications-chunks OpenSearch index as asana-sourced chunks. Published via PutMetricData from the operator-run sync script (not a Lambda, so no Powertools Metrics instance is available) — same namespace/registry convention as the Lambda-emitted metrics above."
+    },
+    {
+      "name": "AsanaSyncTasksSynced",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted alongside AsanaSyncCompleted on each just sync-asana run: the count of project-scoped Asana tasks read via listCommunicationAgentTasks() in that run (before dedup/chunking) — sizes the sync alongside the pass/fail signal AsanaSyncCompleted already gives."
+    },
+    {
+      "name": "AsanaSyncChunksIndexed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted alongside AsanaSyncCompleted on each just sync-asana run: the count of asana-sourced chunks upserted into the communications-chunks OpenSearch index in that run — the sync's actual output volume, distinct from AsanaSyncTasksSynced's input count (one task can yield zero or more chunks)."
+    },
+    {
+      "name": "AsanaScopeViolationRejected",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per linkAsana call rejected because the caller-supplied taskGid does not belong to the configured project_gid (Task 7 privacy scoping, non-negotiable). No comment is posted and nothing is persisted on the communication record when this fires — distinct from AsanaApiFailed, which covers transient/transport failures, not scope denials."
+    },
+    {
+      "name": "ChunkIndexFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "dimensions": ["channel"],
+      "description": "Emitted by the WhatsApp inbound webhook Lambda (Task 9) when the post-persist embed/index step fails for a WhatsApp message — same metric name/semantics as ChiefOfStaffIngest's ChunkIndexFailed (isolated, never fails the ingest outcome), distinguished by namespace since the WhatsApp webhook Lambda is deployed in ApiStack, not IngestStack (see WhatsAppIngested's description for why)."
+    },
+    {
+      "name": "AgentTriggerFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "dimensions": ["channel"],
+      "description": "Emitted by the WhatsApp inbound webhook Lambda (Task 9) when the post-persist agent-trigger publish fails for a WhatsApp message — same metric name/semantics as ChiefOfStaffIngest's AgentTriggerFailed, distinguished by namespace for the same reason as this entry's ChunkIndexFailed counterpart above."
+    },
+    {
+      "name": "WhatsAppIngested",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per inbound WhatsApp message successfully verified (Twilio signature), normalized, deduped, and persisted by the WhatsApp inbound webhook Lambda (Task 9). Lives on the api service's namespace (not ingest's) because the webhook Lambda is deployed alongside the tRPC handler in ApiStack — it must share the already-deployed, stable API Gateway URL Twilio is configured to call."
+    },
+    {
+      "name": "WhatsAppIngestFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per inbound WhatsApp webhook delivery that passed signature verification but could not be normalized or persisted (Task 9). Distinct from WhatsAppSignatureRejected, which covers forged/missing signatures never reaching normalization."
+    },
+    {
+      "name": "WhatsAppSignatureRejected",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per inbound WhatsApp webhook POST whose X-Twilio-Signature header failed HMAC-SHA1 verification against the auth token and exact webhook URL, or was missing entirely (Task 9 brief constraint 3: 'reject unsigned/forged'). The request is rejected with HTTP 403 before any normalization/persistence is attempted."
+    },
+    {
+      "name": "WhatsAppSent",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per successful Twilio Messages API send from the approve->send loop's WhatsApp connector (Task 9) — the channel-dimensioned counterpart to the generic ReplySent metric every channel's send emits."
+    },
+    {
+      "name": "WhatsAppSendFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per Twilio Messages API send call that threw (Task 9) — the channel-dimensioned counterpart to the generic SendFailed metric. The communication is left at status 'approved', never silently marked answered; a retried approveDraft re-attempts the send (same idempotent-claim pattern as Gmail)."
+    },
+    {
+      "name": "McpTokenIssued",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per successful `issueMcpToken` call (Task 11, design.md §8) — the dashboard minting a new per-user bearer token for the Cursor MCP server. Only the token's SHA-256 hash is ever persisted; this metric carries no token material."
+    },
+    {
+      "name": "McpToolInvoked",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per MCP-authenticated tRPC call that passed the bearer-token gate (Task 11) — every `routers/mcp.ts` procedure behind the `authed` middleware (retrieveContext, recommendAction, draftReply, approveDraft, supplyContext, manageAsanaCreate, manageAsanaLink)."
+    },
+    {
+      "name": "McpAuthFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per MCP call whose bearer token was missing, unknown, forged, or revoked (Task 11) — the security-relevant denial counter proving a forged/other-user token never resolves to a userId; graphed on the failed axis alongside AsanaScopeViolationRejected."
+    },
+    {
+      "name": "SessionTokenIssued",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per successful dashboard `login` call (Task 8.5) — a verified username/password minted a session token via the SAME McpAuthService.issue Task 11 uses for MCP tokens. Only the token's SHA-256 hash is ever persisted; this metric carries no token or password material."
+    },
+    {
+      "name": "DashboardRequestAuthenticated",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per dashboard tRPC call that passed the bearer-token gate (Task 8.5) — every communications/metrics/accounts/asana procedure behind `authedMiddleware`, the dashboard-side equivalent of McpToolInvoked."
+    },
+    {
+      "name": "DashboardAuthFailed",
+      "namespace": "ChiefOfStaffApi",
+      "unit": "Count",
+      "service": "api",
+      "description": "Emitted once per `login` call rejected for an unknown username or wrong password (Task 8.5) — the security-relevant denial counter for the dashboard's own credential gate, graphed on the failed axis alongside McpAuthFailed. A rejected dashboard login and a rejected dashboard bearer token both also route through McpAuthFailed's shared verification path where applicable; DashboardAuthFailed specifically covers the credential-check step `login` itself owns."
+    }
+  ]
+}

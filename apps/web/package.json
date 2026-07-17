@@ -1,0 +1,31 @@
+{
+  "name": "@chief-of-staff/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.playwright.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:design": "playwright test --project=design",
+    "test:browser": "playwright test --project=browser",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@chief-of-staff/shared": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@chief-of-staff/tsconfig": "workspace:*",
+    "@playwright/test": "^1.61.1",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  }
+}

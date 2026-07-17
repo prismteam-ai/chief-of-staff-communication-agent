@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "channelType": "gmail",
+  "accountId": "acct-demo-alex",
+  "externalId": "e2e-schedule-1",
+  "threadKey": "thread-schedule-1",
+  "participants": [
+    { "id": "priya.nair@vendorco.example", "displayName": "Priya Nair", "role": "from" },
+    { "id": "demoalex775@gmail.com", "displayName": "Alex Demo", "role": "to" }
+  ],
+  "ts": "2026-07-16T10:45:00.000Z",
+  "body": "Hi Alex, I'd like to set up a 30-minute meeting next week to walk through the contract renewal. Are you free Tuesday or Wednesday afternoon? Happy to send a calendar invite once we pick a time.",
+  "attachments": []
+}

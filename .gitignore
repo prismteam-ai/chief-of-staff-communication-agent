@@ -1,0 +1,38 @@
+# --- secrets & credentials (never committed) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+accounts.local.json
+*credentials*.json
+.aws/
+
+# --- node / build ---
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.turbo/
+
+# --- playwright ---
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# --- cdk / sam ---
+cdk.out/
+.aws-sam/
+cdk.context.json
+
+# --- local data & databases ---
+data/
+*.local.db
+*.sqlite
+
+# --- editor / os ---
+.DS_Store
+.idea/
+*.log

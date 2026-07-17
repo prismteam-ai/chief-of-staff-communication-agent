@@ -1,0 +1,29 @@
+{
+  "name": "@chief-of-staff/mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pidgeot MCP server (stdio) for the Chief of Staff Communication Agent — Task 11, design.md §8. npx-runnable standalone (see the 'why standalone' note below).",
+  "bin": {
+    "chief-of-staff-mcp": "./dist/server.js",
+    "mcp": "./dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

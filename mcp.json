@@ -1,0 +1,13 @@
+{
+  "$schema": "https://cursor.com/schemas/mcp.json",
+  "mcpServers": {
+    "pidgeot": {
+      "command": "node",
+      "args": ["<ABSOLUTE_PATH_TO_CLONE>/chief-of-staff-communication-agent/mcp/dist/server.js"],
+      "env": {
+        "COS_API_URL": "https://klxrwe0sa3.execute-api.us-east-2.amazonaws.com",
+        "COS_API_TOKEN": "<paste your per-user token from the dashboard's Settings > MCP Tokens view>"
+      }
+    }
+  }
+}

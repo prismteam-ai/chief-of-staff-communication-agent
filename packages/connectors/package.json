@@ -1,0 +1,56 @@
+{
+  "name": "@chief-of-staff/connectors",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/contract-test.d.ts",
+      "default": "./dist/contract-test.js"
+    },
+    "./gmail": {
+      "types": "./dist/gmail/index.d.ts",
+      "default": "./dist/gmail/index.js"
+    },
+    "./whatsapp": {
+      "types": "./dist/whatsapp/index.d.ts",
+      "default": "./dist/whatsapp/index.js"
+    },
+    "./asana": {
+      "types": "./dist/asana/index.d.ts",
+      "default": "./dist/asana/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1088.0",
+    "@chief-of-staff/shared": "workspace:*",
+    "googleapis": "^173.0.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@chief-of-staff/tsconfig": "workspace:*",
+    "aws-sdk-client-mock": "^4.1.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "peerDependencies": {
+    "vitest": "^2.1.8"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
+  }
+}

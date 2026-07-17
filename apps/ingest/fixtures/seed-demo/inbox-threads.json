@@ -1,0 +1,83 @@
+[
+  {
+    "category": "scheduling",
+    "subject": "Q3 budget review — confirm Thursday?",
+    "from": { "name": "Priya Natarajan", "email": "priya.natarajan@northwind-consulting.com" },
+    "body": "Hi Alex,\n\nJust checking in on the Q3 budget review — can we confirm the meeting slot for Thursday at 10am? I want to make sure Legal has the updated numbers before then.\n\nThanks,\nPriya"
+  },
+  {
+    "category": "contract-question",
+    "subject": "Meridian rollout contract — two clauses to discuss",
+    "from": { "name": "Daniel Osei", "email": "daniel.osei@meridian-partners.io" },
+    "body": "Hi Alex,\n\nWe reviewed the draft contract for the Meridian rollout and have two clauses we'd like to discuss before signing — the liability cap in section 4 and the renewal notice window in section 9. Can we grab 15 minutes this week?\n\nDaniel",
+    "reply": {
+      "from": { "name": "Daniel Osei", "email": "daniel.osei@meridian-partners.io" },
+      "body": "Following up — are you available tomorrow at 2pm to walk through the two clauses?\n\nDaniel"
+    }
+  },
+  {
+    "category": "attachment",
+    "subject": "Signed vendor agreement attached",
+    "from": { "name": "Marta Kowalczyk", "email": "marta.kowalczyk@brightpath-vendors.com" },
+    "body": "Hi Alex,\n\nPlease find attached the signed vendor agreement for your records. Let me know if you need anything else before onboarding starts next month.\n\nMarta",
+    "attachment": {
+      "filename": "vendor-agreement-signature.png",
+      "contentType": "image/png",
+      "base64Data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    }
+  },
+  {
+    "category": "newsletter",
+    "subject": "This week in operations: three things worth 5 minutes",
+    "from": { "name": "Ops Weekly Digest", "email": "digest@opsweekly-newsletter.com" },
+    "body": "Hi there,\n\nThis week: (1) a new benchmark on remote-team standup cadence, (2) a case study on vendor consolidation savings, (3) an upcoming webinar on Q4 planning. No action needed — just for your radar.\n\nThe Ops Weekly team"
+  },
+  {
+    "category": "urgent-escalation",
+    "subject": "URGENT: production incident affecting checkout flow",
+    "from": { "name": "Jordan Blake", "email": "jordan.blake@fieldstone-systems.com" },
+    "body": "Alex,\n\nWe're seeing elevated error rates on the checkout integration since 09:14 this morning — about 8% of transactions are failing. Our on-call team is investigating but wanted to flag this immediately given the revenue impact. Can you loop in whoever owns the account on your side?\n\nJordan"
+  },
+  {
+    "category": "scheduling",
+    "subject": "Rescheduling our 1:1 — conflict came up",
+    "from": { "name": "Sam Whitfield", "email": "sam.whitfield@northshore-advisors.com" },
+    "body": "Hi Alex,\n\nSomething came up and I need to move our 1:1 from Tuesday to Wednesday, same time if that works. Sorry for the short notice!\n\nSam"
+  },
+  {
+    "category": "fyi",
+    "subject": "FYI — updated org chart for the partnerships team",
+    "from": { "name": "Renee Castellano", "email": "renee.castellano@harborline-partners.com" },
+    "body": "Hi Alex,\n\nJust sharing the updated org chart for our partnerships team following the Q2 reorg — no action needed on your end, just wanted you to have visibility for future intros.\n\nRenee"
+  },
+  {
+    "category": "contract-question",
+    "subject": "Question about the SOW payment milestones",
+    "from": { "name": "Felix Adeyemi", "email": "felix.adeyemi@lumen-consulting-group.com" },
+    "body": "Hi Alex,\n\nQuick question on the statement of work — milestone 2 is listed as due 30 days after kickoff, but our finance team read it as 30 days after milestone 1 sign-off. Could you clarify which it is before we invoice?\n\nFelix"
+  },
+  {
+    "category": "urgent-escalation",
+    "subject": "Need your approval today — vendor contract expires tomorrow",
+    "from": { "name": "Corinne Vasquez", "email": "corinne.vasquez@summitline-logistics.com" },
+    "body": "Alex,\n\nSorry for the late notice, but the current logistics vendor contract expires tomorrow at midnight and we need your sign-off on the renewal terms today to avoid a service gap. The redlines are unchanged from last cycle. Can you confirm by end of day?\n\nCorinne"
+  },
+  {
+    "category": "scheduling",
+    "subject": "Availability for the offsite planning call",
+    "from": { "name": "Theo Lindqvist", "email": "theo.lindqvist@brightpath-vendors.com" },
+    "body": "Hi Alex,\n\nWe're trying to lock the planning call for the Q4 offsite — does Monday or Wednesday next week work better for you? Either 30-minute slot in the morning is fine on our end.\n\nTheo"
+  },
+  {
+    "category": "newsletter",
+    "subject": "Industry brief: supply chain resilience trends",
+    "from": { "name": "Supply Chain Brief", "email": "briefing@supplychain-insights-daily.com" },
+    "body": "Hello,\n\nThis edition covers nearshoring trends, three vendor-diversification case studies, and a short explainer on tariff exposure modeling. No action needed — enjoy the read.\n\nThe editorial team"
+  },
+  {
+    "category": "fyi",
+    "subject": "Heads up — new compliance training rollout next month",
+    "from": { "name": "People Operations", "email": "peopleops@northwind-consulting.com" },
+    "body": "Hi Alex,\n\nJust a heads up that the annual compliance training rolls out to all account leads next month. You'll get a separate calendar invite once the schedule is finalized — no action needed right now.\n\nPeople Ops"
+  }
+]
