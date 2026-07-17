@@ -25,10 +25,13 @@ Do **not** use this skill for:
 
 ## Prerequisites
 
-- **Node.js 22+**
-- **Pidgeot MCP** via this plugin's bundled `mcp.json` (server name **`pidgeot`**), installing from
-  the public GitHub repo `github:jzubielik/chief-of-staff-communication-agent` via `npx`. Reload
-  Cursor after installing/updating the kit; confirm **`pidgeot`** is enabled under MCP settings.
+- **Node.js 22+**, **pnpm 9+**
+- **Pidgeot MCP** via this plugin's bundled `mcp.json` (server name **`pidgeot`**), built from a
+  local clone of `github:jzubielik/chief-of-staff-communication-agent` (`mcp/` is a monorepo
+  workspace member — `pnpm install && pnpm --filter @chief-of-staff/mcp-server build` — never
+  `npx --package=github:...#path:mcp`, which does not resolve a monorepo subdirectory). Full steps:
+  [`reference/mcp-setup.md`](./reference/mcp-setup.md). Reload Cursor after installing/updating the
+  kit or rebuilding; confirm **`pidgeot`** is enabled under MCP settings.
 - **Required env** (set per-teammate in the `pidgeot` server's `env` block, never hard-coded):
   - `COS_API_URL` — the deployed API base URL (operator-provided; see `reference/mcp-setup.md`)
   - `COS_API_TOKEN` — a per-user token minted from the dashboard's "MCP tokens" view (Settings →

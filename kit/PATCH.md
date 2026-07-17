@@ -111,11 +111,8 @@ reproduced here for convenience:
 {
   "mcpServers": {
     "pidgeot": {
-      "command": "bash",
-      "args": [
-        "-c",
-        "exec npx -y --package=github:jzubielik/chief-of-staff-communication-agent#path:mcp chief-of-staff-mcp"
-      ],
+      "command": "node",
+      "args": ["<ABSOLUTE_PATH_TO_CLONE>/chief-of-staff-communication-agent/mcp/dist/server.js"],
       "env": {
         "COS_API_URL": "https://klxrwe0sa3.execute-api.us-east-2.amazonaws.com",
         "COS_API_TOKEN": "<paste your per-user token from the dashboard's Settings > MCP Tokens view>"
@@ -125,9 +122,15 @@ reproduced here for convenience:
 }
 ```
 
-Each teammate must replace `COS_API_TOKEN`'s placeholder with their own token (see
-`skills/use-pidgeot/reference/mcp-setup.md`) — unlike `elephant`, this server is per-user scoped,
-so there is no single shared value to bundle.
+**Not `npx --package=github:...#path:mcp`.** `mcp/` is a workspace member of this monorepo
+(`@chief-of-staff/mcp-server`, `"private": true`) — npm's `github:owner/repo#path:subdir` install
+spec does not resolve a single subdirectory of a monorepo, so that invocation fails outright. The
+working setup is build-from-source: clone the monorepo, `pnpm install && pnpm --filter
+@chief-of-staff/mcp-server build` (produces `mcp/dist/server.js`), then point `args` at that built
+file with an ABSOLUTE path. Each teammate must replace BOTH placeholders — the clone path and
+`COS_API_TOKEN` with their own token (see `skills/use-pidgeot/reference/mcp-setup.md` for the full
+copy-pasteable steps) — unlike `elephant`, this server is per-user scoped and build-from-source, so
+there is no single shared value to bundle.
 
 ## Validation proof (already run against a throwaway copy of the real kit repo)
 
