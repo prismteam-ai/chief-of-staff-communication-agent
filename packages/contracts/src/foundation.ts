@@ -19,6 +19,12 @@ export const healthResponseSchema = z
 
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
+export const productHealthResponseSchema = healthResponseSchema.extend({
+  foundationOnly: z.literal(false),
+});
+
+export type ProductHealthResponse = z.infer<typeof productHealthResponseSchema>;
+
 export const foundationOnlyErrorSchema = z
   .object({
     code: z.literal('MCP_FOUNDATION_ONLY'),
@@ -47,5 +53,16 @@ export function createHealthResponse(service: string): HealthResponse {
     status: 'ok',
     timestamp: new Date().toISOString(),
     foundationOnly: true,
+  });
+}
+
+export function createProductHealthResponse(
+  service: string,
+): ProductHealthResponse {
+  return productHealthResponseSchema.parse({
+    service,
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    foundationOnly: false,
   });
 }

@@ -48,6 +48,12 @@ describe('typed product router', () => {
   it('serves the complete fixture-backed product surface with schema parity', async () => {
     const caller = createCaller();
 
+    await expect(caller.system.health()).resolves.toMatchObject({
+      service: 'chief-api',
+      status: 'ok',
+      foundationOnly: false,
+    });
+
     const dashboard = dashboardMetricsResultSchema.parse(
       await caller.dashboard.metrics({ window: '24h' }),
     );

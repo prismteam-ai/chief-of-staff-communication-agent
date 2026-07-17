@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import {
   createDraftInputSchema,
   createDraftResultSchema,
-  createHealthResponse,
+  createProductHealthResponse,
   getApprovalStatusInputSchema,
   getApprovalStatusResultSchema,
   getCommunicationInputSchema,
@@ -16,7 +16,7 @@ import {
   getSlaMetricsResultSchema,
   getThreadContextInputSchema,
   getThreadContextResultSchema,
-  healthResponseSchema,
+  productHealthResponseSchema,
   listCommunicationsInputSchema,
   listCommunicationsResultSchema,
   prepareAsanaActionInputSchema,
@@ -64,15 +64,15 @@ async function productCall<T>(operation: () => ProductResult<T>): Promise<T> {
 }
 
 export const systemRouter = router({
-  health: publicProcedure.output(healthResponseSchema).query(({ ctx }) => {
-    ctx.observability.logger.info('Product API health requested', {
-      surface: 'typed-product-api',
-      externalEffects: 'disabled',
-    });
-    // This schema is part of the Wave 1 freeze. Product readiness is proven by
-    // the active routers below while the compatibility response remains stable.
-    return createHealthResponse('chief-api');
-  }),
+  health: publicProcedure
+    .output(productHealthResponseSchema)
+    .query(({ ctx }) => {
+      ctx.observability.logger.info('Product API health requested', {
+        surface: 'typed-product-api',
+        externalEffects: 'disabled',
+      });
+      return createProductHealthResponse('chief-api');
+    }),
 });
 
 export const dashboardRouter = router({

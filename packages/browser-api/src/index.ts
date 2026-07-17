@@ -7,7 +7,7 @@ import {
   getRelatedAsanaWorkResultSchema,
   getSlaMetricsResultSchema,
   getThreadContextResultSchema,
-  healthResponseSchema,
+  productHealthResponseSchema,
   listCommunicationsResultSchema,
   prepareAsanaActionResultSchema,
   recommendActionResultSchema,
@@ -21,7 +21,7 @@ import {
   type CommunicationSummaryView,
   type ConnectorStatusView,
   type ContextRequest,
-  type HealthResponse,
+  type ProductHealthResponse,
   type ProposalHandoff,
   type RetrievalCandidate,
   type Citation,
@@ -87,7 +87,7 @@ export interface BrowserApprovalStatus {
 }
 
 export interface BrowserApi {
-  systemHealth(): Promise<HealthResponse>;
+  systemHealth(): Promise<ProductHealthResponse>;
   dashboardMetrics(
     window: '24h' | '7d' | '30d',
   ): Promise<BrowserDashboardMetrics>;
@@ -143,7 +143,9 @@ export function createBrowserApi(baseUrl: string): BrowserApi {
 
   return {
     async systemHealth() {
-      return healthResponseSchema.parse(await client.system.health.query());
+      return productHealthResponseSchema.parse(
+        await client.system.health.query(),
+      );
     },
     async dashboardMetrics(window) {
       return client.dashboard.metrics.query({ window });

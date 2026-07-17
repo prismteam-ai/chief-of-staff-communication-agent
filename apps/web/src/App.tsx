@@ -58,7 +58,7 @@ import type {
   CommunicationSummaryView,
   ConnectorStatusView,
   CitedDraftResult,
-  HealthResponse,
+  ProductHealthResponse,
   ActionRecommendation,
   ThreadContextView,
   WorkObjectFact,
@@ -88,7 +88,7 @@ import {
 
 type ApiState =
   | { readonly kind: 'checking' }
-  | { readonly kind: 'ready'; readonly health: HealthResponse }
+  | { readonly kind: 'ready'; readonly health: ProductHealthResponse }
   | { readonly kind: 'unavailable' };
 
 type WorkflowState = 'draft' | 'revised' | 'approved';

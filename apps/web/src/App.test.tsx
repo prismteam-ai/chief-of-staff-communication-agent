@@ -62,7 +62,7 @@ function arrangeHostedProjection() {
     service: 'chief-api',
     status: 'ok',
     timestamp: '2026-07-17T12:00:00.000Z',
-    foundationOnly: true,
+    foundationOnly: false,
   });
   browserApiMock.dashboardMetrics.mockResolvedValue({
     totalCommunications: 1,

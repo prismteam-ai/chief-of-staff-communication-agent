@@ -2,7 +2,7 @@ import type { APIGatewayProxyEventV2, Context } from 'aws-lambda';
 import { describe, expect, it } from 'vitest';
 
 import {
-  healthResponseSchema,
+  productHealthResponseSchema,
   listCommunicationsResultSchema,
 } from '@chief/contracts';
 
@@ -88,8 +88,12 @@ describe('API Gateway tRPC Lambda integration', () => {
     );
     expect(healthResponse.statusCode).toBe(200);
     expect(
-      healthResponseSchema.parse(resultData(healthResponse.body)),
-    ).toMatchObject({ service: 'chief-api', status: 'ok' });
+      productHealthResponseSchema.parse(resultData(healthResponse.body)),
+    ).toMatchObject({
+      service: 'chief-api',
+      status: 'ok',
+      foundationOnly: false,
+    });
 
     const listResponse = await handler(
       eventFor('communications.list', { input: { limit: 2 } }),

@@ -58,7 +58,9 @@ test.describe('runtime health and static delivery', () => {
       `${apiBaseUrl}/trpc/system.health?batch=1&input=${input}`,
     );
     expect(response.ok()).toBe(true);
-    await expect(response.text()).resolves.toContain('chief-api');
+    const body = await response.text();
+    expect(body).toContain('chief-api');
+    expect(body).toContain('"foundationOnly":false');
   });
 
   test('reports MCP health when an MCP URL is supplied', async ({

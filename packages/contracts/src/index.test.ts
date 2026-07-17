@@ -4,9 +4,11 @@ import {
   contactChannelPolicySchema,
   connectorDescriptorSchema,
   createHealthResponse,
+  createProductHealthResponse,
   effectExecutionArtifactSchema,
   foundationCapabilities,
   healthResponseSchema,
+  productHealthResponseSchema,
   keyedDigestValueSchema,
   listCommunicationsInputSchema,
   mcpSearchKnowledgeInputSchema,
@@ -29,6 +31,12 @@ describe('foundation contracts', () => {
 
     expect(healthResponseSchema.parse(response)).toEqual(response);
     expect(response.foundationOnly).toBe(true);
+
+    const productResponse = createProductHealthResponse('chief-api');
+    expect(productHealthResponseSchema.parse(productResponse)).toEqual(
+      productResponse,
+    );
+    expect(productResponse.foundationOnly).toBe(false);
   });
 
   it('keeps future capabilities explicitly named', () => {
