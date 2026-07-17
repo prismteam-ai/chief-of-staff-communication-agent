@@ -29,6 +29,16 @@ import type { AccountsRepo } from '../repos/accounts-repo.js';
  * return full communication records (the dashboard views need the rationale/draft body to let a
  * human act) — those two are working-set views, not the metrics payload, and design.md never
  * scopes the PII constraint to them.
+ *
+ * Unified multi-account aggregation (slowking fix 1): the assignment's core intent is "every
+ * communication across ALL channels in ONE unified inbox" — a user who has connected both a Gmail
+ * and a WhatsApp account should see both together, not pick one account at a time. `accountId` on
+ * every method below is now OPTIONAL: when omitted, `loadUserScoped` resolves the caller's own
+ * accounts server-side via `accountsRepo.listByUser(userId)` (never a client-supplied account list)
+ * and concatenates `listByAccount` across every one of THEIR OWN accounts — the account-scoping
+ * property still holds because `listByUser` itself is filtered to `userId` in DynamoDB (see that
+ * repo's doc comment). Passing an explicit `accountId` still works and still runs the single-account
+ * ownership assertion — a caller can filter down to one channel if it wants to.
  */
 
 /** The human-actionable queue: recommendation produced but not yet resolved by the user. */
@@ -44,7 +54,8 @@ const PENDING_APPROVAL_STATES: readonly CommunicationState[] = [
 const OVERDUE_THRESHOLD_MINUTES = 5;
 
 export interface DashboardMetricsInput {
-  accountId: string;
+  /** Omit to aggregate across every account the caller owns (the default, unified-inbox view). */
+  accountId?: string;
   userId: string;
 }
 
@@ -135,13 +146,27 @@ export class MetricsService {
     assertAccountAccess(userId, accountId, ownershipMapFor(accountId, ownerUserId));
   }
 
-  private async loadAccountScoped(input: DashboardMetricsInput): Promise<ApiCommunicationRecord[]> {
-    await this.assertAccountOwned(input.accountId, input.userId);
-    return this.communicationsRepo.listByAccount(input.accountId);
+  /**
+   * Resolves the record set for a dashboard read (slowking fix 1). With an explicit `accountId`,
+   * behaves exactly as before: assert ownership, then list that one account. Without one, resolves
+   * the caller's OWN accounts server-side (`accountsRepo.listByUser` — never a client-supplied
+   * list) and aggregates `listByAccount` across all of them, so a user with a Gmail AND a WhatsApp
+   * account sees both in one unified view.
+   */
+  private async loadUserScoped(input: DashboardMetricsInput): Promise<ApiCommunicationRecord[]> {
+    if (input.accountId) {
+      await this.assertAccountOwned(input.accountId, input.userId);
+      return this.communicationsRepo.listByAccount(input.accountId);
+    }
+    const ownedAccounts = await this.accountsRepo.listByUser(input.userId);
+    const perAccount = await Promise.all(
+      ownedAccounts.map((account) => this.communicationsRepo.listByAccount(account.accountId)),
+    );
+    return perAccount.flat();
   }
 
   async getDashboardMetrics(input: DashboardMetricsInput): Promise<DashboardMetrics> {
-    const records = await this.loadAccountScoped(input);
+    const records = await this.loadUserScoped(input);
     const nowSeconds = this.now().getTime() / 1000;
 
     const statusBreakdown = zeroedStatusBreakdown();
@@ -203,7 +228,7 @@ export class MetricsService {
   /** Recommended-actions view (README L36): every communication carrying a recommendation,
    * most-recent-first (by the message's own timestamp, not ingestion time). */
   async listRecommendedActions(input: DashboardMetricsInput): Promise<ApiCommunicationRecord[]> {
-    const records = await this.loadAccountScoped(input);
+    const records = await this.loadUserScoped(input);
     return records
       .filter((r) => r.recommendation !== undefined)
       .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
@@ -214,7 +239,7 @@ export class MetricsService {
   async listDraftsAwaitingApproval(
     input: DashboardMetricsInput,
   ): Promise<ApiCommunicationRecord[]> {
-    const records = await this.loadAccountScoped(input);
+    const records = await this.loadUserScoped(input);
     return records
       .filter(
         (r) =>

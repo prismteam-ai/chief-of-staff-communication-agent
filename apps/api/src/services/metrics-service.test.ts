@@ -353,6 +353,118 @@ describe('MetricsService.listRecommendedActions', () => {
   });
 });
 
+describe('MetricsService — unified multi-account aggregation (slowking fix 1)', () => {
+  const WHATSAPP_ACCOUNT_ID = 'acct-whatsapp-sandbox';
+
+  function multiAccountAccountsRepo(): AccountsRepo {
+    return {
+      async getOwner(accountId) {
+        if (accountId === ACCOUNT_A || accountId === WHATSAPP_ACCOUNT_ID) return USER_A;
+        if (accountId === ACCOUNT_B) return USER_B;
+        return undefined;
+      },
+      async getOwnAddress() {
+        return undefined;
+      },
+      async listByUser(userId) {
+        if (userId !== USER_A) return [];
+        return [
+          {
+            accountId: ACCOUNT_A,
+            userId: USER_A,
+            channelType: 'gmail',
+            displayName: 'demoalex775@gmail.com',
+            credentialSecretArn: 'arn:aws:secretsmanager:fake:fake:secret:fake',
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+          {
+            accountId: WHATSAPP_ACCOUNT_ID,
+            userId: USER_A,
+            channelType: 'whatsapp',
+            displayName: '+15550001111',
+            credentialSecretArn: 'arn:aws:secretsmanager:fake:fake:secret:fake2',
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+        ];
+      },
+    };
+  }
+
+  it('getDashboardMetrics with no accountId aggregates channelBreakdown across every owned account', async () => {
+    const records = [
+      fixture({ commId: 'g1', accountId: ACCOUNT_A, channelType: 'gmail' }),
+      fixture({ commId: 'g2', accountId: ACCOUNT_A, channelType: 'gmail' }),
+      fixture({ commId: 'w1', accountId: WHATSAPP_ACCOUNT_ID, channelType: 'whatsapp' }),
+      // Belongs to a different user entirely — must never leak in.
+      fixture({ commId: 'b1', accountId: ACCOUNT_B, channelType: 'gmail' }),
+    ];
+    const service = new MetricsService({
+      communicationsRepo: inMemoryRepo(records),
+      accountsRepo: multiAccountAccountsRepo(),
+      now: () => new Date('2026-07-16T13:00:00.000Z'),
+    });
+
+    const metrics = await service.getDashboardMetrics({ userId: USER_A });
+
+    expect(metrics.totalVolume).toBe(3);
+    expect(metrics.channelBreakdown).toEqual({ gmail: 2, whatsapp: 1 });
+  });
+
+  it('listRecommendedActions/listDraftsAwaitingApproval with no accountId span every owned account', async () => {
+    const records = [
+      fixture({
+        commId: 'g-rec',
+        accountId: ACCOUNT_A,
+        channelType: 'gmail',
+        status: 'drafted',
+        draft: { commId: 'g-rec', accountId: ACCOUNT_A, body: 'hi', confidence: 0.8 },
+        recommendation: {
+          commId: 'g-rec',
+          accountId: ACCOUNT_A,
+          actionType: 'reply_needed',
+          confidence: 0.8,
+          rationale: 'r',
+        },
+      }),
+      fixture({
+        commId: 'w-rec',
+        accountId: WHATSAPP_ACCOUNT_ID,
+        channelType: 'whatsapp',
+        status: 'drafted',
+        draft: { commId: 'w-rec', accountId: WHATSAPP_ACCOUNT_ID, body: 'hey', confidence: 0.75 },
+        recommendation: {
+          commId: 'w-rec',
+          accountId: WHATSAPP_ACCOUNT_ID,
+          actionType: 'reply_needed',
+          confidence: 0.75,
+          rationale: 'r2',
+        },
+      }),
+    ];
+    const service = new MetricsService({
+      communicationsRepo: inMemoryRepo(records),
+      accountsRepo: multiAccountAccountsRepo(),
+    });
+
+    const recommended = await service.listRecommendedActions({ userId: USER_A });
+    expect(recommended.map((r) => r.commId).sort()).toEqual(['g-rec', 'w-rec']);
+
+    const drafts = await service.listDraftsAwaitingApproval({ userId: USER_A });
+    expect(drafts.map((d) => d.commId).sort()).toEqual(['g-rec', 'w-rec']);
+  });
+
+  it('never aggregates another user’s accounts, even without an explicit accountId', async () => {
+    const records = [fixture({ commId: 'b1', accountId: ACCOUNT_B, channelType: 'gmail' })];
+    const service = new MetricsService({
+      communicationsRepo: inMemoryRepo(records),
+      accountsRepo: multiAccountAccountsRepo(),
+    });
+
+    const metrics = await service.getDashboardMetrics({ userId: USER_B });
+    expect(metrics.totalVolume).toBe(0);
+  });
+});
+
 describe('MetricsService.listDraftsAwaitingApproval', () => {
   it('returns only drafted/awaiting_approval communications with a draft body', async () => {
     const records = [

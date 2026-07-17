@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { CommunicationState } from '@chief-of-staff/shared';
+import { CHANNEL_TYPES, type ChannelType, type CommunicationState } from '@chief-of-staff/shared';
 import {
   createApiClient,
   TrpcError,
@@ -30,6 +30,17 @@ import { LoginView } from './views/LoginView.js';
  * (`trpc-client.ts`'s `getToken`); no procedure input carries `userId` anymore, so there is nothing
  * left for a client to forge. A 401 (missing/invalid/forged/expired token) drops the session and
  * shows the login screen again.
+ *
+ * Unified multi-account inbox (slowking fix 1): the dashboard used to require picking ONE
+ * `accountId` up front (a text input under "Connection") — a user with both a Gmail and a WhatsApp
+ * account could only ever see one channel at a time, contradicting the assignment's core intent of
+ * "every communication across ALL channels in ONE unified inbox". That selector is gone. Every view
+ * now calls its procedure with NO `accountId`, which the server resolves to "aggregate across every
+ * account the signed-in user owns" (`MetricsService.loadUserScoped` / `ApprovalService.
+ * listCommunications`, both server-side off the token's `userId` — never a client-supplied list).
+ * The optional per-channel `channelFilter` dropdown below narrows the already-unified result set
+ * client-side (a display filter over data the user already legitimately received), not a
+ * pre-aggregation account picker.
  */
 
 const DEFAULT_API_URL = (import.meta.env.VITE_API_URL ?? '').trim();
@@ -54,7 +65,6 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]['key'];
 
-const DEFAULT_ACCOUNT_ID = 'acct-gmail-demoalex775';
 const SESSION_TOKEN_KEY = 'cos.sessionToken';
 const SESSION_USER_ID_KEY = 'cos.sessionUserId';
 
@@ -68,7 +78,9 @@ function usePersistedState(key: string, initial: string): [string, (v: string) =
 
 export function App() {
   const [apiUrl, setApiUrl] = usePersistedState('cos.apiUrl', DEFAULT_API_URL);
-  const [accountId, setAccountId] = usePersistedState('cos.accountId', DEFAULT_ACCOUNT_ID);
+  // Unified inbox (slowking fix 1): no account picker — `channelFilter` is a client-side display
+  // filter over the already-unified (all-owned-accounts) result set, not a pre-aggregation choice.
+  const [channelFilter, setChannelFilter] = useState<ChannelType | 'all'>('all');
 
   // --- Session (Task 8.5): a session token replaces the old demo-user selector entirely. ---
   const [sessionToken, setSessionToken] = useState<string | undefined>(
@@ -156,13 +168,14 @@ export function App() {
   const [busyCommId, setBusyCommId] = useState<string | undefined>();
   const [actionErrors, setActionErrors] = useState<Record<string, string>>({});
 
+  // No `accountId` on any of these four (slowking fix 1): every call aggregates across every
+  // account the signed-in user owns, resolved server-side from the session token.
   const refreshQueue = useCallback(async () => {
     if (!client || !sessionToken) return;
     setQueueLoading(true);
     setQueueError(undefined);
     try {
       const result = await client.listCommunications({
-        accountId,
         status: statusFilter === 'all' ? undefined : statusFilter,
       });
       setCommunications(result);
@@ -171,46 +184,46 @@ export function App() {
     } finally {
       setQueueLoading(false);
     }
-  }, [client, sessionToken, accountId, statusFilter]);
+  }, [client, sessionToken, statusFilter]);
 
   const refreshMetrics = useCallback(async () => {
     if (!client || !sessionToken) return;
     setMetricsLoading(true);
     setMetricsError(undefined);
     try {
-      setMetrics(await client.getDashboardMetrics({ accountId }));
+      setMetrics(await client.getDashboardMetrics());
     } catch (error) {
       setMetricsError(handleLoadError(error));
     } finally {
       setMetricsLoading(false);
     }
-  }, [client, sessionToken, accountId]);
+  }, [client, sessionToken]);
 
   const refreshRecommended = useCallback(async () => {
     if (!client || !sessionToken) return;
     setRecommendedLoading(true);
     setRecommendedError(undefined);
     try {
-      setRecommended(await client.listRecommendedActions({ accountId }));
+      setRecommended(await client.listRecommendedActions());
     } catch (error) {
       setRecommendedError(handleLoadError(error));
     } finally {
       setRecommendedLoading(false);
     }
-  }, [client, sessionToken, accountId]);
+  }, [client, sessionToken]);
 
   const refreshDrafts = useCallback(async () => {
     if (!client || !sessionToken) return;
     setDraftsLoading(true);
     setDraftsError(undefined);
     try {
-      setDrafts(await client.listDraftsAwaitingApproval({ accountId }));
+      setDrafts(await client.listDraftsAwaitingApproval());
     } catch (error) {
       setDraftsError(handleLoadError(error));
     } finally {
       setDraftsLoading(false);
     }
-  }, [client, sessionToken, accountId]);
+  }, [client, sessionToken]);
 
   const refreshAccounts = useCallback(async () => {
     if (!client || !sessionToken) return;
@@ -262,6 +275,16 @@ export function App() {
 
   const isLoggedIn = Boolean(sessionToken && sessionUserId);
 
+  // The optional per-channel filter (slowking fix 1): a client-side narrowing of the already-
+  // unified (all-owned-accounts) result set the server returned — never a re-scoping request.
+  function byChannel<T extends { channelType: ChannelType }>(list: T[] | undefined): T[] | undefined {
+    if (!list || channelFilter === 'all') return list;
+    return list.filter((c) => c.channelType === channelFilter);
+  }
+  const filteredRecommended = byChannel(recommended);
+  const filteredDrafts = byChannel(drafts);
+  const filteredCommunications = byChannel(communications) ?? [];
+
   return (
     <main
       style={{
@@ -273,9 +296,10 @@ export function App() {
     >
       <h1>Chief of Staff — Dashboard</h1>
       <p style={{ color: '#4b5563' }}>
-        Communication volume, recommended actions, and approvals for one connected account at a time
-        — every view below is scoped server-side to the signed-in user&apos;s own accounts, resolved
-        from your session token, never from anything typed into this page.
+        One unified inbox across every channel you&apos;ve connected — every view below aggregates
+        server-side across ALL of the signed-in user&apos;s own accounts, resolved from your session
+        token, never from anything typed into this page. Use the channel filter to narrow to one
+        channel.
       </p>
 
       <fieldset style={{ marginBottom: '1.5rem', border: '1px solid #d1d5db', borderRadius: 8 }}>
@@ -303,12 +327,20 @@ export function App() {
             </div>
           )}
           <label>
-            Account id
-            <input
-              value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
+            Channel filter
+            <select
+              data-testid="channel-filter"
+              value={channelFilter}
+              onChange={(e) => setChannelFilter(e.target.value as ChannelType | 'all')}
               style={{ width: '100%' }}
-            />
+            >
+              <option value="all">All channels (unified inbox)</option>
+              {CHANNEL_TYPES.map((channel) => (
+                <option key={channel} value={channel}>
+                  {channel}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
       </fieldset>
@@ -359,7 +391,7 @@ export function App() {
 
           {activeTab === 'recommended' && (
             <RecommendedActionsView
-              communications={recommended}
+              communications={filteredRecommended}
               loading={recommendedLoading}
               error={recommendedError}
             />
@@ -367,7 +399,7 @@ export function App() {
 
           {activeTab === 'drafts' && (
             <DraftsAwaitingApprovalView
-              communications={drafts}
+              communications={filteredDrafts}
               loading={draftsLoading}
               error={draftsError}
               busyCommId={busyCommId}
@@ -410,11 +442,11 @@ export function App() {
               </div>
 
               {queueError && <p style={{ color: '#b91c1c' }}>Failed to load: {queueError}</p>}
-              {!queueLoading && !queueError && communications.length === 0 && (
+              {!queueLoading && !queueError && filteredCommunications.length === 0 && (
                 <p style={{ color: '#6b7280' }}>No communications match this filter.</p>
               )}
 
-              {communications.map((c) => (
+              {filteredCommunications.map((c) => (
                 <CommunicationCard
                   key={c.commId}
                   communication={c}

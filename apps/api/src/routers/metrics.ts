@@ -15,10 +15,16 @@ import { MetricsService } from '../services/metrics-service.js';
  * reads `userId` from the verified bearer token (`ctx.authedUserId`) — a stranger typing someone
  * else's `accountId` here is still rejected by the service's ownership check, but they can no
  * longer supply an arbitrary `userId` to try it as in the first place.
+ *
+ * `accountId` is OPTIONAL (slowking fix 1, unified multi-account dashboard): omitted, the service
+ * aggregates across every account the authed user owns (resolved server-side, never from a
+ * client-supplied list — see `MetricsService.loadUserScoped`), so a user with both a Gmail and a
+ * WhatsApp account sees one unified inbox instead of picking an account first. Supplying an
+ * explicit `accountId` still filters down to that one account/channel.
  */
 
 const AccountScopedInput = z.object({
-  accountId: z.string().min(1),
+  accountId: z.string().min(1).optional(),
 });
 
 export function createMetricsRouter(

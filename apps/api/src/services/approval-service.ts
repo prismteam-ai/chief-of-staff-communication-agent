@@ -68,7 +68,8 @@ export interface ApprovalServiceDeps {
 }
 
 export interface ListCommunicationsInput {
-  accountId: string;
+  /** Omit to aggregate across every account the caller owns (unified-inbox view, slowking fix 1). */
+  accountId?: string;
   userId: string;
   status?: CommunicationState;
 }
@@ -273,9 +274,25 @@ export class ApprovalService {
     }
   }
 
+  /**
+   * With an explicit `accountId`, unchanged: assert ownership, list that one account. Without one
+   * (slowking fix 1, unified inbox), resolves the caller's OWN accounts server-side
+   * (`accountsRepo.listByUser` — never a client-supplied list) and aggregates across all of them,
+   * most-recent-first, so a user with both a Gmail and a WhatsApp account sees every communication
+   * together instead of picking an account first.
+   */
   async listCommunications(input: ListCommunicationsInput): Promise<ApiCommunicationRecord[]> {
-    await this.assertAccountOwned(input.accountId, input.userId);
-    return this.communicationsRepo.listByAccount(input.accountId, input.status);
+    if (input.accountId) {
+      await this.assertAccountOwned(input.accountId, input.userId);
+      return this.communicationsRepo.listByAccount(input.accountId, input.status);
+    }
+    const ownedAccounts = await this.accountsRepo.listByUser(input.userId);
+    const perAccount = await Promise.all(
+      ownedAccounts.map((account) =>
+        this.communicationsRepo.listByAccount(account.accountId, input.status),
+      ),
+    );
+    return perAccount.flat().sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
   }
 
   async getCommunication(input: ByIdAndUserInput): Promise<ApiCommunicationRecord> {

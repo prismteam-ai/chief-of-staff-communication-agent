@@ -36,7 +36,8 @@ export function createCommunicationsRouter(
     listCommunications: authed
       .input(
         z.object({
-          accountId: z.string().min(1),
+          // Optional (slowking fix 1): omitted, aggregates across every account the caller owns.
+          accountId: z.string().min(1).optional(),
           status: CommunicationStateSchema.optional(),
         }),
       )

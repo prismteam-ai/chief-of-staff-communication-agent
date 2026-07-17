@@ -285,6 +285,121 @@ describe('ApprovalService — listCommunications / getCommunication', () => {
   });
 });
 
+describe('ApprovalService.listCommunications — unified multi-account aggregation (slowking fix 1)', () => {
+  const WHATSAPP_ACCOUNT_ID = 'acct-whatsapp-sandbox';
+
+  function multiAccountRepo(records: ApiCommunicationRecord[]): CommunicationsRepo {
+    return {
+      async getById(commId) {
+        return records.find((r) => r.commId === commId);
+      },
+      async listByAccount(accountId, status) {
+        return records.filter((r) => r.accountId === accountId && (!status || r.status === status));
+      },
+      async putIngested() {
+        throw new Error('not used');
+      },
+      async transition() {
+        throw new Error('not used');
+      },
+      async transitionChain() {
+        throw new Error('not used');
+      },
+      async claimSend() {
+        throw new Error('not used');
+      },
+      async recordSent() {
+        throw new Error('not used');
+      },
+      async linkAsanaTask() {
+        throw new Error('not used');
+      },
+    };
+  }
+
+  function multiAccountAccountsRepo(): AccountsRepo {
+    return {
+      async getOwner(accountId) {
+        if (accountId === ACCOUNT_ID || accountId === WHATSAPP_ACCOUNT_ID) return OWNER_USER_ID;
+        return undefined;
+      },
+      async getOwnAddress() {
+        return undefined;
+      },
+      async listByUser(userId) {
+        if (userId !== OWNER_USER_ID) return [];
+        return [
+          {
+            accountId: ACCOUNT_ID,
+            userId: OWNER_USER_ID,
+            channelType: 'gmail',
+            displayName: 'demoalex775@gmail.com',
+            credentialSecretArn: 'arn:aws:secretsmanager:fake:fake:secret:fake',
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+          {
+            accountId: WHATSAPP_ACCOUNT_ID,
+            userId: OWNER_USER_ID,
+            channelType: 'whatsapp',
+            displayName: '+15550001111',
+            credentialSecretArn: 'arn:aws:secretsmanager:fake:fake:secret:fake2',
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+        ];
+      },
+    };
+  }
+
+  it('omitting accountId aggregates across every account the caller owns, both channels together', async () => {
+    const records = [
+      fixtureRecord({ commId: 'gmail#a', accountId: ACCOUNT_ID, channelType: 'gmail' }),
+      fixtureRecord({
+        commId: 'whatsapp#b',
+        accountId: WHATSAPP_ACCOUNT_ID,
+        channelType: 'whatsapp',
+      }),
+    ];
+    const service = new ApprovalService({
+      communicationsRepo: multiAccountRepo(records),
+      accountsRepo: multiAccountAccountsRepo(),
+      connectorFor: () => undefined,
+      agentTrigger: { async publish() {} },
+      now: NOW,
+      log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      metricsClient: { addMetric: vi.fn() },
+    });
+
+    const result = await service.listCommunications({ userId: OWNER_USER_ID });
+
+    expect(result.map((r) => r.commId).sort()).toEqual(['gmail#a', 'whatsapp#b']);
+    expect(new Set(result.map((r) => r.channelType))).toEqual(new Set(['gmail', 'whatsapp']));
+  });
+
+  it('never aggregates another user’s accounts, even without an explicit accountId', async () => {
+    const records = [
+      fixtureRecord({ commId: 'gmail#a', accountId: ACCOUNT_ID, channelType: 'gmail' }),
+      fixtureRecord({
+        commId: 'whatsapp#b',
+        accountId: WHATSAPP_ACCOUNT_ID,
+        channelType: 'whatsapp',
+      }),
+    ];
+    const service = new ApprovalService({
+      communicationsRepo: multiAccountRepo(records),
+      accountsRepo: multiAccountAccountsRepo(),
+      connectorFor: () => undefined,
+      agentTrigger: { async publish() {} },
+      now: NOW,
+      log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      metricsClient: { addMetric: vi.fn() },
+    });
+
+    const result = await service.listCommunications({ userId: OTHER_USER_ID });
+
+    expect(result).toEqual([]);
+  });
+});
+
 describe('ApprovalService — approveDraft (drafted -> awaiting_approval -> approved -> sent -> answered)', () => {
   it('drives the full transition chain and persists the provider sent id', async () => {
     const { service, repo } = makeService(fixtureRecord({ status: 'drafted' }), {

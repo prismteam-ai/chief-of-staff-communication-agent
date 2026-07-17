@@ -152,7 +152,7 @@ export function createApiClient(
     login: (input: { username: string; password: string }) =>
       mutate<LoginResult>('auth.login', input),
 
-    listCommunications: (input: { accountId: string; status?: CommunicationState }) =>
+    listCommunications: (input: { accountId?: string; status?: CommunicationState }) =>
       query<CommunicationDto[]>('communications.listCommunications', input),
     getCommunication: (input: { commId: string }) =>
       query<CommunicationDto>('communications.getCommunication', input),
@@ -167,12 +167,14 @@ export function createApiClient(
     supplyContext: (input: { commId: string; text: string }) =>
       mutate<CommunicationDto>('communications.supplyContext', input),
 
-    // --- Task 8 dashboard views: server-side aggregation/reads, account-scoped (design.md §8) ---
-    getDashboardMetrics: (input: { accountId: string }) =>
+    // --- Task 8 dashboard views: server-side aggregation/reads (design.md §8). `accountId` is
+    // optional — omitted, the server aggregates across every account the caller owns (unified
+    // inbox, slowking fix 1); pass it to filter down to one channel. ---
+    getDashboardMetrics: (input: { accountId?: string } = {}) =>
       query<DashboardMetrics>('metrics.getDashboardMetrics', input),
-    listRecommendedActions: (input: { accountId: string }) =>
+    listRecommendedActions: (input: { accountId?: string } = {}) =>
       query<CommunicationDto[]>('metrics.listRecommendedActions', input),
-    listDraftsAwaitingApproval: (input: { accountId: string }) =>
+    listDraftsAwaitingApproval: (input: { accountId?: string } = {}) =>
       query<CommunicationDto[]>('metrics.listDraftsAwaitingApproval', input),
     listConnectedAccounts: () => query<ConnectedAccountDto[]>('accounts.listConnectedAccounts'),
   };
