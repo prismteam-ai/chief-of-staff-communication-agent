@@ -12,7 +12,10 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 await migrate();
 
 createServer(async (req, res) => {
-  const baseUrl = process.env.API_BASE_URL ?? `http://localhost:${PORT}`;
+  const baseUrl =
+    process.env.API_BASE_URL ??
+    process.env.RENDER_EXTERNAL_URL ??
+    `http://localhost:${PORT}`;
   let httpReq = nodeRequestFromIncoming(req, baseUrl);
   if (req.method !== "GET" && req.method !== "HEAD") {
     httpReq = mergeBody(httpReq, await readNodeBody(req));
