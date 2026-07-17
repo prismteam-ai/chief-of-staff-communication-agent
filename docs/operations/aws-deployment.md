@@ -66,6 +66,37 @@ private bucket, consume its queue, and read the exact digest secret. It has no
 outbox-send, EventBridge-publish, Bedrock, Lambda-invoke, SES, SNS-publish, or
 provider credential authority.
 
+### Production approval execution composition
+
+The deployed execution Lambda consumes the approval-outbox queue through its
+module-level `handler`. Its complete lane-specific configuration is:
+
+| Environment variable | Bound value class |
+|---|---|
+| `EXECUTION_RUNTIME_MODE` | Literal `effect_disabled`; missing or different fails closed |
+| `CORE_TABLE_NAME` | CDK token for the authoritative core table |
+| `EXECUTION_WORKER_ID` | Stable deployment identity `chief-execution-worker` |
+| `EXECUTION_LEASE_DURATION_MS` | Deployment-owned lease `120000` |
+| Four effect switches | Literals `disabled` |
+
+The handler constructs the AWS DynamoDB document client and
+`DynamoApprovalExecutionPersistence`, then uses only `EffectDisabledSink`.
+There is no provider connector, provider endpoint/credential, external send,
+or in-memory success fallback in this lane. A successful invocation means an
+approved immutable operation was guarded and a truthful `effect_disabled`
+receipt was conditionally persisted; it is not evidence of provider
+acceptance.
+
+The core-table aggregate, operation-unique base-table locator, and versioned
+authority-projection contract is documented in
+[effect-execution.md](../features/effect-execution.md). Strong locator reads and
+transactional aggregate/authority reads do not use a GSI or scan. The execution
+role can get, transactionally read, and conditionally update only the core
+table, plus consume the encrypted outbox queue. It has no transactional-write,
+put, connector-runtime or retrieval-table, S3, EventBridge, Secrets Manager,
+queue-send, provider, or mutable-fact authority. The function has no reserved
+concurrency; its event source retains the bounded maximum concurrency of `2`.
+
 ## Safety defaults
 
 Every Lambda receives four independent disabled switches:
@@ -160,7 +191,7 @@ Review both generated templates. Required invariants include:
 - no OpenSearch resource and no credential value.
 - the three production ingestion lookup GSIs, the exact connector/version
   allowlist with no `demo` source, secret/key ARN references, and no wildcard
-  ingestion data-plane policy resource.
+  worker data-plane policy resource.
 
 ## Deploy an exact snapshot
 
@@ -208,8 +239,9 @@ foreach ($Stage in 1..3) {
 
 Each wave is monotonic: stage 1 adds `ThreadLookupIndex`, stage 2 adds
 `IdentityLookupIndex`, and stage 3 adds `AsanaTopicLookupIndex`. The default is
-stage 3, so normal synths and every later deployment retain the complete schema.
-Do not skip directly to stage 3 when more than one of these indexes is absent.
+stage 3, so normal synths and every later deployment retain the complete
+ingestion schema. Do not skip directly to stage 3 when more than one of these
+indexes is absent.
 
 `--require-approval never` suppresses only the CDK CLI prompt; it does not
 weaken the repository's human authorization rules. The exact deployment action

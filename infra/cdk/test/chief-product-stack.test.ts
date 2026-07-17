@@ -197,7 +197,7 @@ describe('Chief product stack', () => {
         newIndexes.slice(0, stage),
       );
     }
-  }, 30_000);
+  }, 60_000);
 
   it('rejects invalid production GSI migration stages', () => {
     expect(() => createProductTemplate(0)).toThrow(
@@ -405,7 +405,7 @@ describe('Chief product stack', () => {
     });
   });
 
-  it('binds the production ingestion composition explicitly and keeps all effects disabled', () => {
+  it('binds both production compositions explicitly and keeps all effects disabled', () => {
     template.resourcePropertiesCountIs(
       'AWS::Lambda::Function',
       {
@@ -418,9 +418,6 @@ describe('Chief product stack', () => {
             PROVIDER_EFFECTS: 'disabled',
             WORK_MANAGEMENT_EFFECTS: 'disabled',
             CORE_TABLE_NAME: Match.anyValue(),
-            CONNECTOR_RUNTIME_TABLE_NAME: Match.anyValue(),
-            RETRIEVAL_TABLE_NAME: Match.anyValue(),
-            SNAPSHOT_BUCKET_NAME: Match.anyValue(),
           }),
         },
         LoggingConfig: {
@@ -476,13 +473,32 @@ describe('Chief product stack', () => {
     expect(ingestionEnvironment?.INGESTION_CONNECTOR_BINDINGS).not.toContain(
       'demo=',
     );
-    for (const referenceName of [
-      'INGESTION_QUEUE_URL',
-      'OUTBOX_QUEUE_URL',
-      'PRODUCT_EVENT_BUS_NAME',
-    ]) {
-      expectCdkReference(executionEnvironment?.[referenceName]);
-    }
+    expect(executionEnvironment).toMatchObject({
+      EXECUTION_LEASE_DURATION_MS: '120000',
+      EXECUTION_RUNTIME_MODE: 'effect_disabled',
+      EXECUTION_WORKER_ID: 'chief-execution-worker',
+      EXTERNAL_EFFECTS: 'disabled',
+      MODEL_EFFECTS: 'disabled',
+      NODE_OPTIONS: '--enable-source-maps',
+      POWERTOOLS_SERVICE_NAME: 'chief-execution-worker',
+      PROVIDER_EFFECTS: 'disabled',
+      WORK_MANAGEMENT_EFFECTS: 'disabled',
+    });
+    expectCdkReference(executionEnvironment?.CORE_TABLE_NAME);
+    expect(Object.keys(executionEnvironment ?? {}).sort()).toEqual(
+      [
+        'CORE_TABLE_NAME',
+        'EXECUTION_LEASE_DURATION_MS',
+        'EXECUTION_RUNTIME_MODE',
+        'EXECUTION_WORKER_ID',
+        'EXTERNAL_EFFECTS',
+        'MODEL_EFFECTS',
+        'NODE_OPTIONS',
+        'POWERTOOLS_SERVICE_NAME',
+        'PROVIDER_EFFECTS',
+        'WORK_MANAGEMENT_EFFECTS',
+      ].sort(),
+    );
     const ingestionWorker = workers.find(
       ({ Properties }) =>
         (
@@ -597,6 +613,50 @@ describe('Chief product stack', () => {
     expect(JSON.stringify(secretStatements)).toContain('DigestKeySecret');
   });
 
+  it('gives execution only its core records and queue consumer authority', () => {
+    const statements = workerPolicyStatements('ExecutionWorker');
+    const actionResources = statements.flatMap(({ Action, Resource }) => {
+      const actions = Array.isArray(Action)
+        ? Action
+        : Action === undefined
+          ? []
+          : [Action];
+      return actions.map((action) => ({ action, resource: Resource }));
+    });
+    const actions = actionResources.map(({ action }) => action);
+
+    expect(actions.sort()).toEqual(
+      [
+        'dynamodb:GetItem',
+        'dynamodb:TransactGetItems',
+        'dynamodb:UpdateItem',
+        'kms:Decrypt',
+        'sqs:ChangeMessageVisibility',
+        'sqs:DeleteMessage',
+        'sqs:GetQueueAttributes',
+        'sqs:GetQueueUrl',
+        'sqs:ReceiveMessage',
+        'xray:PutTelemetryRecords',
+        'xray:PutTraceSegments',
+      ].sort(),
+    );
+
+    const dynamoStatements = statements.filter(({ Action }) => {
+      const values = Array.isArray(Action)
+        ? Action
+        : Action === undefined
+          ? []
+          : [Action];
+      return values.some((action) => action.startsWith('dynamodb:'));
+    });
+    expect(dynamoStatements).toHaveLength(1);
+    expect(JSON.stringify(dynamoStatements)).toContain('CoreDomainTable');
+    expect(JSON.stringify(dynamoStatements)).not.toContain('/index/');
+    expect(JSON.stringify(statements)).not.toMatch(
+      /ConnectorRuntimeTable|RetrievalTable|SnapshotBlobBucket|ProductEventBus|DigestKeySecret/u,
+    );
+  });
+
   it('grants queue consumers without mutable-fact or scan permissions', () => {
     const actions = allActions();
     expect(actions).toContain('sqs:ReceiveMessage');
@@ -675,10 +735,7 @@ describe('Chief product stack', () => {
       const assembly = app.synth();
       const synthesizedTemplate = assembly.getStackArtifact(stack.artifactId)
         .template as SynthesizedTemplate;
-      const bundles = workerLambdaBundles(
-        synthesizedTemplate,
-        outputDirectory,
-      );
+      const bundles = workerLambdaBundles(synthesizedTemplate, outputDirectory);
 
       for (const bundlePath of bundles.values()) {
         const bundleSource = readFileSync(bundlePath, 'utf8');

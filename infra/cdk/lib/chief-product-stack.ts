@@ -135,7 +135,6 @@ export class ChiefProductStack extends cdk.Stack {
         nonKeyAttributes: ['dedupeKey', 'providerObjectId'],
       });
     }
-
     const connectorRuntimeTable = this.createTable(
       'ConnectorRuntimeTable',
       dataKey,
@@ -299,18 +298,6 @@ export class ChiefProductStack extends cdk.Stack {
       PROVIDER_EFFECTS: 'disabled',
       WORK_MANAGEMENT_EFFECTS: 'disabled',
     } as const;
-    const commonEnvironment = {
-      CORE_TABLE_NAME: coreTable.tableName,
-      CONNECTOR_RUNTIME_TABLE_NAME: connectorRuntimeTable.tableName,
-      RETRIEVAL_TABLE_NAME: retrievalTable.tableName,
-      SNAPSHOT_BUCKET_NAME: snapshotBucket.bucketName,
-      INGESTION_QUEUE_URL: ingestionQueue.queueUrl,
-      OUTBOX_QUEUE_URL: outboxQueue.queueUrl,
-      PRODUCT_EVENT_BUS_NAME: productBus.eventBusName,
-      DIGEST_KEY_SECRET_ARN: digestKeySecret.secretArn,
-      ...effectDisabledEnvironment,
-      POWERTOOLS_METRICS_NAMESPACE: 'ChiefProduct',
-    };
     const ingestionEnvironment = {
       CONNECTOR_RUNTIME_TABLE_NAME: connectorRuntimeTable.tableName,
       CORE_TABLE_NAME: coreTable.tableName,
@@ -345,7 +332,13 @@ export class ChiefProductStack extends cdk.Stack {
       'ExecutionWorker',
       'apps/execution-worker/src/handler.ts',
       'chief-execution-worker',
-      commonEnvironment,
+      {
+        CORE_TABLE_NAME: coreTable.tableName,
+        EXECUTION_LEASE_DURATION_MS: '120000',
+        EXECUTION_RUNTIME_MODE: 'effect_disabled',
+        EXECUTION_WORKER_ID: 'chief-execution-worker',
+        ...effectDisabledEnvironment,
+      },
     );
     executionWorker.addEventSource(
       new eventSources.SqsEventSource(outboxQueue, {
@@ -364,13 +357,17 @@ export class ChiefProductStack extends cdk.Stack {
     ingestionQueue.grantConsumeMessages(ingestionWorker);
     digestKeySecret.grantRead(ingestionWorker);
 
-    this.grantTableData(executionWorker, coreTable, 'read-write');
-    this.grantTableData(executionWorker, connectorRuntimeTable, 'read-write');
-    this.grantTableData(executionWorker, retrievalTable, 'read');
-    snapshotBucket.grantRead(executionWorker);
+    executionWorker.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:TransactGetItems',
+          'dynamodb:UpdateItem',
+        ],
+        resources: [coreTable.tableArn],
+      }),
+    );
     outboxQueue.grantConsumeMessages(executionWorker);
-    productBus.grantPutEventsTo(executionWorker);
-    digestKeySecret.grantRead(executionWorker);
 
     this.createExport(
       'CoreTableName',

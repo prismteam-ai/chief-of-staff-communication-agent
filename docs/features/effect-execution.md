@@ -19,6 +19,73 @@ authoritative DynamoDB-backed persistence adapter
 resolves every tenant/account/payload/revision binding server-side through the
 frozen `ApprovalExecutionPersistence` contract.
 
+## Authoritative DynamoDB aggregate
+
+Production execution uses three versioned core-table records. The approval
+writer must create all three atomically with
+`buildDynamoApprovalExecutionCreateTransaction`; the queue record is not an
+authority source:
+
+- the operation-unique locator uses
+  `PK=O#<base64url operation ID>` and
+  `SK=L#<base64url approval-execution>`;
+- the immutable aggregate uses `PK=T#<base64url tenant ID>` and
+  `SK=E#<base64url approval-execution>#<base64url operation ID>`; and
+- the current-authority projection uses the same tenant partition and
+  `SK=A#<base64url approval-execution-authority>#<base64url operation ID>`.
+
+The creation transaction conditionally requires all three keys to be absent.
+Because the locator key is derived solely from the opaque operation ID, two
+tenants cannot claim the same operation ID: one complete transaction wins and
+the other makes no partial write. Execution performs a strongly consistent
+base-table `GetItem` for the locator, followed by one transactional read of the
+immutable aggregate and authority projection. It never queries a GSI, scans,
+or accepts caller tenant/account routing. A missing or mismatched locator,
+aggregate, or authority projection redrives without dispatch.
+
+The immutable aggregate contains the exact action-plan revision/hash,
+approval, immutable operation artifact/binding, artifact hash, stable
+idempotency key, execution state, claim epoch, attempt count, and state
+version. The separate server-owned authority projection contains the current
+source revision, approver-active state, connector/account/capability state,
+contact-policy projections, and effect-switch state plus a monotonically
+increasing `authorityVersion`.
+
+Canonical authority-change paths compose
+`DynamoApprovalExecutionAuthorityProjectionWriter`. It transactionally checks
+the locator routing and expected authority version before replacing the full
+current projection and incrementing both its version and the aggregate's
+authority-version mirror. Dispatch-attempt persistence conditionally checks the
+exact hydrated mirrored version and requires the claim lease to remain
+unexpired at the one stored `attemptedAt` instant. Any intervening revocation,
+switch, account/capability, contact-policy, or lease change fails before the
+sink boundary.
+
+Every state transition conditionally fences the exact tenant, operation,
+artifact hash, state version, claim owner, and monotonically increasing claim
+epoch. An expired uncalled claim may be taken over with a new epoch. An expired
+dispatching claim freezes as `acceptance_unknown`/
+`reconciliation_required`; it is never ordinarily resent. Dispatch attempt,
+effect-disabled settlement, provider rejection, and accepted correlation are
+immutable ordered transitions. Settled duplicates acknowledge safely without
+incrementing the attempt count or synthesizing another receipt.
+
+The aggregate and authority records are rejected above a conservative 320 KiB
+combined hydration ceiling. A dispatch attempt stores only references already
+bound to the immutable aggregate: operation/attempt IDs, artifact hash, stable
+idempotency key, owner/epoch, and attempted time. It never duplicates the full
+artifact. Bounded receipts/provider results keep valid near-limit aggregate
+updates below DynamoDB's 400 KiB item limit; oversized records fail before a
+claim write.
+
+At settlement, provider results have a 4 KiB serialized ceiling and accepted
+provider correlation has a 1 KiB UTF-8 ceiling. An oversized accepted
+correlation is never persisted; the already-crossed provider boundary freezes
+through the fixed, PII-free acceptance-unknown path. Rejected reason codes must
+match the 96-character safe-code grammar or are stored as the fixed
+`PROVIDER_REJECTED` code. Raw provider correlation/reason text never appears in
+the thrown error.
+
 ## Execution sequence
 
 ```text
@@ -152,23 +219,29 @@ blocked/invalidated outcome is durable and the adapter was never called. A
 `pre_dispatch_retryable` result becomes a partial-batch failure so transient
 preflight infrastructure failures redrive without any duplicate-effect risk.
 
-The exported module-level `handler` is deliberately unconfigured and returns
-every record as failed. Deployment composition must inject:
+The exported module-level `handler` is the production public/evaluator
+composition. It lazily validates explicit environment configuration, creates
+AWS DynamoDB clients and `DynamoApprovalExecutionPersistence`, and injects only
+the endpoint-free `EffectDisabledSink`. It has no connector registry, provider
+endpoint, provider credential, or in-memory fallback. Worker identity and
+lease duration are deployment-owned values; an SQS body can contain only the
+operation ID.
 
-1. the DynamoDB-backed `ClaimHeartbeatPersistence` adapter;
-2. a clock and stable worker ID;
-3. no provider configuration for the public effect-disabled worker; or
-4. an exact runtime policy plus constructor-injected connector registry for a
-   separately authorized controlled-effect worker.
+Missing or malformed configuration fails every identifiable SQS record for
+redrive. A missing/malformed authoritative aggregate or conditional race fails
+only the affected record. Successful public execution truthfully persists an
+`effect_disabled` receipt; it does not persist provider acceptance or claim a
+provider effect.
 
-This fail-closed bootstrap prevents a missing deployment binding from silently
-acknowledging or performing work.
-
-The persistence adapter must conditionally implement both
-`settlePreDispatchDenied` and `settlePreDispatchRetryable` against the exact
-claim owner/epoch. The former records a durable blocked/invalidated terminal
-fact; the latter records retryable-but-uncalled and releases only that fenced
-attempt for safe redrive.
+For a separately authorized controlled-effect composition using
+`ClaimHeartbeatPersistence`, its extended persistence adapter must
+conditionally implement both `settlePreDispatchDenied` and
+`settlePreDispatchRetryable` against the exact claim owner/epoch. The former
+records a durable blocked/invalidated terminal fact; the latter records
+retryable-but-uncalled and releases only that fenced attempt for safe redrive.
+The deployed effect-disabled `DynamoApprovalExecutionPersistence` implements
+the frozen base `ApprovalExecutionPersistence` contract and does not claim
+those controlled-effect extensions.
 
 ## Tradeoffs
 
