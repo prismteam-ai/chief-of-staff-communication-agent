@@ -142,12 +142,10 @@ export class ChiefFoundationStack extends cdk.Stack {
       },
       bundling: {
         target: 'node22',
-        format: nodejs.OutputFormat.ESM,
+        format: nodejs.OutputFormat.CJS,
         mainFields: ['module', 'main'],
         minify: true,
         sourceMap: true,
-        banner:
-          'import { createRequire } from "module";const require = createRequire(import.meta.url);',
       },
       depsLockFilePath: path.join(REPOSITORY_ROOT, 'pnpm-lock.yaml'),
     });
