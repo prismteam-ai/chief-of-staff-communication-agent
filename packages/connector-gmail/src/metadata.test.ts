@@ -2,17 +2,23 @@ import { connectorDescriptorSchema } from '@chief/contracts/connectors';
 import { describe, expect, it } from 'vitest';
 import { gmailConnectorMetadata } from './metadata.js';
 
-describe('Gmail scaffold metadata', () => {
-  it('is immutable, schema-valid, and does not claim a working effect', () => {
+describe('Gmail implementation metadata', () => {
+  it('is immutable, schema-valid, and mirrors the real connector', () => {
     expect(
       connectorDescriptorSchema.parse(gmailConnectorMetadata),
     ).toBeTruthy();
     expect(Object.isFrozen(gmailConnectorMetadata)).toBe(true);
     expect(gmailConnectorMetadata.capabilities).toMatchObject({
-      read: false,
-      send: false,
-      externalEffect: false,
+      read: true,
+      send: true,
+      poll: true,
+      historicalBackfill: true,
+      externalEffect: true,
     });
-    expect(gmailConnectorMetadata.supportedRuntimeModes).toEqual(['disabled']);
+    expect(gmailConnectorMetadata.supportedRuntimeModes).toEqual([
+      'live',
+      'fixture',
+      'disabled',
+    ]);
   });
 });

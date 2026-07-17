@@ -4,6 +4,7 @@ import { backfillGmailMessages } from './backfill.js';
 import {
   createGmailContractFixtures,
   createGmailFixtureDependencies,
+  GMAIL_PROVIDER_MESSAGE_FIXTURE,
 } from './provider-fixtures.js';
 
 describe('Gmail bounded backfill', () => {
@@ -53,5 +54,23 @@ describe('Gmail bounded backfill', () => {
       nextPageToken: 'page-2',
       complete: false,
     });
+  });
+
+  it('rejects a same-thread message ID substitution', async () => {
+    const fixtures = createGmailContractFixtures();
+    const dependencies = createGmailFixtureDependencies(fixtures);
+    dependencies.history.getMessage = () =>
+      Promise.resolve({
+        ...GMAIL_PROVIDER_MESSAGE_FIXTURE,
+        id: 'provider-message-substituted',
+      });
+    await expect(
+      backfillGmailMessages(dependencies.history, {
+        account: fixtures.accountRef,
+        connectorSnapshot: fixtures.snapshot,
+        maxItems: 1,
+        maxPages: 1,
+      }),
+    ).rejects.toThrow('GMAIL_BACKFILL_MESSAGE_ID_MISMATCH');
   });
 });

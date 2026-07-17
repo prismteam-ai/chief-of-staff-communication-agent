@@ -7,6 +7,7 @@ import { gmailConnectorDescriptor, GMAIL_OAUTH_SCOPES } from './descriptor.js';
 import {
   createGmailContractFixtures,
   createGmailFixtureDependencies,
+  GMAIL_PROVIDER_MESSAGE_FIXTURE,
 } from './provider-fixtures.js';
 
 describe('GmailConnector', () => {
@@ -81,6 +82,20 @@ describe('GmailConnector', () => {
     await expect(
       connector.poll(fixtures.accountRef, fixtures.pollRequest),
     ).rejects.toBeInstanceOf(GmailHistoryResetRequiredError);
+  });
+
+  it('rejects a same-thread history message ID substitution', async () => {
+    const fixtures = createGmailContractFixtures();
+    const dependencies = createGmailFixtureDependencies(fixtures);
+    dependencies.history.getMessage = () =>
+      Promise.resolve({
+        ...GMAIL_PROVIDER_MESSAGE_FIXTURE,
+        id: 'provider-message-substituted',
+      });
+    const connector = new GmailConnector(dependencies);
+    await expect(
+      connector.poll(fixtures.accountRef, fixtures.pollRequest),
+    ).rejects.toThrow('GMAIL_HISTORY_MESSAGE_ID_MISMATCH');
   });
 
   it('retains the original history fence across bounded continuation pages', async () => {

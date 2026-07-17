@@ -169,6 +169,9 @@ export class GmailConnector implements OAuthCommunicationConnector {
             account,
             added.message.id,
           );
+          if (message.id !== added.message.id) {
+            throw new Error('GMAIL_HISTORY_MESSAGE_ID_MISMATCH');
+          }
           if (message.threadId !== added.message.threadId) {
             throw new Error('GMAIL_HISTORY_MESSAGE_THREAD_MISMATCH');
           }
@@ -212,6 +215,9 @@ export class GmailConnector implements OAuthCommunicationConnector {
       accountRef(account),
       ref.providerMessageId,
     );
+    if (message.id !== ref.providerMessageId) {
+      throw new Error('GMAIL_MESSAGE_ID_MISMATCH');
+    }
     if (
       ref.providerThreadId !== undefined &&
       ref.providerThreadId !== message.threadId

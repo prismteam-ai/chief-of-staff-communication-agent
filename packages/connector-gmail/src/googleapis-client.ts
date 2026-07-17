@@ -184,13 +184,24 @@ export class GoogleApisGmailClient
     readonly pageToken?: string;
     readonly maxResults: number;
   }): Promise<GmailHistoryPage> {
-    const response = await this.client.users.history.list({
-      userId: 'me',
-      startHistoryId: input.startHistoryId,
-      historyTypes: ['messageAdded'],
-      maxResults: input.maxResults,
-      ...(input.pageToken === undefined ? {} : { pageToken: input.pageToken }),
-    });
+    const response = await (async () => {
+      try {
+        return await this.client.users.history.list({
+          userId: 'me',
+          startHistoryId: input.startHistoryId,
+          historyTypes: ['messageAdded'],
+          maxResults: input.maxResults,
+          ...(input.pageToken === undefined
+            ? {}
+            : { pageToken: input.pageToken }),
+        });
+      } catch (error) {
+        if (httpStatus(error) === 404) {
+          throw new Error('GMAIL_HISTORY_ID_TOO_OLD', { cause: error });
+        }
+        throw error;
+      }
+    })();
     return {
       history: (response.data.history ?? []).map((record) => ({
         id: requireString(record.id, 'history.id'),
@@ -249,7 +260,11 @@ export class GoogleApisGmailClient
       id: providerMessageId,
       format: 'full',
     });
-    return this.toProviderMessage(account, response.data);
+    const message = await this.toProviderMessage(account, response.data);
+    if (message.id !== providerMessageId) {
+      throw new Error('GMAIL_PROVIDER_MESSAGE_ID_MISMATCH');
+    }
+    return message;
   }
 
   public async getThread(

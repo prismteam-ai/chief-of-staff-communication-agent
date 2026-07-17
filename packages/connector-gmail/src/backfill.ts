@@ -75,6 +75,9 @@ export async function backfillGmailMessages(
       }
       seen.add(ref.id);
       const message = await client.getMessage(request.account, ref.id);
+      if (message.id !== ref.id) {
+        throw new Error('GMAIL_BACKFILL_MESSAGE_ID_MISMATCH');
+      }
       if (message.threadId !== ref.threadId) {
         throw new Error('GMAIL_BACKFILL_MESSAGE_THREAD_MISMATCH');
       }
