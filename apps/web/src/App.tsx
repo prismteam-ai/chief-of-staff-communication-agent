@@ -1146,8 +1146,8 @@ function ProjectionThreadPage({
               </button>
               {contextOutcome === undefined ? null : (
                 <p className="projection-notice" role="status">
-                  {contextOutcome} No notification or external mutation
-                  occurred.
+                  Focused context request: {contextOutcome} No notification or
+                  external mutation occurred.
                 </p>
               )}
             </>
