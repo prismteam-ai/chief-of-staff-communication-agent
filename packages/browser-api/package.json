@@ -17,7 +17,9 @@
   },
   "dependencies": {
     "@chief/api-client": "workspace:*",
-    "@chief/contracts": "workspace:*"
+    "@chief/contracts": "workspace:*",
+    "@tanstack/react-query": "5.101.2",
+    "@trpc/client": "11.18.0"
   },
   "devDependencies": {
     "@chief/tsconfig": "workspace:*",

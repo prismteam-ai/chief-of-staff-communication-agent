@@ -3,6 +3,22 @@
   "files": [],
   "references": [
     { "path": "./packages/contracts" },
+    { "path": "./packages/domain" },
+    { "path": "./packages/persistence-dynamodb" },
+    { "path": "./packages/connector-core" },
+    { "path": "./packages/connector-testkit" },
+    { "path": "./packages/connector-gmail" },
+    { "path": "./packages/connector-microsoft-graph" },
+    { "path": "./packages/connector-imap-smtp" },
+    { "path": "./packages/connector-twilio" },
+    { "path": "./packages/connector-x" },
+    { "path": "./packages/connector-linkedin" },
+    { "path": "./packages/work-management-asana" },
+    { "path": "./packages/rag" },
+    { "path": "./packages/model-gateway" },
+    { "path": "./packages/agent" },
+    { "path": "./packages/approval-outbox" },
+    { "path": "./packages/demo-fixtures" },
     { "path": "./packages/observability" },
     { "path": "./apps/api" },
     { "path": "./packages/api-client" },
@@ -11,6 +27,7 @@
     { "path": "./apps/ingestion-worker" },
     { "path": "./apps/execution-worker" },
     { "path": "./apps/web" },
+    { "path": "./apps/e2e" },
     { "path": "./infra/cdk" }
   ]
 }

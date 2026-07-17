@@ -1,0 +1,38 @@
+{
+  "name": "@chief/connector-imap-smtp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./src/*.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src"
+  },
+  "dependencies": {
+    "@chief/connector-core": "workspace:*",
+    "@chief/connector-testkit": "workspace:*",
+    "@chief/contracts": "workspace:*",
+    "@chief/domain": "workspace:*",
+    "imapflow": "1.4.7",
+    "mailparser": "3.9.14",
+    "nodemailer": "9.0.3"
+  },
+  "devDependencies": {
+    "@chief/tsconfig": "workspace:*",
+    "@types/mailparser": "3.4.6",
+    "@types/nodemailer": "8.0.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

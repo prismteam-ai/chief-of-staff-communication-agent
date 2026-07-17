@@ -2,6 +2,7 @@
 import * as cdk from 'aws-cdk-lib';
 
 import { ChiefFoundationStack } from '../lib/chief-foundation-stack.js';
+import { ChiefProductStack } from '../lib/chief-product-stack.js';
 
 const app = new cdk.App();
 const account = String(
@@ -16,5 +17,9 @@ const region = String(
 );
 
 new ChiefFoundationStack(app, 'ChiefFoundationStack', {
+  env: { account, region },
+});
+
+new ChiefProductStack(app, 'ChiefProductStack', {
   env: { account, region },
 });

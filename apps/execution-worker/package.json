@@ -16,8 +16,19 @@
     "test": "vitest run src"
   },
   "dependencies": {
+    "@chief/approval-outbox": "workspace:*",
+    "@chief/connector-core": "workspace:*",
+    "@chief/connector-gmail": "workspace:*",
+    "@chief/connector-imap-smtp": "workspace:*",
+    "@chief/connector-linkedin": "workspace:*",
+    "@chief/connector-microsoft-graph": "workspace:*",
+    "@chief/connector-twilio": "workspace:*",
+    "@chief/connector-x": "workspace:*",
     "@chief/contracts": "workspace:*",
-    "@chief/observability": "workspace:*"
+    "@chief/domain": "workspace:*",
+    "@chief/observability": "workspace:*",
+    "@chief/persistence-dynamodb": "workspace:*",
+    "@chief/work-management-asana": "workspace:*"
   },
   "devDependencies": {
     "@chief/tsconfig": "workspace:*",

@@ -1,0 +1,46 @@
+import { connectorDescriptorSchema } from '@chief/contracts/connectors';
+const descriptor = connectorDescriptorSchema.parse({
+  schemaVersion: '1',
+  connectorId: 'x-direct-messages',
+  descriptorVersion: '1.0.0-scaffold',
+  provider: 'x',
+  channel: 'direct-message',
+  connectionStrategy: 'oauth',
+  authorizationAudience: 'https://api.x.com/',
+  authorizationScopes: [
+    'tweet.read',
+    'users.read',
+    'dm.read',
+    'dm.write',
+    'offline.access',
+  ],
+  capabilities: {
+    read: false,
+    send: false,
+    webhook: false,
+    poll: false,
+    threads: false,
+    attachments: false,
+    deliveryFeedback: false,
+    multipleAccounts: false,
+    historicalBackfill: false,
+    externalEffect: false,
+    replyCorrelation: false,
+    complaintFeedback: false,
+    unsubscribeFeedback: false,
+    optOutFeedback: false,
+    reconsentFeedback: false,
+    consentWindowEligibility: false,
+  },
+  supportedRuntimeModes: ['disabled'],
+  constraints: [
+    'Legacy DM and encrypted XChat capabilities remain separate and unimplemented; no account entitlement is claimed.',
+  ],
+});
+export const xConnectorMetadata = Object.freeze({
+  ...descriptor,
+  authorizationScopes: Object.freeze([...descriptor.authorizationScopes]),
+  capabilities: Object.freeze({ ...descriptor.capabilities }),
+  supportedRuntimeModes: Object.freeze([...descriptor.supportedRuntimeModes]),
+  constraints: Object.freeze([...descriptor.constraints]),
+});

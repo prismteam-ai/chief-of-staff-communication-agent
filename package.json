@@ -18,6 +18,8 @@
     "synth": "turbo run synth",
     "graph:packages": "pnpm --recursive list --depth -1",
     "graph:turbo": "turbo run build --dry=json",
+    "verify:force": "turbo run typecheck test build --force --cache-dir=node_modules/.cache/turbo-force",
+    "test:focused": "pnpm --filter @chief/contracts --filter @chief/domain --filter @chief/connector-core --filter @chief/connector-testkit --filter @chief/persistence-dynamodb --filter @chief/infra-cdk test",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm synth && pnpm graph:packages && pnpm graph:turbo"
   },
   "devDependencies": {

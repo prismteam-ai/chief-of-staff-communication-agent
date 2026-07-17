@@ -18,6 +18,10 @@
     "constructs": "10.7.0"
   },
   "devDependencies": {
+    "@chief/api": "workspace:*",
+    "@chief/execution-worker": "workspace:*",
+    "@chief/ingestion-worker": "workspace:*",
+    "@chief/mcp": "workspace:*",
     "@chief/tsconfig": "workspace:*",
     "@chief/web": "workspace:*",
     "@types/node": "22.19.17",

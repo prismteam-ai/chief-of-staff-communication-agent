@@ -1,45 +1,13 @@
-import { z } from 'zod';
-
-export const foundationCapabilities = [
-  'connectors',
-  'oauth',
-  'rag',
-  'actions',
-  'agents',
-] as const;
-
-export const healthResponseSchema = z.object({
-  service: z.string().min(1),
-  status: z.literal('ok'),
-  timestamp: z.iso.datetime(),
-  foundationOnly: z.literal(true),
-});
-
-export type HealthResponse = z.infer<typeof healthResponseSchema>;
-
-export const foundationOnlyErrorSchema = z.object({
-  code: z.literal('MCP_FOUNDATION_ONLY'),
-  message: z.string().min(1),
-  foundationOnly: z.literal(true),
-});
-
-export type FoundationOnlyError = z.infer<typeof foundationOnlyErrorSchema>;
-
-export const workerFoundationResultSchema = z.object({
-  worker: z.enum(['ingestion-worker', 'execution-worker']),
-  status: z.literal('foundation-ready'),
-  externalEffects: z.literal('disabled'),
-});
-
-export type WorkerFoundationResult = z.infer<
-  typeof workerFoundationResultSchema
->;
-
-export function createHealthResponse(service: string): HealthResponse {
-  return healthResponseSchema.parse({
-    service,
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    foundationOnly: true,
-  });
-}
+export * from './agent.js';
+export * from './api.js';
+export * from './approval.js';
+export * from './communications.js';
+export * from './connectors.js';
+export * from './errors.js';
+export * from './events.js';
+export * from './foundation.js';
+export * from './ids.js';
+export * from './knowledge.js';
+export * from './mcp.js';
+export * from './storage.js';
+export * from './tenancy.js';
