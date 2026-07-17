@@ -1,0 +1,27 @@
+{
+  "name": "@chief/execution-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/handler.d.ts",
+      "default": "./dist/handler.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src"
+  },
+  "dependencies": {
+    "@chief/contracts": "workspace:*",
+    "@chief/observability": "workspace:*"
+  },
+  "devDependencies": {
+    "@chief/tsconfig": "workspace:*",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "name": "chief-of-staff-communication-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": "22.18.0",
+    "pnpm": "10.33.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint eslint.config.mjs apps packages infra/cdk --max-warnings 0",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "synth": "turbo run synth",
+    "graph:packages": "pnpm --recursive list --depth -1",
+    "graph:turbo": "turbo run build --dry=json",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm synth && pnpm graph:packages && pnpm graph:turbo"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.19.17",
+    "corepack": "0.34.6",
+    "eslint": "10.7.0",
+    "esbuild": "0.28.1",
+    "pnpm": "10.33.0",
+    "prettier": "3.9.5",
+    "turbo": "2.10.5",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.64.0",
+    "vitest": "4.1.10"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

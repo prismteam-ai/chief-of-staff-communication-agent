@@ -1,0 +1,8 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'infra/*'
+
+strictPeerDependencies: true
+engineStrict: true
+saveExact: true

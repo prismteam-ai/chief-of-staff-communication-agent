@@ -1,0 +1,9 @@
+{
+  "extends": "@chief/tsconfig/react.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "types": ["vite/client", "node"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
+}

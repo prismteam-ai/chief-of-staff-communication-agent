@@ -1,0 +1,7 @@
+{
+  "app": "node --enable-source-maps dist/bin/app.js",
+  "versionReporting": false,
+  "context": {
+    "@aws-cdk/aws-cloudfront:defaultSecurityPolicyTLSv1.2_2021": true
+  }
+}

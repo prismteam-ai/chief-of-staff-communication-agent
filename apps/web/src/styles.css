@@ -1,0 +1,361 @@
+:root {
+  color: #edf0f4;
+  background: #090b0f;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(
+      circle at 73% -8%,
+      rgba(195, 255, 111, 0.09),
+      transparent 31rem
+    ),
+    radial-gradient(
+      circle at 4% 48%,
+      rgba(95, 123, 255, 0.07),
+      transparent 27rem
+    ),
+    #090b0f;
+}
+
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  content: '';
+  opacity: 0.16;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(to bottom, black, transparent 78%);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+code {
+  color: #caff83;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.shell {
+  width: min(1180px, calc(100% - 40px));
+  margin: 0 auto;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 86px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+}
+
+.brand-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid rgba(202, 255, 131, 0.34);
+  border-radius: 9px;
+  color: #caff83;
+  background: rgba(202, 255, 131, 0.08);
+  font-size: 13px;
+}
+
+.health {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #9aa2ad;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.health-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #77808d;
+  box-shadow: 0 0 0 4px rgba(119, 128, 141, 0.12);
+}
+
+.health--ready .health-dot,
+.health-dot--ready {
+  background: #caff83;
+  box-shadow: 0 0 0 4px rgba(202, 255, 131, 0.12);
+}
+
+.health--unavailable .health-dot,
+.health-dot--unavailable {
+  background: #ff987a;
+  box-shadow: 0 0 0 4px rgba(255, 152, 122, 0.12);
+}
+
+.hero {
+  padding: 108px 0 94px;
+}
+
+.eyebrow,
+.section-kicker {
+  margin: 0 0 20px;
+  color: #caff83;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  max-width: 850px;
+  margin: 0;
+  font-size: clamp(46px, 7vw, 86px);
+  font-weight: 570;
+  letter-spacing: -0.065em;
+  line-height: 0.98;
+}
+
+.lede {
+  max-width: 700px;
+  margin: 34px 0 0;
+  color: #9ca3ae;
+  font-size: clamp(17px, 2vw, 21px);
+  line-height: 1.65;
+}
+
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 38px;
+}
+
+.hero-meta span,
+.foundation-badge {
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 999px;
+  color: #aeb5bf;
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.panel {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  background: rgba(17, 20, 25, 0.82);
+  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.22);
+}
+
+.panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 30px 32px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.panel-heading .section-kicker,
+.status-card .section-kicker {
+  margin-bottom: 9px;
+}
+
+.panel h2,
+.status-card h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 590;
+  letter-spacing: -0.035em;
+}
+
+.foundation-badge {
+  color: #caff83;
+  border-color: rgba(202, 255, 131, 0.22);
+  background: rgba(202, 255, 131, 0.06);
+}
+
+.capability-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.capability {
+  position: relative;
+  min-height: 180px;
+  padding: 27px;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.capability:last-child {
+  border-right: 0;
+}
+
+.capability-index {
+  display: block;
+  margin-bottom: 46px;
+  color: #646d79;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 11px;
+}
+
+.capability h3 {
+  margin: 0 0 7px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.capability p,
+.status-card p {
+  margin: 0;
+  color: #7f8895;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.pending-dot {
+  position: absolute;
+  top: 29px;
+  right: 27px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #505966;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.status-card {
+  min-height: 230px;
+  padding: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(17, 20, 25, 0.56);
+}
+
+.status-card--accent {
+  background: linear-gradient(
+    145deg,
+    rgba(202, 255, 131, 0.08),
+    rgba(17, 20, 25, 0.7) 58%
+  );
+}
+
+.status-card > p:last-of-type {
+  margin-top: 18px;
+}
+
+.runtime-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 31px;
+  color: #dce1e7;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 58px 0 42px;
+  color: #59616c;
+  font-size: 11px;
+}
+
+@media (max-width: 860px) {
+  .hero {
+    padding: 80px 0 70px;
+  }
+
+  .capability-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .capability {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .shell {
+    width: min(100% - 24px, 1180px);
+  }
+
+  .topbar {
+    height: 70px;
+  }
+
+  .hero h1 br {
+    display: none;
+  }
+
+  .panel-heading {
+    flex-direction: column;
+    padding: 24px;
+  }
+
+  .capability-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .capability {
+    min-height: 140px;
+    border-right: 0;
+  }
+
+  .capability-index {
+    margin-bottom: 27px;
+  }
+
+  footer {
+    flex-direction: column;
+  }
+}
