@@ -1,8 +1,11 @@
 import path from 'node:path';
 
 import * as cdk from 'aws-cdk-lib';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as cloudwatchActions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as events from 'aws-cdk-lib/aws-events';
+import * as eventTargets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as kms from 'aws-cdk-lib/aws-kms';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
@@ -11,8 +14,11 @@ import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as sns from 'aws-cdk-lib/aws-sns';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import type { Construct } from 'constructs';
+
+import { runtimeExportNames } from './runtime-exports.js';
 
 const REPOSITORY_ROOT = path.resolve(process.cwd(), '../..');
 const PROJECT_NAME = 'chief-communications';
@@ -142,22 +148,87 @@ export class ChiefProductStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
-    const outboxDlq = new sqs.Queue(this, 'OutboxDeadLetterQueue', {
-      encryption: sqs.QueueEncryption.KMS,
-      encryptionMasterKey: dataKey,
-      retentionPeriod: cdk.Duration.days(14),
-      enforceSSL: true,
+    const ingestionDlq = this.createDeadLetterQueue(
+      'IngestionDeadLetterQueue',
+      dataKey,
+    );
+    const ingestionQueue = this.createWorkQueue(
+      'IngestionQueue',
+      ingestionDlq,
+      dataKey,
+    );
+    const outboxDlq = this.createDeadLetterQueue(
+      'OutboxDeadLetterQueue',
+      dataKey,
+    );
+    const outboxQueue = this.createWorkQueue('OutboxQueue', outboxDlq, dataKey);
+
+    const alertTopicName = `${PROJECT_NAME}-runtime-alerts`;
+    const alertTopicArn = this.formatArn({
+      resource: alertTopicName,
+      service: 'sns',
     });
-    const outboxQueue = new sqs.Queue(this, 'OutboxQueue', {
-      encryption: sqs.QueueEncryption.KMS,
-      encryptionMasterKey: dataKey,
-      visibilityTimeout: cdk.Duration.minutes(2),
-      retentionPeriod: cdk.Duration.days(4),
-      enforceSSL: true,
-      deadLetterQueue: { queue: outboxDlq, maxReceiveCount: 5 },
+    const alertTopic = new sns.Topic(this, 'RuntimeAlertTopic', {
+      displayName: 'Chief runtime state changes',
+      masterKey: dataKey,
+      topicName: alertTopicName,
+    });
+    const cloudWatchPrincipal = new iam.ServicePrincipal(
+      'cloudwatch.amazonaws.com',
+    );
+    const alarmArnPattern = `arn:${this.partition}:cloudwatch:${this.region}:${this.account}:alarm:*`;
+    alertTopic.addToResourcePolicy(
+      new iam.PolicyStatement({
+        actions: ['sns:Publish'],
+        conditions: {
+          ArnLike: { 'aws:SourceArn': alarmArnPattern },
+          StringEquals: { 'aws:SourceAccount': this.account },
+        },
+        principals: [cloudWatchPrincipal],
+        resources: [alertTopic.topicArn],
+      }),
+    );
+    dataKey.addToResourcePolicy(
+      new iam.PolicyStatement({
+        actions: ['kms:Decrypt', 'kms:GenerateDataKey*'],
+        conditions: {
+          ArnEquals: { 'aws:SourceArn': alertTopicArn },
+          StringEquals: {
+            'aws:SourceAccount': this.account,
+            'kms:EncryptionContext:aws:sns:topicArn': alertTopicArn,
+          },
+        },
+        principals: [new iam.ServicePrincipal('sns.amazonaws.com')],
+        resources: ['*'],
+      }),
+    );
+    this.createDeadLetterAlarm(
+      'IngestionDeadLetterAlarm',
+      ingestionDlq,
+      alertTopic,
+    );
+    this.createDeadLetterAlarm('OutboxDeadLetterAlarm', outboxDlq, alertTopic);
+
+    const productBus = new events.EventBus(this, 'ProductEventBus', {
+      kmsKey: dataKey,
+    });
+    new events.Rule(this, 'IngestionRequestedRule', {
+      eventBus: productBus,
+      description:
+        'Routes verified canonical ingestion requests into the bounded worker queue.',
+      eventPattern: {
+        source: ['chief.connectors'],
+        detailType: ['communication.ingest.requested'],
+      },
+      targets: [
+        new eventTargets.SqsQueue(ingestionQueue, {
+          deadLetterQueue: ingestionDlq,
+          maxEventAge: cdk.Duration.hours(1),
+          retryAttempts: 3,
+        }),
+      ],
     });
 
-    const productBus = new events.EventBus(this, 'ProductEventBus');
     const digestKeySecret = new secretsmanager.Secret(this, 'DigestKeySecret', {
       description:
         'Versioned HMAC key material for tenant-bound provider identifier digests.',
@@ -175,10 +246,14 @@ export class ChiefProductStack extends cdk.Stack {
       CONNECTOR_RUNTIME_TABLE_NAME: connectorRuntimeTable.tableName,
       RETRIEVAL_TABLE_NAME: retrievalTable.tableName,
       SNAPSHOT_BUCKET_NAME: snapshotBucket.bucketName,
+      INGESTION_QUEUE_URL: ingestionQueue.queueUrl,
       OUTBOX_QUEUE_URL: outboxQueue.queueUrl,
       PRODUCT_EVENT_BUS_NAME: productBus.eventBusName,
       DIGEST_KEY_SECRET_ARN: digestKeySecret.secretArn,
       EXTERNAL_EFFECTS: 'disabled',
+      MODEL_EFFECTS: 'disabled',
+      PROVIDER_EFFECTS: 'disabled',
+      WORK_MANAGEMENT_EFFECTS: 'disabled',
       POWERTOOLS_METRICS_NAMESPACE: 'ChiefProduct',
     };
 
@@ -187,6 +262,14 @@ export class ChiefProductStack extends cdk.Stack {
       'apps/ingestion-worker/src/handler.ts',
       'chief-ingestion-worker',
       commonEnvironment,
+    );
+    ingestionWorker.addEventSource(
+      new eventSources.SqsEventSource(ingestionQueue, {
+        batchSize: 10,
+        maxBatchingWindow: cdk.Duration.seconds(5),
+        maxConcurrency: 2,
+        reportBatchItemFailures: true,
+      }),
     );
     const executionWorker = this.createWorker(
       'ExecutionWorker',
@@ -197,6 +280,8 @@ export class ChiefProductStack extends cdk.Stack {
     executionWorker.addEventSource(
       new eventSources.SqsEventSource(outboxQueue, {
         batchSize: 10,
+        maxBatchingWindow: cdk.Duration.seconds(5),
+        maxConcurrency: 2,
         reportBatchItemFailures: true,
       }),
     );
@@ -206,6 +291,7 @@ export class ChiefProductStack extends cdk.Stack {
     this.grantTableData(ingestionWorker, retrievalTable, 'read-write');
     snapshotBucket.grantRead(ingestionWorker);
     snapshotBucket.grantPut(ingestionWorker);
+    ingestionQueue.grantConsumeMessages(ingestionWorker);
     outboxQueue.grantSendMessages(ingestionWorker);
     productBus.grantPutEventsTo(ingestionWorker);
     digestKeySecret.grantRead(ingestionWorker);
@@ -218,23 +304,151 @@ export class ChiefProductStack extends cdk.Stack {
     productBus.grantPutEventsTo(executionWorker);
     digestKeySecret.grantRead(executionWorker);
 
-    new cdk.CfnOutput(this, 'CoreTableName', { value: coreTable.tableName });
-    new cdk.CfnOutput(this, 'ConnectorRuntimeTableName', {
-      value: connectorRuntimeTable.tableName,
+    this.createExport(
+      'CoreTableName',
+      coreTable.tableName,
+      runtimeExportNames.coreTableName,
+    );
+    this.createExport(
+      'CoreTableArn',
+      coreTable.tableArn,
+      runtimeExportNames.coreTableArn,
+    );
+    this.createExport(
+      'ConnectorRuntimeTableName',
+      connectorRuntimeTable.tableName,
+      runtimeExportNames.connectorRuntimeTableName,
+    );
+    this.createExport(
+      'ConnectorRuntimeTableArn',
+      connectorRuntimeTable.tableArn,
+      runtimeExportNames.connectorRuntimeTableArn,
+    );
+    this.createExport(
+      'RetrievalTableName',
+      retrievalTable.tableName,
+      runtimeExportNames.retrievalTableName,
+    );
+    this.createExport(
+      'RetrievalTableArn',
+      retrievalTable.tableArn,
+      runtimeExportNames.retrievalTableArn,
+    );
+    this.createExport(
+      'SnapshotBucketName',
+      snapshotBucket.bucketName,
+      runtimeExportNames.snapshotBucketName,
+    );
+    this.createExport(
+      'SnapshotBucketArn',
+      snapshotBucket.bucketArn,
+      runtimeExportNames.snapshotBucketArn,
+    );
+    this.createExport(
+      'IngestionQueueUrl',
+      ingestionQueue.queueUrl,
+      runtimeExportNames.ingestionQueueUrl,
+    );
+    this.createExport(
+      'IngestionQueueArn',
+      ingestionQueue.queueArn,
+      runtimeExportNames.ingestionQueueArn,
+    );
+    this.createExport(
+      'OutboxQueueUrl',
+      outboxQueue.queueUrl,
+      runtimeExportNames.outboxQueueUrl,
+    );
+    this.createExport(
+      'OutboxQueueArn',
+      outboxQueue.queueArn,
+      runtimeExportNames.outboxQueueArn,
+    );
+    this.createExport(
+      'ProductEventBusName',
+      productBus.eventBusName,
+      runtimeExportNames.productEventBusName,
+    );
+    this.createExport(
+      'ProductEventBusArn',
+      productBus.eventBusArn,
+      runtimeExportNames.productEventBusArn,
+    );
+    this.createExport(
+      'DigestKeySecretArn',
+      digestKeySecret.secretArn,
+      runtimeExportNames.digestKeySecretArn,
+    );
+    this.createExport(
+      'ProductDataKeyArn',
+      dataKey.keyArn,
+      runtimeExportNames.dataKeyArn,
+    );
+    new cdk.CfnOutput(this, 'RuntimeAlertTopicArn', {
+      value: alertTopic.topicArn,
     });
-    new cdk.CfnOutput(this, 'RetrievalTableName', {
-      value: retrievalTable.tableName,
+    new cdk.CfnOutput(this, 'IngestionDeadLetterQueueUrl', {
+      value: ingestionDlq.queueUrl,
     });
-    new cdk.CfnOutput(this, 'SnapshotBucketName', {
-      value: snapshotBucket.bucketName,
+    new cdk.CfnOutput(this, 'OutboxDeadLetterQueueUrl', {
+      value: outboxDlq.queueUrl,
     });
-    new cdk.CfnOutput(this, 'OutboxQueueUrl', { value: outboxQueue.queueUrl });
-    new cdk.CfnOutput(this, 'ProductEventBusName', {
-      value: productBus.eventBusName,
+
+    const foundationStack = scope.node.tryFindChild('ChiefFoundationStack');
+    if (foundationStack instanceof cdk.Stack) {
+      foundationStack.addDependency(this);
+    }
+  }
+
+  private createDeadLetterQueue(id: string, dataKey: kms.IKey): sqs.Queue {
+    return new sqs.Queue(this, id, {
+      encryption: sqs.QueueEncryption.KMS,
+      encryptionMasterKey: dataKey,
+      retentionPeriod: cdk.Duration.days(14),
+      enforceSSL: true,
     });
-    new cdk.CfnOutput(this, 'DigestKeySecretArn', {
-      value: digestKeySecret.secretArn,
+  }
+
+  private createWorkQueue(
+    id: string,
+    deadLetterQueue: sqs.IQueue,
+    dataKey: kms.IKey,
+  ): sqs.Queue {
+    return new sqs.Queue(this, id, {
+      encryption: sqs.QueueEncryption.KMS,
+      encryptionMasterKey: dataKey,
+      visibilityTimeout: cdk.Duration.minutes(6),
+      retentionPeriod: cdk.Duration.days(4),
+      enforceSSL: true,
+      deadLetterQueue: { queue: deadLetterQueue, maxReceiveCount: 5 },
     });
+  }
+
+  private createDeadLetterAlarm(
+    id: string,
+    queue: sqs.IQueue,
+    topic: sns.ITopic,
+  ): void {
+    const alarm = new cloudwatch.Alarm(this, id, {
+      alarmDescription:
+        'The queue contains terminal failures. Triage and redrive; the alarm clears when drained.',
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      datapointsToAlarm: 1,
+      evaluationPeriods: 1,
+      metric: queue.metricApproximateNumberOfMessagesVisible({
+        period: cdk.Duration.minutes(1),
+        statistic: 'Maximum',
+      }),
+      threshold: 0,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    const action = new cloudwatchActions.SnsAction(topic);
+    alarm.addAlarmAction(action);
+    alarm.addOkAction(action);
+  }
+
+  private createExport(id: string, value: string, exportName: string): void {
+    new cdk.CfnOutput(this, id, { exportName, value });
   }
 
   private createTable(id: string, encryptionKey: kms.IKey): dynamodb.Table {
@@ -262,11 +476,13 @@ export class ChiefProductStack extends cdk.Stack {
       'dynamodb:DescribeTable',
       'dynamodb:GetItem',
       'dynamodb:Query',
+      'dynamodb:TransactGetItems',
     ];
     if (access === 'read-write') {
       actions.push(
         'dynamodb:ConditionCheckItem',
         'dynamodb:PutItem',
+        'dynamodb:TransactWriteItems',
         'dynamodb:UpdateItem',
       );
     }
@@ -295,6 +511,7 @@ export class ChiefProductStack extends cdk.Stack {
       architecture: lambda.Architecture.ARM_64,
       memorySize: 512,
       timeout: cdk.Duration.seconds(60),
+      reservedConcurrentExecutions: 2,
       tracing: lambda.Tracing.ACTIVE,
       logGroup,
       environment: {

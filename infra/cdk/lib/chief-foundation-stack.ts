@@ -5,6 +5,7 @@ import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
@@ -12,9 +13,40 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import type { Construct } from 'constructs';
 
+import { runtimeExportNames } from './runtime-exports.js';
+
 const REPOSITORY_ROOT = path.resolve(process.cwd(), '../..');
 const PROJECT_NAME = 'chief-communications';
 const REPOSITORY_NAME = 'chief-of-staff-communication-agent';
+const FIXTURE_TENANT_ID = 'chief-evaluator-fixture';
+const SPA_REWRITE_FUNCTION_CODE = `function handler(event) {
+  var request = event.request;
+  var uri = request.uri;
+  var isApiPath = uri === '/trpc' || uri.indexOf('/trpc/') === 0 ||
+    uri === '/mcp' || uri.indexOf('/mcp/') === 0;
+  if (isApiPath || (request.method !== 'GET' && request.method !== 'HEAD')) {
+    return request;
+  }
+  var finalSegment = uri.substring(uri.lastIndexOf('/') + 1);
+  if (uri.charAt(uri.length - 1) === '/' || finalSegment.indexOf('.') === -1) {
+    request.uri = '/index.html';
+  }
+  return request;
+}`;
+
+interface RuntimeBindings {
+  readonly connectorRuntimeTableArn: string;
+  readonly connectorRuntimeTableName: string;
+  readonly coreTableArn: string;
+  readonly coreTableName: string;
+  readonly dataKeyArn: string;
+  readonly outboxQueueArn: string;
+  readonly outboxQueueUrl: string;
+  readonly retrievalTableArn: string;
+  readonly retrievalTableName: string;
+  readonly snapshotBucketArn: string;
+  readonly snapshotBucketName: string;
+}
 
 export class ChiefFoundationStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: cdk.StackProps) {
@@ -31,53 +63,65 @@ export class ChiefFoundationStack extends cdk.Stack {
       versioned: true,
     });
 
-    const distribution = new cloudfront.Distribution(this, 'WebDistribution', {
-      defaultRootObject: 'index.html',
-      defaultBehavior: {
-        origin: origins.S3BucketOrigin.withOriginAccessControl(webBucket),
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
-      },
-      errorResponses: [403, 404].map((httpStatus) => ({
-        httpStatus,
-        responseHttpStatus: 200,
-        responsePagePath: '/index.html',
-        ttl: cdk.Duration.seconds(0),
-      })),
-    });
-
-    new s3deploy.BucketDeployment(this, 'DeployWeb', {
-      sources: [
-        s3deploy.Source.asset(path.join(REPOSITORY_ROOT, 'apps/web/dist')),
-      ],
-      destinationBucket: webBucket,
-      distribution,
-      distributionPaths: ['/*'],
-      prune: true,
-    });
-
     const apiLogGroup = this.createLogGroup('ApiLogGroup');
     const mcpLogGroup = this.createLogGroup('McpLogGroup');
+    const apiAccessLogGroup = this.createLogGroup('ApiAccessLogGroup');
+    const runtime = this.importRuntimeBindings();
+    const fixtureEnvironment = {
+      EXTERNAL_EFFECTS: 'disabled',
+      FIXTURE_TENANT_ID,
+      MODEL_EFFECTS: 'disabled',
+      PROVIDER_EFFECTS: 'disabled',
+      PUBLIC_FIXTURE_MODE: 'enabled',
+      WORK_MANAGEMENT_EFFECTS: 'disabled',
+    };
 
     const apiFunction = this.createFunction(
       'ApiFunction',
       path.join(REPOSITORY_ROOT, 'apps/api/src/handler.ts'),
       'chief-api',
       apiLogGroup,
+      {
+        ...fixtureEnvironment,
+        CONNECTOR_RUNTIME_TABLE_NAME: runtime.connectorRuntimeTableName,
+        CORE_TABLE_NAME: runtime.coreTableName,
+        OUTBOX_QUEUE_URL: runtime.outboxQueueUrl,
+        PUBLIC_ROUTE_SCOPE: 'fixture-read-propose-approve-effect-disabled',
+        RETRIEVAL_TABLE_NAME: runtime.retrievalTableName,
+        SNAPSHOT_BUCKET_NAME: runtime.snapshotBucketName,
+      },
+      8,
     );
     const mcpFunction = this.createFunction(
       'McpFunction',
       path.join(REPOSITORY_ROOT, 'apps/mcp/src/handler.ts'),
       'chief-mcp',
       mcpLogGroup,
+      {
+        ...fixtureEnvironment,
+        CONNECTOR_RUNTIME_TABLE_NAME: runtime.connectorRuntimeTableName,
+        CORE_TABLE_NAME: runtime.coreTableName,
+        PUBLIC_ROUTE_SCOPE: 'fixture-mcp-read-propose-approval-handoff',
+        RETRIEVAL_TABLE_NAME: runtime.retrievalTableName,
+        SNAPSHOT_BUCKET_NAME: runtime.snapshotBucketName,
+      },
+      4,
     );
+    this.grantApiRuntimeAccess(apiFunction, runtime);
+    this.grantMcpRuntimeAccess(mcpFunction, runtime);
 
     const httpApi = new apigwv2.HttpApi(this, 'HttpApi', {
       apiName: `${PROJECT_NAME}-api`,
       corsPreflight: {
-        allowHeaders: ['content-type'],
-        allowMethods: [apigwv2.CorsHttpMethod.ANY],
+        allowHeaders: ['authorization', 'content-type', 'mcp-protocol-version'],
+        allowMethods: [
+          apigwv2.CorsHttpMethod.DELETE,
+          apigwv2.CorsHttpMethod.GET,
+          apigwv2.CorsHttpMethod.OPTIONS,
+          apigwv2.CorsHttpMethod.POST,
+        ],
         allowOrigins: ['*'],
+        maxAge: cdk.Duration.hours(1),
       },
     });
 
@@ -105,11 +149,155 @@ export class ChiefFoundationStack extends cdk.Stack {
       integration: mcpIntegration,
     });
 
+    const defaultStage = httpApi.defaultStage?.node
+      .defaultChild as apigwv2.CfnStage;
+    defaultStage.accessLogSettings = {
+      destinationArn: apiAccessLogGroup.logGroupArn,
+      format: JSON.stringify({
+        apiId: '$context.apiId',
+        error: '$context.error.message',
+        httpMethod: '$context.httpMethod',
+        integrationError: '$context.integrationErrorMessage',
+        integrationLatency: '$context.integrationLatency',
+        requestId: '$context.requestId',
+        responseLatency: '$context.responseLatency',
+        routeKey: '$context.routeKey',
+        status: '$context.status',
+      }),
+    };
+    defaultStage.defaultRouteSettings = {
+      throttlingBurstLimit: 40,
+      throttlingRateLimit: 20,
+    };
+
+    const responseHeadersPolicy = new cloudfront.ResponseHeadersPolicy(
+      this,
+      'SecurityHeadersPolicy',
+      {
+        responseHeadersPolicyName: `${PROJECT_NAME}-security-headers`,
+        securityHeadersBehavior: {
+          contentSecurityPolicy: {
+            contentSecurityPolicy: [
+              "default-src 'self'",
+              "base-uri 'self'",
+              `connect-src 'self' https://*.execute-api.${this.region}.${this.urlSuffix}`,
+              "font-src 'self' data:",
+              "form-action 'self'",
+              "frame-ancestors 'none'",
+              "img-src 'self' data: blob:",
+              "object-src 'none'",
+              "script-src 'self'",
+              "style-src 'self' 'unsafe-inline'",
+            ].join('; '),
+            override: true,
+          },
+          contentTypeOptions: { override: true },
+          frameOptions: {
+            frameOption: cloudfront.HeadersFrameOption.DENY,
+            override: true,
+          },
+          referrerPolicy: {
+            referrerPolicy: cloudfront.HeadersReferrerPolicy.SAME_ORIGIN,
+            override: true,
+          },
+          strictTransportSecurity: {
+            accessControlMaxAge: cdk.Duration.days(730),
+            includeSubdomains: true,
+            override: true,
+            preload: true,
+          },
+          xssProtection: {
+            modeBlock: true,
+            override: true,
+            protection: true,
+          },
+        },
+        customHeadersBehavior: {
+          customHeaders: [
+            {
+              header: 'Permissions-Policy',
+              override: true,
+              value:
+                'camera=(), geolocation=(), microphone=(), payment=(), usb=()',
+            },
+          ],
+        },
+      },
+    );
+    const spaRewriteFunction = new cloudfront.Function(
+      this,
+      'SpaNavigationRewrite',
+      {
+        code: cloudfront.FunctionCode.fromInline(SPA_REWRITE_FUNCTION_CODE),
+        comment:
+          'Rewrites extensionless browser navigation only; API and asset errors remain truthful.',
+        runtime: cloudfront.FunctionRuntime.JS_2_0,
+      },
+    );
+    const distribution = new cloudfront.Distribution(this, 'WebDistribution', {
+      defaultRootObject: 'index.html',
+      defaultBehavior: {
+        origin: origins.S3BucketOrigin.withOriginAccessControl(webBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        functionAssociations: [
+          {
+            eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+            function: spaRewriteFunction,
+          },
+        ],
+        responseHeadersPolicy,
+      },
+    });
+    const apiOrigin = new origins.HttpOrigin(
+      `${httpApi.httpApiId}.execute-api.${this.region}.${this.urlSuffix}`,
+      { protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY },
+    );
+    const apiBehavior: cloudfront.AddBehaviorOptions = {
+      allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+      cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+      originRequestPolicy:
+        cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+      responseHeadersPolicy,
+      viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+    };
+    distribution.addBehavior('/trpc/*', apiOrigin, apiBehavior);
+    distribution.addBehavior('/mcp', apiOrigin, apiBehavior);
+    distribution.addBehavior('/mcp/*', apiOrigin, apiBehavior);
+    const webUrl = `https://${distribution.distributionDomainName}`;
+    apiFunction.addEnvironment('PRODUCT_BASE_URL', webUrl);
+    mcpFunction.addEnvironment('CHIEF_PRODUCT_BASE_URL', webUrl);
+
+    new s3deploy.BucketDeployment(this, 'DeployWeb', {
+      sources: [
+        s3deploy.Source.asset(path.join(REPOSITORY_ROOT, 'apps/web/dist')),
+      ],
+      destinationBucket: webBucket,
+      distribution,
+      distributionPaths: ['/*'],
+      prune: true,
+    });
+
     new cdk.CfnOutput(this, 'WebUrl', {
-      value: `https://${distribution.distributionDomainName}`,
+      value: webUrl,
     });
     new cdk.CfnOutput(this, 'ApiUrl', {
       value: httpApi.apiEndpoint,
+    });
+    new cdk.CfnOutput(this, 'ApiHealthUrl', {
+      value: `${httpApi.apiEndpoint}/trpc/system.health`,
+    });
+    new cdk.CfnOutput(this, 'McpUrl', {
+      value: `${httpApi.apiEndpoint}/mcp`,
+    });
+    new cdk.CfnOutput(this, 'McpHealthUrl', {
+      value: `${httpApi.apiEndpoint}/mcp/health`,
+    });
+    new cdk.CfnOutput(this, 'CloudFrontApiUrl', {
+      value: `https://${distribution.distributionDomainName}/trpc`,
+    });
+    new cdk.CfnOutput(this, 'CloudFrontMcpUrl', {
+      value: `https://${distribution.distributionDomainName}/mcp`,
     });
   }
 
@@ -125,6 +313,8 @@ export class ChiefFoundationStack extends cdk.Stack {
     entry: string,
     serviceName: string,
     logGroup: logs.LogGroup,
+    runtimeEnvironment: Record<string, string>,
+    reservedConcurrentExecutions: number,
   ): nodejs.NodejsFunction {
     return new nodejs.NodejsFunction(this, id, {
       entry,
@@ -132,10 +322,12 @@ export class ChiefFoundationStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_22_X,
       architecture: lambda.Architecture.ARM_64,
       memorySize: 512,
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.seconds(25),
+      reservedConcurrentExecutions,
       tracing: lambda.Tracing.ACTIVE,
       logGroup,
       environment: {
+        ...runtimeEnvironment,
         NODE_OPTIONS: '--enable-source-maps',
         POWERTOOLS_SERVICE_NAME: serviceName,
         POWERTOOLS_METRICS_NAMESPACE: 'ChiefFoundation',
@@ -149,5 +341,125 @@ export class ChiefFoundationStack extends cdk.Stack {
       },
       depsLockFilePath: path.join(REPOSITORY_ROOT, 'pnpm-lock.yaml'),
     });
+  }
+
+  private importRuntimeBindings(): RuntimeBindings {
+    return {
+      connectorRuntimeTableArn: cdk.Fn.importValue(
+        runtimeExportNames.connectorRuntimeTableArn,
+      ),
+      connectorRuntimeTableName: cdk.Fn.importValue(
+        runtimeExportNames.connectorRuntimeTableName,
+      ),
+      coreTableArn: cdk.Fn.importValue(runtimeExportNames.coreTableArn),
+      coreTableName: cdk.Fn.importValue(runtimeExportNames.coreTableName),
+      dataKeyArn: cdk.Fn.importValue(runtimeExportNames.dataKeyArn),
+      outboxQueueArn: cdk.Fn.importValue(runtimeExportNames.outboxQueueArn),
+      outboxQueueUrl: cdk.Fn.importValue(runtimeExportNames.outboxQueueUrl),
+      retrievalTableArn: cdk.Fn.importValue(
+        runtimeExportNames.retrievalTableArn,
+      ),
+      retrievalTableName: cdk.Fn.importValue(
+        runtimeExportNames.retrievalTableName,
+      ),
+      snapshotBucketArn: cdk.Fn.importValue(
+        runtimeExportNames.snapshotBucketArn,
+      ),
+      snapshotBucketName: cdk.Fn.importValue(
+        runtimeExportNames.snapshotBucketName,
+      ),
+    };
+  }
+
+  private grantApiRuntimeAccess(
+    function_: nodejs.NodejsFunction,
+    runtime: RuntimeBindings,
+  ): void {
+    this.grantTableData(function_, runtime.coreTableArn, 'read-write');
+    this.grantTableData(
+      function_,
+      runtime.connectorRuntimeTableArn,
+      'read-write',
+    );
+    this.grantTableData(function_, runtime.retrievalTableArn, 'read');
+    this.grantSnapshotRead(function_, runtime.snapshotBucketArn);
+    function_.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['sqs:SendMessage'],
+        resources: [runtime.outboxQueueArn],
+      }),
+    );
+    function_.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['kms:Decrypt', 'kms:GenerateDataKey'],
+        resources: [runtime.dataKeyArn],
+      }),
+    );
+  }
+
+  private grantMcpRuntimeAccess(
+    function_: nodejs.NodejsFunction,
+    runtime: RuntimeBindings,
+  ): void {
+    this.grantTableData(function_, runtime.coreTableArn, 'read-write');
+    this.grantTableData(function_, runtime.connectorRuntimeTableArn, 'read');
+    this.grantTableData(function_, runtime.retrievalTableArn, 'read');
+    this.grantSnapshotRead(function_, runtime.snapshotBucketArn);
+    function_.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['kms:Decrypt'],
+        resources: [runtime.dataKeyArn],
+      }),
+    );
+  }
+
+  private grantTableData(
+    function_: nodejs.NodejsFunction,
+    tableArn: string,
+    access: 'read' | 'read-write',
+  ): void {
+    function_.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'dynamodb:BatchGetItem',
+          'dynamodb:DescribeTable',
+          'dynamodb:GetItem',
+          'dynamodb:Query',
+          'dynamodb:TransactGetItems',
+        ],
+        resources: [tableArn, `${tableArn}/index/*`],
+      }),
+    );
+    if (access === 'read-write') {
+      function_.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: [
+            'dynamodb:ConditionCheckItem',
+            'dynamodb:PutItem',
+            'dynamodb:TransactWriteItems',
+            'dynamodb:UpdateItem',
+          ],
+          resources: [tableArn],
+        }),
+      );
+    }
+  }
+
+  private grantSnapshotRead(
+    function_: nodejs.NodejsFunction,
+    snapshotBucketArn: string,
+  ): void {
+    function_.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:GetObject', 's3:GetObjectVersion'],
+        resources: [`${snapshotBucketArn}/*`],
+      }),
+    );
+    function_.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:GetBucketLocation', 's3:ListBucket'],
+        resources: [snapshotBucketArn],
+      }),
+    );
   }
 }
