@@ -103,6 +103,12 @@ export class ApiStack extends TaggedStack {
         // by the platform; the explicit setting applies to the non-Lambda runtimes (CI,
         // scripts, the CDK app), which all set it.
         NODE_OPTIONS: '--enable-source-maps',
+        // Slowking fix 3: without this, tRPC's `isDev` default (`NODE_ENV !== 'production'`)
+        // resolves to `true` on a Lambda that never otherwise sets `NODE_ENV`, and
+        // `NODE_OPTIONS=--enable-source-maps` above then rewrites every leaked stack trace back to
+        // the original `/apps/api/src/...` TS source paths — see trpc.ts's `errorFormatter` doc
+        // comment for the full mechanism this closes.
+        NODE_ENV: 'production',
         POWERTOOLS_SERVICE_NAME: SERVICE_NAME,
         POWERTOOLS_METRICS_NAMESPACE: METRICS_NAMESPACE,
         // supplyContext's re-run hand-off (Task 6 review fix) — same deterministic-name wiring as
@@ -331,6 +337,10 @@ export class ApiStack extends TaggedStack {
       }),
       environment: {
         NODE_OPTIONS: '--enable-source-maps',
+        // Slowking fix 3: same rationale as TrpcHandler above — belt-and-suspenders here since this
+        // handler doesn't go through tRPC's error formatting, but keeps every Lambda in this stack
+        // consistently non-verbose in production.
+        NODE_ENV: 'production',
         POWERTOOLS_SERVICE_NAME: SERVICE_NAME,
         POWERTOOLS_METRICS_NAMESPACE: METRICS_NAMESPACE,
         AGENT_QUEUE_URL: agentQueueUrl,
