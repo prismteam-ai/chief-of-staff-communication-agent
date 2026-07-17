@@ -332,7 +332,6 @@ export class ChiefProductStack extends cdk.Stack {
       'apps/ingestion-worker/src/handler.ts',
       'chief-ingestion-worker',
       ingestionEnvironment,
-      2,
     );
     ingestionWorker.addEventSource(
       new eventSources.SqsEventSource(ingestionQueue, {
@@ -569,7 +568,6 @@ export class ChiefProductStack extends cdk.Stack {
     relativeEntry: string,
     serviceName: string,
     environment: Record<string, string>,
-    reservedConcurrentExecutions?: number,
   ): nodejs.NodejsFunction {
     const logGroup = new logs.LogGroup(this, `${id}LogGroup`, {
       retention: logs.RetentionDays.THREE_MONTHS,
@@ -582,7 +580,6 @@ export class ChiefProductStack extends cdk.Stack {
       architecture: lambda.Architecture.ARM_64,
       memorySize: 512,
       timeout: cdk.Duration.seconds(60),
-      reservedConcurrentExecutions,
       tracing: lambda.Tracing.ACTIVE,
       applicationLogLevelV2: lambda.ApplicationLogLevel.INFO,
       loggingFormat: lambda.LoggingFormat.JSON,

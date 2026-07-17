@@ -145,9 +145,8 @@ Review both generated templates. Required invariants include:
 - two KMS-encrypted work queues, two KMS-encrypted DLQs, and redrive policies;
 - two SQS event-source mappings with partial-batch failure reporting and
   concurrency `2`;
-- a 256 KiB message ceiling on both work queues, ingestion reserved concurrency
-  `2`, JSON Lambda system logs at `WARN`, and Powertools application logs
-  filtered at `INFO`;
+- a 256 KiB message ceiling on both work queues, JSON Lambda system logs at
+  `WARN`, and Powertools application logs filtered at `INFO`;
 - one encrypted EventBridge bus and bounded ingestion route;
 - one stateful non-empty alarm per DLQ, with both ALARM and OK actions;
 - 90-day logs, active tracing, bounded timeouts, and SQS event-source maximum
@@ -249,8 +248,9 @@ Also verify:
 
 - both DLQs are empty;
 - both event-source mappings are enabled;
-- the ingestion mapping reports partial batch failures, maximum concurrency
-  `2`, and the function has reserved concurrency `2`;
+- the ingestion mapping reports partial batch failures and maximum concurrency
+  `2`; both workers use the account's unreserved pool so Lambda can preserve its
+  mandatory unreserved minimum;
 - a deliberately malformed, fixture-mode, wrong-authority, or wrong connector
   version queue record is returned in `batchItemFailures` and produces no
   canonical write;

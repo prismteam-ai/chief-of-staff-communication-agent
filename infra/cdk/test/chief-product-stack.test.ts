@@ -437,7 +437,9 @@ describe('Chief product stack', () => {
         )?.Environment?.Variables?.POWERTOOLS_SERVICE_NAME ===
         'chief-execution-worker',
     );
-    expect(ingestionWorker?.Properties?.ReservedConcurrentExecutions).toBe(2);
+    expect(
+      ingestionWorker?.Properties?.ReservedConcurrentExecutions,
+    ).toBeUndefined();
     expect(
       executionWorker?.Properties?.ReservedConcurrentExecutions,
     ).toBeUndefined();
