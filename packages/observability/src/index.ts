@@ -8,12 +8,21 @@ export interface Observability {
   readonly tracer: Tracer;
 }
 
-export function createObservability(serviceName: string): Observability {
+const DEFAULT_METRICS_NAMESPACE = 'ChiefFoundation';
+
+export function createObservability(
+  serviceName: string,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): Observability {
+  const configuredNamespace = environment.POWERTOOLS_METRICS_NAMESPACE?.trim();
   return {
     logger: new Logger({ serviceName }),
     metrics: new Metrics({
       serviceName,
-      namespace: 'ChiefFoundation',
+      namespace:
+        configuredNamespace === undefined || configuredNamespace.length === 0
+          ? DEFAULT_METRICS_NAMESPACE
+          : configuredNamespace,
     }),
     tracer: new Tracer({ serviceName }),
   };
