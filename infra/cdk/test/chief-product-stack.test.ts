@@ -1,3 +1,8 @@
+import { createRequire } from 'node:module';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
 import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { describe, expect, it } from 'vitest';
@@ -28,6 +33,65 @@ interface SynthesizedWorkerResource {
   readonly Properties?: {
     readonly ReservedConcurrentExecutions?: number;
   };
+}
+
+interface SynthesizedTemplate {
+  readonly Resources: Record<
+    string,
+    {
+      readonly Type: string;
+      readonly Properties?: {
+        readonly Code?: { readonly S3Key?: unknown };
+        readonly Environment?: {
+          readonly Variables?: {
+            readonly POWERTOOLS_SERVICE_NAME?: unknown;
+          };
+        };
+        readonly Runtime?: unknown;
+      };
+    }
+  >;
+}
+
+const require = createRequire(import.meta.url);
+
+function workerLambdaBundles(
+  synthesizedTemplate: SynthesizedTemplate,
+  outputDirectory: string,
+): Map<string, string> {
+  const bundles = new Map<string, string>();
+
+  for (const resource of Object.values(synthesizedTemplate.Resources)) {
+    const serviceName =
+      resource.Properties?.Environment?.Variables?.POWERTOOLS_SERVICE_NAME;
+    if (
+      resource.Type !== 'AWS::Lambda::Function' ||
+      resource.Properties?.Runtime !== 'nodejs22.x' ||
+      (serviceName !== 'chief-ingestion-worker' &&
+        serviceName !== 'chief-execution-worker')
+    ) {
+      continue;
+    }
+
+    const assetKey = resource.Properties.Code?.S3Key;
+    const assetMatch = /^([a-f0-9]{64})\.zip$/.exec(String(assetKey));
+    expect(assetMatch).not.toBeNull();
+    const assetDirectory = path.join(
+      outputDirectory,
+      `asset.${assetMatch?.[1]}`,
+    );
+    const javaScriptFiles = readdirSync(assetDirectory).filter((file) =>
+      file.endsWith('.js'),
+    );
+    expect(javaScriptFiles).toEqual(['index.js']);
+    bundles.set(String(serviceName), path.join(assetDirectory, 'index.js'));
+  }
+
+  expect([...bundles.keys()].sort()).toEqual([
+    'chief-execution-worker',
+    'chief-ingestion-worker',
+  ]);
+  return bundles;
 }
 
 function allActions(): readonly string[] {
@@ -597,4 +661,35 @@ describe('Chief product stack', () => {
     });
     expect(foundation.dependencies).toContain(product);
   }, 20_000);
+
+  it('synthesizes importable CommonJS worker assets', () => {
+    const outputDirectory = mkdtempSync(
+      path.join(tmpdir(), 'chief-product-assets-'),
+    );
+
+    try {
+      const app = new cdk.App({ outdir: outputDirectory });
+      const stack = new ChiefProductStack(app, 'AssetChiefProduct', {
+        env: { account: '417242953053', region: 'us-east-2' },
+      });
+      const assembly = app.synth();
+      const synthesizedTemplate = assembly.getStackArtifact(stack.artifactId)
+        .template as SynthesizedTemplate;
+      const bundles = workerLambdaBundles(
+        synthesizedTemplate,
+        outputDirectory,
+      );
+
+      for (const bundlePath of bundles.values()) {
+        const bundleSource = readFileSync(bundlePath, 'utf8');
+        expect(bundleSource).not.toContain(
+          'import { createRequire } from module;',
+        );
+        const loadedBundle = require(bundlePath) as { handler?: unknown };
+        expect(typeof loadedBundle.handler).toBe('function');
+      }
+    } finally {
+      rmSync(outputDirectory, { force: true, recursive: true });
+    }
+  }, 30_000);
 });
