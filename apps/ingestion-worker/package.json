@@ -16,6 +16,10 @@
     "test": "vitest run src"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1089.0",
+    "@aws-sdk/client-s3": "3.1089.0",
+    "@aws-sdk/client-secrets-manager": "3.1089.0",
+    "@aws-sdk/lib-dynamodb": "3.1089.0",
     "@chief/agent": "workspace:*",
     "@chief/connector-core": "workspace:*",
     "@chief/connector-gmail": "workspace:*",

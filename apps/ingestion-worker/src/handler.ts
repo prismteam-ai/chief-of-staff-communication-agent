@@ -1,52 +1,14 @@
 import { KeyCodec } from '@chief/persistence-dynamodb';
-import { createObservability } from '@chief/observability';
 
+import { createAwsProductionIngestionHandler } from './aws-composition.js';
 import {
   DeterministicRetrievalMutationSink,
   InMemoryIngestionStore,
   RecordingRetrievalIndex,
 } from './memory-store.js';
 import { CanonicalIngestionPipeline } from './pipeline.js';
-import type { IngestionEvent, IngestionResult } from './types.js';
-
-const observability = createObservability('chief-ingestion-worker');
-
-export type IngestionHandler = (
-  event: IngestionEvent,
-) => Promise<IngestionResult>;
-
-export function createIngestionHandler(
-  pipeline: CanonicalIngestionPipeline,
-): IngestionHandler {
-  return async (event) => {
-    const result = await pipeline.process(event);
-    observability.logger.info('Canonical ingestion invocation complete', {
-      invocationId: result.invocationId,
-      status: result.status,
-      received: result.received,
-      processed: result.processed,
-      quarantined: result.quarantined,
-      projectionFailures: result.projectionFailures,
-      projectionRecoveriesQueued: result.projectionRecoveriesQueued,
-      externalProviderCalls: result.externalProviderCalls,
-      sources: result.sources.map((source) => ({
-        source: source.source,
-        status: source.status,
-        received: source.received,
-        created: source.created,
-        updated: source.updated,
-        duplicates: source.duplicates,
-        deleted: source.deleted,
-        quarantined: source.quarantined,
-        checkpointAdvanced: source.checkpointAdvanced,
-        retrievalUpdated: source.retrievalUpdated,
-        projectionFailed: source.projectionFailed,
-        projectionRecoveryQueued: source.projectionRecoveryQueued,
-      })),
-    });
-    return result;
-  };
-}
+import type { SqsBatchResponse, SqsEvent } from './production-ingress.js';
+import { createIngestionHandler, type IngestionHandler } from './service.js';
 
 /**
  * Credentialless fixture runtime for deterministic local/demo-shaped Lambda
@@ -71,10 +33,24 @@ export function createFixtureIngestionHandler(): IngestionHandler {
   );
 }
 
-export const handler: IngestionHandler = createFixtureIngestionHandler();
+let productionHandler:
+  Promise<(event: SqsEvent) => Promise<SqsBatchResponse>> | undefined;
+
+/**
+ * Deployment entry point. It has no fixture fallback: missing configuration,
+ * digest material, or AWS access rejects the invocation before processing.
+ */
+export async function handler(event: SqsEvent): Promise<SqsBatchResponse> {
+  productionHandler ??= createAwsProductionIngestionHandler(process.env);
+  return (await productionHandler)(event);
+}
 
 export * from './authored-segment.js';
+export * from './aws-composition.js';
 export * from './dynamo-store.js';
 export * from './memory-store.js';
 export * from './pipeline.js';
+export * from './production-ingress.js';
+export * from './runtime-config.js';
+export * from './service.js';
 export type * from './types.js';
