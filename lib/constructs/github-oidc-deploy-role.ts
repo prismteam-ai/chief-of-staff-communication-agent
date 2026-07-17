@@ -22,7 +22,7 @@ export interface GitHubOidcDeployRoleProps {
  * published as a CfnOutput to be recorded as the `AWS_DEPLOY_ROLE_ARN` repository variable
  * (one-time manual step).
  *
- * ## Least privilege (slowking fix 4)
+ * ## Reduced privilege, self-modification denied (slowking fix 4; see docs/FOLLOWUPS.md)
  * This role used to carry the `AdministratorAccess` managed policy — scaffold-stage scope, "tighten
  * later" documented as a follow-up that was never done. Replaced with an inline policy scoped to
  * what `just deploy` (`cdk deploy --all` + `scripts/deploy-web.ts` + `scripts/smoke.ts` +
@@ -61,6 +61,13 @@ export interface GitHubOidcDeployRoleProps {
  * `functionName`/`roleName` everywhere, then tighten these two statements to match — or add IAM
  * permission boundaries. `cdk synth --strict` passes with this policy; a real deploy exercise only
  * happens through CI on push (not run here — no push without separate explicit approval).
+ *
+ * **The unresolved edge from that tradeoff**: the account-wide `role/*` IAM grant matches this
+ * role's OWN ARN, so `iam:PutRolePolicy`/`iam:AttachRolePolicy` on itself would have been a
+ * one-call return to full admin. The `DenySelfModification` statement below closes exactly that —
+ * an explicit Deny on this role's own ARN, which always wins over the broad Allow. It does NOT
+ * address the broader gap that these grants (and `lambda:*`/`iam:PassRole`) are account-wide
+ * rather than name-prefixed; see `docs/FOLLOWUPS.md` for the honest accounting of what's left.
  */
 export class GitHubOidcDeployRole extends Construct {
   public readonly role: iam.Role;
@@ -272,6 +279,34 @@ export class GitHubOidcDeployRole extends Construct {
           `arn:${stack.partition}:iam::${account}:role/*`,
           `arn:${stack.partition}:iam::${account}:policy/*`,
         ],
+      }),
+    );
+
+    // --- DENY: this role may never modify ITS OWN identity (slowking-fixes Important #4 follow-up)
+    // The broad `role/*` grant above (needed so CDK can manage this project's Lambda/scheduler
+    // execution roles) also matches this role's OWN ARN, so without this statement a compromised
+    // token could call `iam:PutRolePolicy`/`iam:AttachRolePolicy` on itself and grant itself full
+    // admin in one call. An explicit Deny always wins over an Allow in IAM's evaluation, so this
+    // closes that one-call self-escalation path without narrowing what the Allow above lets CDK do
+    // to any OTHER (stack-owned) role — `cdk deploy` never mutates the deploy role itself, only
+    // stack execution roles (e.g. `ApiStack-HandlerServiceRole-...`), which have different ARNs and
+    // are unaffected by this Deny. `iam:CreatePolicyVersion`'s underlying resource type is a
+    // customer-managed policy ARN, not a role ARN — this repo attaches no customer-managed policies
+    // to itself (every policy on this role is CDK's own inline `DefaultPolicy`), so that entry is
+    // included for completeness/future-proofing rather than closing a live gap today.
+    this.role.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'DenySelfModification',
+        effect: iam.Effect.DENY,
+        actions: [
+          'iam:PutRolePolicy',
+          'iam:AttachRolePolicy',
+          'iam:DeleteRolePolicy',
+          'iam:PutRolePermissionsBoundary',
+          'iam:DeleteRolePermissionsBoundary',
+          'iam:CreatePolicyVersion',
+        ],
+        resources: [`arn:${stack.partition}:iam::${account}:role/${props.roleName}`],
       }),
     );
 

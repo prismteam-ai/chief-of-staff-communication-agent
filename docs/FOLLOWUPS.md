@@ -4,18 +4,31 @@ Honest accounting of shortcuts taken to fit this delivery's scope/window, why ea
 for a demo/assignment submission, and what the production fix looks like. None of these block the
 demonstrated workflows; all are scoped, understood tradeoffs rather than oversights.
 
-## 1. OIDC deploy role has `AdministratorAccess`
+## 1. OIDC deploy role: reduced from `AdministratorAccess`, not yet fully least-privilege
 
-`lib/constructs/github-oidc-deploy-role.ts` grants the GitHub Actions OIDC deploy role the AWS
-managed `AdministratorAccess` policy.
+`lib/constructs/github-oidc-deploy-role.ts` originally granted the GitHub Actions OIDC deploy role
+the AWS managed `AdministratorAccess` policy. That was replaced (slowking-fixes batch) with an
+inline policy scoped to the specific services `just deploy` touches, plus an explicit `Deny`
+(`DenySelfModification`) that blocks the role from calling `iam:PutRolePolicy`/
+`iam:AttachRolePolicy`/`iam:PutRolePermissionsBoundary`/`iam:DeleteRolePermissionsBoundary`/
+`iam:CreatePolicyVersion`/`iam:DeleteRolePolicy` on ITS OWN role ARN — closing the one-call
+self-escalation path a bare `role/*` Allow would otherwise leave open.
 
-- **Why acceptable here:** this is a single-account, single-operator sandbox environment with no
-  other tenants or workloads to blast-radius into; the deploy role's trust policy is still scoped
-  to this one repo/branch via the OIDC subject condition, so only this codebase's CI can assume it.
-- **Production fix:** replace with a least-privilege policy scoped to exactly the resource types
-  `cdk deploy` needs to touch (CloudFormation, the specific Lambda/DynamoDB/OpenSearch/API Gateway/
-  Amplify/IAM-for-CDK-execution-roles namespaces this app owns), generated from `cdk synth`'s
-  actual resource list rather than hand-maintained.
+- **What's still not least-privilege:** the mutating IAM grants (`iam:PutRolePolicy`/
+  `iam:AttachRolePolicy`/etc.), `iam:PassRole`, and `lambda:*` remain scoped to this account+region
+  but NOT to a stable name prefix — every OTHER role in the account (not just this app's own
+  Lambda/scheduler roles) technically matches `role/*`/`policy/*`, because none of this repo's
+  `NodejsFunction`s set an explicit `functionName`/`roleName`, so CDK auto-generates unstable
+  per-deploy names a prefix pattern can't target. The self-modification Deny closes the sharpest
+  edge (this role escalating itself) but not the account-wide breadth of what it can otherwise
+  touch.
+- **Why acceptable here:** single-account, single-operator sandbox with no other tenants; the
+  role's trust policy is still scoped to this one repo/branch via the OIDC subject condition, so
+  only this codebase's CI can assume it, and it can no longer grant itself more power once assumed.
+- **Production fix:** set explicit `${PROJECT_NAME}`-prefixed `functionName`/`roleName` on every
+  `NodejsFunction`/execution role this app creates, then narrow the IAM/Lambda/PassRole statements
+  to that prefix; add a permissions boundary requirement on every role this policy is allowed to
+  create, so even the account-wide grants can only ever produce boundary-constrained roles.
 
 ## 2. `accounts-repo.listByUser` is a Scan with a filter expression
 
