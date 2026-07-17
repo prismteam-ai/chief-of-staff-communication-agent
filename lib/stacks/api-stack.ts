@@ -25,6 +25,21 @@ const GITHUB_REPO = 'jzubielik/chief-of-staff-communication-agent';
 // Twilio secrets below use (Secrets Manager appends a random suffix to every ARN).
 const DASHBOARD_LOGIN_SECRET_ID = 'cos/dashboard-login';
 
+// Final-review fix: the deployed Amplify dashboard's ACTUAL origin (`infra/run-records/
+// first-deploy.md`) plus the two local dev-server origins (`apps/web`'s `vite dev`/`vite preview`
+// defaults) — everything the browser dashboard is ever legitimately served from. `'*'` was
+// previously safe in the sense that auth here is a Bearer token (`Authorization` header, never a
+// cookie), so no origin can ride a logged-in browser's ambient credentials the way CORS wildcards
+// are dangerous for cookie-authenticated APIs — but a wildcard still lets ANY origin's JS read this
+// API's responses if it ever gets a token via other means (XSS on an unrelated site, a leaked
+// token pasted into a malicious page's console). Naming the actual origins closes that off with no
+// functional cost to the one real client.
+const DASHBOARD_ORIGINS = [
+  'https://main.dismzb3pzaz79.amplifyapp.com',
+  'http://localhost:5173', // apps/web `vite dev` default port
+  'http://localhost:4173', // apps/web `vite preview` default port
+];
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API_HANDLER_ENTRY = path.join(__dirname, '../../apps/api/src/handler.ts');
 const WHATSAPP_WEBHOOK_HANDLER_ENTRY = path.join(
@@ -257,7 +272,7 @@ export class ApiStack extends TaggedStack {
     const httpApi = new apigwv2.HttpApi(this, 'HttpApi', {
       apiName: `${PROJECT_NAME}-api`,
       corsPreflight: {
-        allowOrigins: ['*'],
+        allowOrigins: DASHBOARD_ORIGINS,
         allowMethods: [apigwv2.CorsHttpMethod.ANY],
         allowHeaders: ['Content-Type', 'Authorization'],
       },
