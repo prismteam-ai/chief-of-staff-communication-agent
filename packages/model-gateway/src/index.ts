@@ -1,14 +1,5 @@
-export interface ModelProfileManifest {
-  readonly schemaVersion: '1';
-  readonly profileId: string;
-  readonly region: 'us-east-2';
-  readonly gateway: 'vercel-ai-sdk';
-  readonly manifestHash: string;
-}
-
-export interface ModelGateway {
-  readonly profile: ModelProfileManifest;
-}
+export * from './bedrock-prompt-cache.js';
+export * from './gateway.js';
 
 export const modelGatewayPolicy = Object.freeze({
   provider: 'amazon-bedrock',
