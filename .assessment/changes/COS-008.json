@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "taskId": "COS-008",
+  "state": "satisfied",
+  "branch": "assessment/chief-communications",
+  "baseHead": "6f785d03ec14d163b327d638c34e9a730a5daa3e",
+  "nativeChild": "/root/metagross",
+  "model": "gpt-5.6-sol",
+  "reasoning": "ultra",
+  "implementationPaths": [
+    "config/team-kit-applicability/registry.json",
+    "config/team-kit-applicability/registry.schema.json",
+    "config/team-kit-applicability/validate.mjs",
+    "docs/operations/integration-exceptions/team-kit-applicability.md",
+    ".assessment/changes/COS-008.json"
+  ],
+  "registryEntryCount": 8,
+  "stateCounts": {
+    "adopted": 0,
+    "adapted": 1,
+    "not_applicable": 2,
+    "exception_pending": 5
+  },
+  "verification": {
+    "nodeExecutable": "E:\\nvm\\v22.18.0\\node.exe",
+    "nodeVersion": "v22.18.0",
+    "registryValidator": "passed",
+    "liveConformanceClaimed": false
+  },
+  "externalAccessVerified": false,
+  "stubbedConformanceClaimed": false,
+  "externalEffectsPerformed": false,
+  "commitCreated": false,
+  "remoteWritePerformed": false
+}

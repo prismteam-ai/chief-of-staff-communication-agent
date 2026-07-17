@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "taskId": "COS-006",
+  "state": "satisfied",
+  "branch": "assessment/chief-communications",
+  "baseHead": "6f785d03ec14d163b327d638c34e9a730a5daa3e",
+  "remoteTrackingBranch": null,
+  "worktreeWasCleanAtCreation": true,
+  "remoteWritePerformed": false
+}

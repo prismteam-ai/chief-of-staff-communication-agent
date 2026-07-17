@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "taskId": "COS-009",
+  "state": "satisfied_for_first_native_writer",
+  "executionMode": "native_team_kit",
+  "provider": "openai-codex",
+  "model": "gpt-5.6-sol",
+  "reasoning": "ultra",
+  "roster": "chief",
+  "freshProcessRequired": true,
+  "persistentRolloutRequired": true,
+  "fallbackAllowed": false,
+  "repositoryRoot": "E:\\Coding\\Soofi\\chief-of-staff-communication-agent",
+  "branch": "assessment/chief-communications",
+  "baseHead": "6f785d03ec14d163b327d638c34e9a730a5daa3e",
+  "firstWaveTaskIds": [
+    "COS-007",
+    "COS-008"
+  ],
+  "expectedNativeChildren": [
+    "/root/metagross"
+  ],
+  "writableDescendants": [
+    ".assessment",
+    ".gitignore",
+    ".env.example",
+    ".gitleaks.toml",
+    "config/team-kit-applicability",
+    "docs/operations/integration-exceptions",
+    "tools/secret-policy"
+  ],
+  "requiredEvidence": [
+    "rendered_prompt_sha256",
+    "parent_thread_id",
+    "parent_rollout_sha256",
+    "child_thread_ids",
+    "child_agent_paths",
+    "child_rollout_sha256",
+    "parent_and_child_turn_context",
+    "native_wait_observed",
+    "output_sha256",
+    "changed_paths",
+    "verification_results"
+  ],
+  "denied": [
+    "credential_read",
+    "provider_mutation",
+    "aws_mutation",
+    "deployment",
+    "real_message_send",
+    "asana_mutation",
+    "purchase",
+    "team_kit_write",
+    "commit",
+    "push",
+    "pull_request"
+  ]
+}
