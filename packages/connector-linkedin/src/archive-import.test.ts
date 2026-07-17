@@ -117,6 +117,46 @@ describe('LinkedIn archive import', () => {
     expect(reversed).toEqual(normal);
   });
 
+  it('accepts bounded provider-added columns while requiring the canonical ten-column subset', async () => {
+    const bytes = new TextEncoder().encode(
+      [
+        'Conversation Id,Conversation Title,From,Sender Profile Url,To,Recipient Profile Urls,Date,Subject,Content,Folder,Attachments,Message Id',
+        'conversation-1,[SYNTHETIC] Expanded,[SYNTHETIC] Sender,,[SYNTHETIC] Recipient,,2026-07-16 08:30:00 UTC,,[SYNTHETIC] expanded provider row,INBOX,,provider-message-1',
+        '',
+      ].join('\r\n'),
+    );
+    const result = await importLinkedinArchive(
+      syntheticInput(
+        entries(linkedinArchiveEntryFromBytes('messages.csv', bytes)),
+      ),
+    );
+
+    expect(result.messages).toHaveLength(1);
+    expect(result.malformedRowCount).toBe(0);
+  });
+
+  it('checks formula injection in provider-added columns before ignoring them', async () => {
+    const bytes = new TextEncoder().encode(
+      [
+        'Conversation Id,Conversation Title,From,Sender Profile Url,To,Recipient Profile Urls,Date,Subject,Content,Folder,Attachments,Message Id',
+        'conversation-1,[SYNTHETIC] Expanded,[SYNTHETIC] Sender,,[SYNTHETIC] Recipient,,2026-07-16 08:30:00 UTC,,[SYNTHETIC] expanded provider row,INBOX,,=1+1',
+        '',
+      ].join('\r\n'),
+    );
+    const result = await importLinkedinArchive(
+      syntheticInput(
+        entries(linkedinArchiveEntryFromBytes('messages.csv', bytes)),
+      ),
+    );
+    expect(result.messages).toHaveLength(0);
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        code: 'formula_cell_rejected',
+        column: 'EXTRA_COLUMN_12',
+      }),
+    ]);
+  });
+
   it('deduplicates identical provider rows and preserves deterministic replay IDs', async () => {
     const text = new TextDecoder().decode(
       SYNTHETIC_LINKEDIN_MESSAGES_CSV_BYTES,
@@ -232,15 +272,39 @@ describe('LinkedIn archive import', () => {
         `conversation-1,[SYNTHETIC] Formula,[SYNTHETIC] Sender,,[SYNTHETIC] Recipient,2026-07-16 08:30:00 UTC,,${escaped},INBOX,`,
       ]);
 
-      await expect(
-        importLinkedinArchive(
-          syntheticInput(
-            entries(linkedinArchiveEntryFromBytes('messages.csv', bytes)),
-          ),
+      const result = await importLinkedinArchive(
+        syntheticInput(
+          entries(linkedinArchiveEntryFromBytes('messages.csv', bytes)),
         ),
-      ).rejects.toMatchObject({
-        code: 'CSV_FORMULA_CELL_REJECTED',
-      });
+      );
+      expect(result.messages).toHaveLength(0);
+      expect(result.issues).toEqual([
+        expect.objectContaining({
+          code: 'formula_cell_rejected',
+          column: 'CONTENT',
+        }),
+      ]);
+    },
+  );
+
+  it.each([
+    '@colleague please review',
+    '+1234567890',
+    '- bullet-style reply',
+    '-Thanks for the update',
+  ])(
+    'preserves non-formula communication text beginning with %s',
+    async (content) => {
+      const bytes = csvBytes([
+        `conversation-1,[SYNTHETIC] Safe prefix,[SYNTHETIC] Sender,,[SYNTHETIC] Recipient,2026-07-16 08:30:00 UTC,,[SYNTHETIC] ${content},INBOX,`,
+      ]);
+      const result = await importLinkedinArchive(
+        syntheticInput(
+          entries(linkedinArchiveEntryFromBytes('messages.csv', bytes)),
+        ),
+      );
+
+      expect(result.messages).toHaveLength(1);
     },
   );
 

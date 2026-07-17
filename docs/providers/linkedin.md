@@ -24,18 +24,32 @@ The importer accepts only one of these explicit provenance classes:
   `VISIBLE_SYNTHETIC_LINKEDIN_EXPORT_V1` provenance marker and visibly
   `[SYNTHETIC]` row content.
 
-Exactly one `messages.csv` is required. Its byte-level CSV shape uses these
-LinkedIn export columns in this exact order:
+Exactly one `messages.csv` is required. Its byte-level CSV shape must contain
+these LinkedIn export columns exactly once (matching is case-insensitive):
 
 ```text
 CONVERSATION ID,CONVERSATION TITLE,FROM,SENDER PROFILE URL,TO,DATE,SUBJECT,CONTENT,FOLDER,ATTACHMENTS
 ```
+
+Provider-added columns are accepted up to a 32-column header bound so current
+exports can evolve without discarding the canonical contract. Every
+cell—including ignored cells—is formula-checked; a formula-shaped cell
+quarantines its row before unknown values are ignored. Missing, duplicate,
+empty, or excessive headers fail closed.
 
 The source is consumed as bounded byte chunks. The importer validates declared
 sizes, limits entry/archive/CSV/record/row/attachment counts, hashes every
 entry, and never writes archive paths to disk. Absolute paths, drive paths,
 backslashes, encoded/confusable separators, empty/dot/traversal segments,
 case-insensitive duplicate paths, and unsafe attachment paths fail closed.
+
+The local acceptance adapter reads ZIP central-directory and local-header
+metadata without extracting. It rejects multi-disk/ZIP64/encrypted archives,
+unsupported compression, unsafe member paths, excessive compression ratios,
+and configured compressed/uncompressed bounds before or during inflation. CRC
+and uncompressed size are verified while each member streams into the same
+archive-import contract. Its CLI emits aggregate counts, hashes, limits, and
+admission status only; it never emits member names, row values, or identities.
 
 ## Normalization and replay
 
@@ -50,9 +64,12 @@ Duplicate rows converge to one message; malformed rows produce content-free
 issue codes and do not expose the rejected cell value. IDs for the same archive
 under another tenant or connector account differ.
 
-Every cell is checked for spreadsheet formula prefixes (`=`, `+`, `-`, `@`,
-including leading whitespace) before normalization. Formula-shaped cells fail
-the archive import rather than being retained for later CSV export.
+Every cell is checked for executable spreadsheet-formula shapes before
+normalization. Formula assignment, signed arithmetic/function/command shapes,
+and `@FUNCTION(...)` shapes (including leading whitespace) quarantine that row
+with a content-free issue code, while other rows continue.
+Ordinary communication text such as mentions, international phone numbers, and
+dash-led prose is preserved; no imported value is emitted as a CSV formula.
 
 ## RAG admission
 
@@ -79,6 +96,7 @@ pnpm --filter @chief/connector-linkedin test
 pnpm --filter @chief/connector-linkedin lint
 pnpm --filter @chief/connector-linkedin typecheck
 pnpm --filter @chief/connector-linkedin build
+pnpm --filter @chief/connector-linkedin accept:archive <operator-authorized-zip>
 ```
 
 The tests run networklessly with byte-shaped synthetic CSV and attachment

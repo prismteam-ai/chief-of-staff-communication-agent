@@ -31,8 +31,9 @@ const EXPECTED_HEADERS = [
   'FOLDER',
   'ATTACHMENTS',
 ] as const;
+const MAX_HEADER_COLUMNS = 32;
 
-const DEFAULT_LIMITS = Object.freeze({
+export const LINKEDIN_ARCHIVE_IMPORT_DEFAULT_LIMITS = Object.freeze({
   maxEntries: 256,
   maxArchiveBytes: 128 * 1024 * 1024,
   maxCsvBytes: 64 * 1024 * 1024,
@@ -97,23 +98,29 @@ function resolveLimits(
   overrides: LinkedinArchiveImportLimits,
 ): EffectiveLimits {
   return {
-    maxEntries: positiveBound(overrides.maxEntries, DEFAULT_LIMITS.maxEntries),
+    maxEntries: positiveBound(
+      overrides.maxEntries,
+      LINKEDIN_ARCHIVE_IMPORT_DEFAULT_LIMITS.maxEntries,
+    ),
     maxArchiveBytes: positiveBound(
       overrides.maxArchiveBytes,
-      DEFAULT_LIMITS.maxArchiveBytes,
+      LINKEDIN_ARCHIVE_IMPORT_DEFAULT_LIMITS.maxArchiveBytes,
     ),
     maxCsvBytes: positiveBound(
       overrides.maxCsvBytes,
-      DEFAULT_LIMITS.maxCsvBytes,
+      LINKEDIN_ARCHIVE_IMPORT_DEFAULT_LIMITS.maxCsvBytes,
     ),
-    maxRows: positiveBound(overrides.maxRows, DEFAULT_LIMITS.maxRows),
+    maxRows: positiveBound(
+      overrides.maxRows,
+      LINKEDIN_ARCHIVE_IMPORT_DEFAULT_LIMITS.maxRows,
+    ),
     maxRecordBytes: positiveBound(
       overrides.maxRecordBytes,
-      DEFAULT_LIMITS.maxRecordBytes,
+      LINKEDIN_ARCHIVE_IMPORT_DEFAULT_LIMITS.maxRecordBytes,
     ),
     maxAttachmentsPerMessage: positiveBound(
       overrides.maxAttachmentsPerMessage,
-      DEFAULT_LIMITS.maxAttachmentsPerMessage,
+      LINKEDIN_ARCHIVE_IMPORT_DEFAULT_LIMITS.maxAttachmentsPerMessage,
     ),
   };
 }
@@ -145,7 +152,13 @@ function assertNoFormulaCell(
   column: string,
 ): void {
   const candidate = value.replace(/^[\t\r ]+/u, '');
-  if (/^[=+\-@]/u.test(candidate)) {
+  const formulaShaped =
+    candidate.startsWith('=') ||
+    /^[-+](?:[\p{L}_][\p{L}\p{N}_.]*\s*\(|(?:cmd|powershell|mshta|rundll32|calc)[|!]|\d+(?:\.\d+)?\s*[-+*/^])/iu.test(
+      candidate,
+    ) ||
+    /^@[\p{L}_][\p{L}\p{N}_.]*\s*\(/iu.test(candidate);
+  if (formulaShaped) {
     throw new LinkedinArchiveImportError('CSV_FORMULA_CELL_REJECTED', {
       entryPath,
       rowNumber,
@@ -313,6 +326,10 @@ async function parseMessagesCsv(
   const digest = createHash('sha256');
   let actualSizeBytes = 0;
   let headerSeen = false;
+  let headerColumnCount = 0;
+  let headerIndexes: ReadonlyMap<(typeof EXPECTED_HEADERS)[number], number> =
+    new Map();
+  let safeHeaderLabels: readonly string[] = [];
   let fatalError: LinkedinArchiveImportError | undefined;
 
   const parser = parse({
@@ -349,13 +366,35 @@ async function parseMessagesCsv(
       const rowNumber = candidate.info?.lines ?? rows.length + 1;
       if (!headerSeen) {
         headerSeen = true;
+        headerColumnCount = stringCells.length;
+        const normalizedHeaders = stringCells.map((cell) =>
+          cell.trim().toUpperCase(),
+        );
+        const uniqueHeaders = new Set(normalizedHeaders);
+        const indexes = new Map<(typeof EXPECTED_HEADERS)[number], number>();
+        for (const header of EXPECTED_HEADERS) {
+          const index = normalizedHeaders.indexOf(header);
+          if (index >= 0) indexes.set(header, index);
+        }
         if (
-          stringCells.length !== EXPECTED_HEADERS.length ||
-          stringCells.some((cell, index) => cell !== EXPECTED_HEADERS[index])
+          headerColumnCount < EXPECTED_HEADERS.length ||
+          headerColumnCount > MAX_HEADER_COLUMNS ||
+          uniqueHeaders.size !== headerColumnCount ||
+          normalizedHeaders.some((header) => header.length === 0) ||
+          indexes.size !== EXPECTED_HEADERS.length
         ) {
           fatalError = new LinkedinArchiveImportError(
             'MESSAGES_CSV_HEADER_MISMATCH',
             { entryPath, rowNumber },
+          );
+        } else {
+          headerIndexes = indexes;
+          safeHeaderLabels = normalizedHeaders.map((header, index) =>
+            EXPECTED_HEADERS.includes(
+              header as (typeof EXPECTED_HEADERS)[number],
+            )
+              ? header
+              : `EXTRA_COLUMN_${index + 1}`,
           );
         }
         continue;
@@ -370,7 +409,7 @@ async function parseMessagesCsv(
         });
         continue;
       }
-      if (stringCells.length !== EXPECTED_HEADERS.length) {
+      if (stringCells.length !== headerColumnCount) {
         issues.push({
           entryPath,
           rowNumber,
@@ -379,29 +418,38 @@ async function parseMessagesCsv(
         continue;
       }
 
+      let formulaRejected = false;
       for (const [index, cell] of stringCells.entries()) {
         try {
           assertNoFormulaCell(
             cell,
             entryPath,
             rowNumber,
-            EXPECTED_HEADERS[index] ?? 'UNKNOWN',
+            safeHeaderLabels[index] ?? 'UNKNOWN',
           );
         } catch (error) {
           if (error instanceof LinkedinArchiveImportError) {
-            fatalError = error;
+            issues.push({
+              entryPath,
+              rowNumber,
+              code: 'formula_cell_rejected',
+              column: safeHeaderLabels[index] ?? 'UNKNOWN',
+            });
+            formulaRejected = true;
             break;
           }
           throw error;
         }
       }
-      if (fatalError !== undefined) {
+      if (formulaRejected) {
         continue;
       }
 
-      const from = trimmed(stringCells[2] ?? '');
-      const recipients = parseRecipients(stringCells[4] ?? '');
-      const content = trimmed(stringCells[7] ?? '');
+      const cell = (header: (typeof EXPECTED_HEADERS)[number]): string =>
+        stringCells[headerIndexes.get(header) as number] ?? '';
+      const from = trimmed(cell('FROM'));
+      const recipients = parseRecipients(cell('TO'));
+      const content = trimmed(cell('CONTENT'));
       if (
         from === undefined ||
         recipients.length === 0 ||
@@ -414,7 +462,7 @@ async function parseMessagesCsv(
         });
         continue;
       }
-      const sourceTimestamp = parseTimestamp(stringCells[5] ?? '');
+      const sourceTimestamp = parseTimestamp(cell('DATE'));
       if (sourceTimestamp === undefined) {
         issues.push({
           entryPath,
@@ -428,7 +476,7 @@ async function parseMessagesCsv(
       let attachmentReferences: readonly AttachmentReference[];
       try {
         attachmentReferences = parseAttachmentReferences(
-          stringCells[9] ?? '',
+          cell('ATTACHMENTS'),
           entryPath,
           limits.maxAttachmentsPerMessage,
         );
@@ -447,28 +495,28 @@ async function parseMessagesCsv(
       }
 
       const normalizedParts = [
-        trimmed(stringCells[0] ?? '') ?? '',
-        trimmed(stringCells[1] ?? '') ?? '',
+        trimmed(cell('CONVERSATION ID')) ?? '',
+        trimmed(cell('CONVERSATION TITLE')) ?? '',
         from,
-        trimmed(stringCells[3] ?? '') ?? '',
+        trimmed(cell('SENDER PROFILE URL')) ?? '',
         ...recipients,
         sourceTimestamp,
-        trimmed(stringCells[6] ?? '') ?? '',
+        trimmed(cell('SUBJECT')) ?? '',
         content,
-        trimmed(stringCells[8] ?? '') ?? '',
+        trimmed(cell('FOLDER')) ?? '',
         ...attachmentReferences.map((reference) => reference.sourceReference),
       ];
       rows.push({
         rowNumber,
-        providerConversationId: trimmed(stringCells[0] ?? ''),
-        conversationTitle: trimmed(stringCells[1] ?? ''),
+        providerConversationId: trimmed(cell('CONVERSATION ID')),
+        conversationTitle: trimmed(cell('CONVERSATION TITLE')),
         from,
-        senderProfileUrl: trimmed(stringCells[3] ?? ''),
+        senderProfileUrl: trimmed(cell('SENDER PROFILE URL')),
         to: recipients,
         sourceTimestamp,
-        subject: trimmed(stringCells[6] ?? ''),
+        subject: trimmed(cell('SUBJECT')),
         content,
-        folder: trimmed(stringCells[8] ?? ''),
+        folder: trimmed(cell('FOLDER')),
         attachmentReferences,
         rowSha256: sha256(normalizedParts),
       });

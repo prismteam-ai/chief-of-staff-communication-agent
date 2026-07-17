@@ -73,7 +73,8 @@ export interface LinkedinArchiveIssue {
     | 'invalid_column_count'
     | 'missing_required_value'
     | 'invalid_timestamp'
-    | 'invalid_attachment_metadata';
+    | 'invalid_attachment_metadata'
+    | 'formula_cell_rejected';
   readonly column?: string;
 }
 
@@ -124,4 +125,12 @@ export interface LinkedinArchiveImportLimits {
   readonly maxRows?: number;
   readonly maxRecordBytes?: number;
   readonly maxAttachmentsPerMessage?: number;
+}
+
+export interface LinkedinArchiveZipLimits {
+  readonly maxContainerBytes?: number;
+  readonly maxEntries?: number;
+  readonly maxCompressedBytes?: number;
+  readonly maxUncompressedBytes?: number;
+  readonly maxCompressionRatio?: number;
 }
