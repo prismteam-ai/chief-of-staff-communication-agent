@@ -4,6 +4,7 @@ import {
   DraftSchema,
   DEFAULT_CONFIDENCE_THRESHOLD,
   routeByConfidence,
+  routeRecommendation,
 } from './confidence.js';
 import { ACTION_TYPES } from './action-type.js';
 
@@ -110,5 +111,35 @@ describe('routeByConfidence', () => {
   it('honors an explicit custom threshold', () => {
     expect(routeByConfidence(0.5, 0.6)).toBe('needs_context');
     expect(routeByConfidence(0.6, 0.6)).toBe('drafted');
+  });
+});
+
+describe('routeRecommendation — confidence + actionType gate (slowking fix 2)', () => {
+  it('reply_needed and schedule at/above threshold still route to drafted (does not break the existing drafted path)', () => {
+    expect(routeRecommendation('reply_needed', 0.9)).toBe('drafted');
+    expect(routeRecommendation('schedule', 0.9)).toBe('drafted');
+    expect(routeRecommendation('delegate', 0.9)).toBe('drafted');
+  });
+
+  it('fyi_no_reply at/above threshold routes to dismissed, not drafted — no reply is owed', () => {
+    expect(routeRecommendation('fyi_no_reply', 0.9)).toBe('dismissed');
+    expect(routeRecommendation('fyi_no_reply', DEFAULT_CONFIDENCE_THRESHOLD)).toBe('dismissed');
+  });
+
+  it('escalate at/above threshold routes to needs_context, not drafted — no auto-reply', () => {
+    expect(routeRecommendation('escalate', 0.9)).toBe('needs_context');
+  });
+
+  it('confidence below threshold always wins first, regardless of actionType', () => {
+    // Even a low-confidence fyi_no_reply/escalate must still land in needs_context — the
+    // classification itself is uncertain, so it is not safe to silently auto-dismiss.
+    expect(routeRecommendation('fyi_no_reply', 0.1)).toBe('needs_context');
+    expect(routeRecommendation('escalate', 0.1)).toBe('needs_context');
+    expect(routeRecommendation('reply_needed', 0.1)).toBe('needs_context');
+  });
+
+  it('honors an explicit custom threshold', () => {
+    expect(routeRecommendation('reply_needed', 0.5, 0.6)).toBe('needs_context');
+    expect(routeRecommendation('reply_needed', 0.6, 0.6)).toBe('drafted');
   });
 });

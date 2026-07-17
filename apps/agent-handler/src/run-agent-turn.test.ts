@@ -157,6 +157,93 @@ describe('runAgentTurn — low confidence: the gate routes to needs_context IN C
   });
 });
 
+describe('runAgentTurn — confidence gate also branches on actionType (slowking fix 2)', () => {
+  it('reply_needed at/above threshold still produces a draft (does not break the existing drafted path)', async () => {
+    const { repo, persisted } = fakeRepo(baseRecord());
+    const draftSpy = vi.fn(async () => ({ body: 'Sure — happy to help.', confidence: 0.85 }));
+    const runner: AgentRunner = {
+      classify: async () => ({
+        actionType: 'reply_needed',
+        confidence: 0.9,
+        rationale: 'Direct request.',
+      }),
+      draft: draftSpy,
+    };
+
+    const result = await runAgentTurn(
+      { commId: 'gmail#ext-1', accountId: 'acct-1' },
+      { ...commonDeps, agentRunner: runner, communicationsRepo: repo },
+    );
+
+    expect(result.outcome).toBe('recommended_and_drafted');
+    expect(draftSpy).toHaveBeenCalledOnce();
+    expect(persisted[0]!.status).toBe('drafted');
+    expect(persisted[0]!.draft).toBeDefined();
+  });
+
+  it('fyi_no_reply at/above threshold produces NO draft — dismissed instead, no reply owed', async () => {
+    const { repo, persisted } = fakeRepo(baseRecord());
+    const draftSpy = vi.fn(async () => ({ body: 'should not be produced', confidence: 0.85 }));
+    const runner: AgentRunner = {
+      classify: async () => ({
+        actionType: 'fyi_no_reply',
+        confidence: 0.95,
+        rationale: 'A newsletter — no reply owed.',
+      }),
+      draft: draftSpy,
+    };
+
+    const result = await runAgentTurn(
+      { commId: 'gmail#ext-1', accountId: 'acct-1' },
+      { ...commonDeps, agentRunner: runner, communicationsRepo: repo },
+    );
+
+    expect(result.outcome).toBe('dismissed_no_reply_needed');
+    // The draft step must NOT run for fyi_no_reply — high confidence alone is not enough.
+    expect(draftSpy).not.toHaveBeenCalled();
+
+    const outcome = persisted[0]!;
+    expect(outcome.status).toBe('dismissed');
+    expect(outcome.draft).toBeUndefined();
+    expect(outcome.transitions.map((t) => `${t.from}->${t.to}`)).toEqual([
+      'ingested->recommended',
+      'recommended->dismissed',
+    ]);
+    for (const t of outcome.transitions) {
+      expect(canTransition(t.from, t.to)).toBe(true);
+    }
+  });
+
+  it('escalate at/above threshold produces NO auto-reply draft — routes to needs_context for a human', async () => {
+    const { repo, persisted } = fakeRepo(baseRecord());
+    const draftSpy = vi.fn(async () => ({ body: 'should not be produced', confidence: 0.85 }));
+    const runner: AgentRunner = {
+      classify: async () => ({
+        actionType: 'escalate',
+        confidence: 0.95,
+        rationale: 'Urgent, high-stakes incident.',
+      }),
+      draft: draftSpy,
+    };
+
+    const result = await runAgentTurn(
+      { commId: 'gmail#ext-1', accountId: 'acct-1' },
+      { ...commonDeps, agentRunner: runner, communicationsRepo: repo },
+    );
+
+    expect(result.outcome).toBe('needs_context');
+    expect(draftSpy).not.toHaveBeenCalled();
+
+    const outcome = persisted[0]!;
+    expect(outcome.status).toBe('needs_context');
+    expect(outcome.draft).toBeUndefined();
+    // Distinguishable from a true low-confidence needs_context: actionType/confidence are on the
+    // returned outcome, and confidence here is high — this is the actionType gate, not the
+    // confidence gate.
+    expect(result).toMatchObject({ actionType: 'escalate', confidence: 0.95 });
+  });
+});
+
 describe('runAgentTurn — memory append is isolated from the turn outcome', () => {
   it('still returns recommended_and_drafted (with the outcome already persisted) when appendEvents throws', async () => {
     const { repo, persisted } = fakeRepo(baseRecord());

@@ -20,6 +20,12 @@ import type { RecommendationOutput } from './tools/recommend-action.js';
  * Bedrock), and asserts the produced recommendation CLASS (action type) matches the expected class
  * in `cases.json` — never the exact wording. The low-confidence fixture must land in `needs_context`
  * via the in-code confidence gate. This complements the RAG golden-query replay.
+ *
+ * (slowking fix 2) The confidence gate now also branches on `actionType` (`routeRecommendation`):
+ * `fyi_no_reply` at/above threshold routes to `dismissed` (no draft — no reply is owed), and
+ * `escalate` at/above threshold routes to `needs_context` (no draft — must surface to a human). The
+ * `fyi-newsletter.json`/`escalate-urgent.json` fixtures below assert exactly that, closing the gap
+ * where every actionType used to get an auto-drafted "reply" once confidence cleared the threshold.
  */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -28,7 +34,7 @@ const FIXTURES_DIR = path.resolve(__dirname, '../../../fixtures/e2e');
 interface Case {
   file: string;
   expectedActionType: ActionType;
-  expectedOutcome: 'recommended_and_drafted' | 'needs_context';
+  expectedOutcome: 'recommended_and_drafted' | 'needs_context' | 'dismissed_no_reply_needed';
   note: string;
 }
 interface CasesManifest {
@@ -153,6 +159,9 @@ describe('e2e fixture replay — inbound message classifies to the expected acti
 
       if (testCase.expectedOutcome === 'needs_context') {
         expect(outcome.status).toBe('needs_context');
+        expect(outcome.draft).toBeUndefined();
+      } else if (testCase.expectedOutcome === 'dismissed_no_reply_needed') {
+        expect(outcome.status).toBe('dismissed');
         expect(outcome.draft).toBeUndefined();
       } else {
         expect(outcome.status).toBe('drafted');

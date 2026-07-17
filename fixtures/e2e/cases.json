@@ -1,5 +1,5 @@
 {
-  "_comment": "End-to-end triage fixtures (Task 5). Each case is a NormalizedMessage-shaped fixture file plus the EXPECTED RECOMMENDATION CLASS (action type, not exact wording — per the brief). The replay test (apps/agent-handler/src/e2e-replay.test.ts) loads these files, drives runAgentTurn with a deterministic keyword-based fake model (no Bedrock), and asserts the produced actionType matches expectedActionType and that low-confidence cases land in needs_context. Wording is never asserted — only the class.",
+  "_comment": "End-to-end triage fixtures (Task 5). Each case is a NormalizedMessage-shaped fixture file plus the EXPECTED RECOMMENDATION CLASS (action type, not exact wording — per the brief). The replay test (apps/agent-handler/src/e2e-replay.test.ts) loads these files, drives runAgentTurn with a deterministic keyword-based fake model (no Bedrock), and asserts the produced actionType matches expectedActionType and that low-confidence cases land in needs_context. Wording is never asserted — only the class. (slowking fix 2) fyi_no_reply and escalate now route to dismissed/needs_context respectively instead of always drafting — see confidence.ts's routeRecommendation.",
   "confidenceThreshold": 0.6,
   "cases": [
     {
@@ -11,8 +11,8 @@
     {
       "file": "fyi-newsletter.json",
       "expectedActionType": "fyi_no_reply",
-      "expectedOutcome": "recommended_and_drafted",
-      "note": "A newsletter / announcement — informational, no reply owed."
+      "expectedOutcome": "dismissed_no_reply_needed",
+      "note": "A newsletter / announcement — informational, no reply owed; dismissed, no draft."
     },
     {
       "file": "schedule-request.json",
@@ -29,8 +29,8 @@
     {
       "file": "escalate-urgent.json",
       "expectedActionType": "escalate",
-      "expectedOutcome": "recommended_and_drafted",
-      "note": "Urgent, high-stakes — surface to the principal."
+      "expectedOutcome": "needs_context",
+      "note": "Urgent, high-stakes — surface to the principal; no auto-reply draft."
     },
     {
       "file": "ambiguous-low-confidence.json",

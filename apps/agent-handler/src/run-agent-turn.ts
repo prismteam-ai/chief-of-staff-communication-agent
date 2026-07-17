@@ -1,7 +1,7 @@
 import { MetricUnit } from '@aws-lambda-powertools/metrics';
 import {
   applyTransition,
-  routeByConfidence,
+  routeRecommendation,
   DEFAULT_CONFIDENCE_THRESHOLD,
   type Draft,
   type Recommendation,
@@ -33,9 +33,17 @@ import type { logger as LoggerType, metrics as MetricsType } from './context.js'
  *   2. load conversation history from the ConversationEventStore (session = threadKey), with any
  *      `suppliedContext` entries appended as additional history for a re-run turn
  *   3. classify via the AgentRunner (retrieveContext available as a tool) → Recommendation
- *   4. apply the confidence GATE IN CODE (`routeByConfidence`) — never a prompt instruction
- *   5a. below threshold → transition <entryState>→recommended→needs_context, persist, STOP (no draft)
- *   5b. at/above       → draft, transition <entryState>→recommended→drafted, persist recommendation+draft
+ *   4. apply the confidence + actionType GATE IN CODE (`routeRecommendation`) — never a prompt
+ *      instruction. Two gates, both in code (slowking fix 2 — closes the gap `state-machine.ts`
+ *      already documented: the agent used to always draft once confidence cleared the threshold,
+ *      regardless of `actionType`, so an `fyi_no_reply` newsletter or an `escalate`-worthy message
+ *      still got a fabricated "reply" drafted AS the counterparty):
+ *   5a. below threshold        → transition <entryState>→recommended→needs_context, persist, STOP (no draft)
+ *   5b. at/above, fyi_no_reply → transition <entryState>→recommended→dismissed, persist, STOP (no draft;
+ *       no reply is owed at all — the state machine's documented "no reply needed" outcome)
+ *   5c. at/above, escalate     → transition <entryState>→recommended→needs_context, persist, STOP (no
+ *       draft; urgent/high-stakes must surface to a human, never an auto-drafted reply)
+ *   5d. at/above, otherwise    → draft, transition <entryState>→recommended→drafted, persist recommendation+draft
  *   6. append the turn to the ConversationEventStore (idempotent tokens from the provider msg id),
  *      isolated (`appendTurnIsolated`) so a memory-write failure never flips an already-persisted
  *      outcome to 'failed' — see the helper's doc comment for why that matters for redelivery
@@ -64,6 +72,9 @@ export interface RunAgentTurnInput {
 export type AgentTurnOutcome =
   | { outcome: 'recommended_and_drafted'; commId: string; actionType: string; confidence: number }
   | { outcome: 'needs_context'; commId: string; actionType: string; confidence: number }
+  /** actionType `fyi_no_reply` at/above the confidence threshold (slowking fix 2): no reply is
+   * owed, so the turn dismisses the communication instead of fabricating a draft. */
+  | { outcome: 'dismissed_no_reply_needed'; commId: string; actionType: string; confidence: number }
   | { outcome: 'skipped'; commId: string; reason: string }
   | { outcome: 'failed'; commId: string; error: string };
 
@@ -175,8 +186,12 @@ export async function runAgentTurn(
     );
     metricsClient.addMetric('RecommendationProduced', MetricUnit.Count, 1);
 
-    // --- confidence GATE, in code (Task 5 constraint 3) --------------------------------------
-    const route = routeByConfidence(recommendation.confidence, confidenceThreshold);
+    // --- confidence + actionType GATE, in code (Task 5 constraint 3; slowking fix 2) ---------
+    const route = routeRecommendation(
+      recommendation.actionType,
+      recommendation.confidence,
+      confidenceThreshold,
+    );
     log.info('Recommendation produced', {
       commId,
       actionType: recommendation.actionType,
@@ -203,14 +218,18 @@ export async function runAgentTurn(
         sessionId,
         actorId,
         record,
-        { recommendation },
+        { recommendation, route: 'needs_context' },
         { commId, log, metricsClient },
       );
-      log.info('Routed to needs_context (below confidence threshold)', {
-        commId,
-        confidence: recommendation.confidence,
-        threshold: confidenceThreshold,
-      });
+      log.info(
+        'Routed to needs_context (below confidence threshold, or escalate — no auto-reply)',
+        {
+          commId,
+          actionType: recommendation.actionType,
+          confidence: recommendation.confidence,
+          threshold: confidenceThreshold,
+        },
+      );
       return {
         outcome: 'needs_context',
         commId,
@@ -219,7 +238,44 @@ export async function runAgentTurn(
       };
     }
 
-    // --- draft (at/above threshold) ----------------------------------------------------------
+    if (route === 'dismissed') {
+      // fyi_no_reply at/above threshold (slowking fix 2): no reply is owed at all — dismiss
+      // instead of fabricating a draft nobody asked for (state-machine.ts's documented
+      // `recommended -> dismissed` "no reply needed — FYI, newsletters" outcome).
+      const transitions = twoHopTransitions({
+        commId,
+        accountId,
+        from: entryState,
+        to: 'dismissed',
+        now,
+      });
+      await communicationsRepo.persistOutcome({
+        commId,
+        status: 'dismissed',
+        recommendation,
+        transitions,
+      });
+      await appendTurnIsolated(
+        conversationStore,
+        sessionId,
+        actorId,
+        record,
+        { recommendation, route: 'dismissed' },
+        { commId, log, metricsClient },
+      );
+      log.info('Routed to dismissed (fyi_no_reply — no reply owed)', {
+        commId,
+        confidence: recommendation.confidence,
+      });
+      return {
+        outcome: 'dismissed_no_reply_needed',
+        commId,
+        actionType: recommendation.actionType,
+        confidence: recommendation.confidence,
+      };
+    }
+
+    // --- draft (at/above threshold, and actionType warrants a reply) -------------------------
     // manageAsana (Task 7) is offered as a real callable tool alongside retrieveContext during the
     // draft step — the model decides whether follow-up tracking applies. It ONLY proposes (see
     // tools/manage-asana.ts's module doc: no network dependency, cannot perform a write), so binding
@@ -279,7 +335,7 @@ export async function runAgentTurn(
       sessionId,
       actorId,
       record,
-      { recommendation, draft },
+      { recommendation, draft, route: 'drafted' },
       { commId, log, metricsClient },
     );
 
@@ -307,7 +363,8 @@ export async function runAgentTurn(
 
 /**
  * Builds the two transition records for one agent turn: `<from> → recommended` then
- * `recommended → <to>` (`drafted` or `needs_context`). `from` is the turn's entry state — `ingested`
+ * `recommended → <to>` (`drafted`, `needs_context`, or `dismissed` — slowking fix 2). `from` is the
+ * turn's entry state — `ingested`
  * for the first-ever turn, `awaiting_reprocess` for a `supplyContext` re-run (Task 6 review fix; see
  * the module doc comment). Both hops are validated by `applyTransition` against the shared state
  * machine, so an illegal move throws (and the turn fails visibly) rather than persisting an
@@ -317,7 +374,7 @@ function twoHopTransitions(params: {
   commId: string;
   accountId: string;
   from: EntryState;
-  to: 'drafted' | 'needs_context';
+  to: 'drafted' | 'needs_context' | 'dismissed';
   now: () => Date;
 }): TransitionRecord[] {
   const { commId, accountId, from, to, now } = params;
@@ -356,7 +413,11 @@ async function appendTurnIsolated(
   sessionId: string,
   actorId: string,
   record: AgentCommunicationRecord,
-  outcome: { recommendation: Recommendation; draft?: Draft },
+  outcome: {
+    recommendation: Recommendation;
+    draft?: Draft;
+    route: 'drafted' | 'needs_context' | 'dismissed';
+  },
   deps: {
     commId: string;
     log: Pick<typeof LoggerType, 'info' | 'warn' | 'error'>;
@@ -381,12 +442,21 @@ async function appendTurn(
   sessionId: string,
   actorId: string,
   record: AgentCommunicationRecord,
-  outcome: { recommendation: Recommendation; draft?: Draft },
+  outcome: {
+    recommendation: Recommendation;
+    draft?: Draft;
+    route: 'drafted' | 'needs_context' | 'dismissed';
+  },
 ): Promise<void> {
   const at = record.ts;
+  // (slowking fix 2) `dismissed` (fyi_no_reply) and `needs_context` both have no draft — the
+  // explicit `route` (not draft presence alone) picks the right summary so conversation history
+  // never misreports a dismissed "no reply owed" outcome as "Routed to needs_context".
+  const routeSummary =
+    outcome.route === 'dismissed' ? 'Dismissed — no reply owed.' : 'Routed to needs_context.';
   const assistantSummary = outcome.draft
     ? `Recommended ${outcome.recommendation.actionType} (confidence ${outcome.recommendation.confidence}). Draft prepared.`
-    : `Recommended ${outcome.recommendation.actionType} (confidence ${outcome.recommendation.confidence}). Routed to needs_context.`;
+    : `Recommended ${outcome.recommendation.actionType} (confidence ${outcome.recommendation.confidence}). ${routeSummary}`;
 
   const events: ConversationEvent[] = [
     { kind: 'user', at, text: record.body },
