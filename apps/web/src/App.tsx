@@ -1060,6 +1060,30 @@ function ProjectionThreadPage({
           )}
         </section>
 
+        {state.asana === undefined || state.asana.length === 0 ? null : (
+          <section
+            className="surface projection-history"
+            aria-label="Related Asana work"
+          >
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Read-only work context</p>
+                <h2>Related Asana work</h2>
+              </div>
+              <ListChecks aria-hidden="true" size={19} />
+            </div>
+            <ol className="projection-history-list">
+              {state.asana.map((fact) => (
+                <li key={`${fact.kind}-${fact.providerObjectId}`}>
+                  <strong>{fact.providerObjectId}</strong>
+                  <p>{fact.kind.replaceAll('_', ' ')}</p>
+                  <small>Fixture snapshot · external mutation disabled</small>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
         <section
           className="surface projection-action"
           aria-label="Recommendation and proposals"

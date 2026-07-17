@@ -362,7 +362,10 @@ function recommendationFixtures(): ReadonlyMap<string, ActionRecommendation> {
       urgency: 'high',
       reasonSummary:
         'The sender asks for a launch commitment and a named QA owner.',
-      citations: [citation('Launch readiness task · due Friday', 11)],
+      citations: [
+        citation('Launch readiness task SEC-4821 · due Friday', 11),
+        citation('Friday launch decision · QA owner requested', 16),
+      ],
       missingFacts: [],
       status: 'current',
       reproducibility: reproducibility('fixture-action-context'),
@@ -757,10 +760,10 @@ export class FixtureProductService implements ProductService {
     const items = [
       workObjectFactSchema.parse({
         kind: 'task',
-        providerObjectId: 'asana-task-launch-readiness',
+        providerObjectId: 'SEC-4821',
         providerVersion: '2026-07-17T11:42:00.000Z',
         providerTimestamp: '2026-07-17T11:42:00.000Z',
-        payloadFingerprint: sha256('asana-task-launch-readiness'),
+        payloadFingerprint: sha256('asana-task-SEC-4821'),
       }),
       workObjectFactSchema.parse({
         kind: 'project',

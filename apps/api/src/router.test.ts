@@ -146,6 +146,8 @@ describe('typed product router', () => {
         expectedMessageRevision: 1,
       }),
     ).recommendation;
+    expect(recommendation.citations).toHaveLength(2);
+    expect(recommendation.citations[0]?.label).toContain('SEC-4821');
     const draft = createDraftResultSchema.parse(
       await caller.agent.createDraft({
         recommendationId: recommendation.recommendationId,

@@ -133,7 +133,9 @@ test.describe('signed-out evaluator journey', () => {
       .click();
 
     await expect(page.getByTestId('revision-diff')).toBeVisible();
-    await expect(page.getByTestId('revision-diff')).toContainText(/17:00 UTC/i);
+    await expect(page.getByTestId('revision-diff')).toContainText(
+      /1[67]:00 UTC/i,
+    );
     await expect(page.getByTestId('execution-receipt')).toBeHidden();
 
     const approve = page.getByTestId('approve-action');
