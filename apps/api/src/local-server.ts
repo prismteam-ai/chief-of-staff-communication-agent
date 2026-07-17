@@ -22,7 +22,7 @@ createServer(async (req, res) => {
     webRoot: join(repoRoot, "apps/web/public"),
   });
   await writeNodeResponse(res, response);
-}).listen(PORT, () => {
-  console.log(`Indeedee agent: http://localhost:${PORT}`);
+}).listen(PORT, "0.0.0.0", () => {
+  console.log(`Indeedee agent: http://0.0.0.0:${PORT}`);
   startSyncScheduler();
 });
