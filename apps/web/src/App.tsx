@@ -277,7 +277,9 @@ export function App() {
 
   // The optional per-channel filter (slowking fix 1): a client-side narrowing of the already-
   // unified (all-owned-accounts) result set the server returned — never a re-scoping request.
-  function byChannel<T extends { channelType: ChannelType }>(list: T[] | undefined): T[] | undefined {
+  function byChannel<T extends { channelType: ChannelType }>(
+    list: T[] | undefined,
+  ): T[] | undefined {
     if (!list || channelFilter === 'all') return list;
     return list.filter((c) => c.channelType === channelFilter);
   }
