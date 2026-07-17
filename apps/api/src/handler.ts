@@ -1,9 +1,19 @@
 import { awsLambdaRequestHandler } from '@trpc/server/adapters/aws-lambda';
 
-import { createContext } from './context.js';
+import {
+  createContextFactory,
+  defaultApiDependencies,
+  type ApiDependencies,
+} from './context.js';
 import { appRouter } from './router.js';
 
-export const handler = awsLambdaRequestHandler({
-  router: appRouter,
-  createContext,
-});
+export function createApiHandler(
+  dependencies: ApiDependencies = defaultApiDependencies,
+) {
+  return awsLambdaRequestHandler({
+    router: appRouter,
+    createContext: createContextFactory(dependencies),
+  });
+}
+
+export const handler = createApiHandler();

@@ -1,37 +1,16 @@
 import type { APIGatewayProxyEventV2, Context } from 'aws-lambda';
 import { describe, expect, it } from 'vitest';
 
-import { healthResponseSchema } from '@chief/contracts';
+import {
+  healthResponseSchema,
+  listCommunicationsResultSchema,
+} from '@chief/contracts';
 
-import { handler } from './handler.js';
-
-const event: APIGatewayProxyEventV2 = {
-  version: '2.0',
-  routeKey: 'ANY /trpc/{proxy+}',
-  rawPath: '/trpc/system.health',
-  rawQueryString: '',
-  headers: { accept: 'application/json' },
-  requestContext: {
-    accountId: '417242953053',
-    apiId: 'fixture-api',
-    domainName: 'fixture.execute-api.us-east-2.amazonaws.com',
-    domainPrefix: 'fixture',
-    http: {
-      method: 'GET',
-      path: '/trpc/system.health',
-      protocol: 'HTTP/1.1',
-      sourceIp: '127.0.0.1',
-      userAgent: 'vitest',
-    },
-    requestId: 'fixture-request',
-    routeKey: 'ANY /trpc/{proxy+}',
-    stage: '$default',
-    time: '17/Jul/2026:11:00:00 +0000',
-    timeEpoch: 1_768_558_400_000,
-  },
-  pathParameters: { proxy: 'system.health' },
-  isBase64Encoded: false,
-};
+import { createApiHandler } from './handler.js';
+import {
+  createFixtureProductService,
+  createFixtureRequestContext,
+} from './fixture-product-service.js';
 
 const lambdaContext: Context = {
   callbackWaitsForEmptyEventLoop: false,
@@ -49,19 +28,112 @@ const lambdaContext: Context = {
   succeed: () => undefined,
 };
 
-describe('API Gateway tRPC Lambda integration', () => {
-  it('routes the CDK proxy shape through the official adapter', async () => {
-    const response = await handler(event, lambdaContext);
+function eventFor(
+  procedure: string,
+  options: {
+    readonly input?: unknown;
+    readonly headers?: Record<string, string>;
+  } = {},
+): APIGatewayProxyEventV2 {
+  const rawQueryString =
+    options.input === undefined
+      ? ''
+      : `input=${encodeURIComponent(JSON.stringify(options.input))}`;
+  return {
+    version: '2.0',
+    routeKey: 'ANY /trpc/{proxy+}',
+    rawPath: `/trpc/${procedure}`,
+    rawQueryString,
+    headers: { accept: 'application/json', ...options.headers },
+    requestContext: {
+      accountId: '417242953053',
+      apiId: 'fixture-api',
+      domainName: 'fixture.execute-api.us-east-2.amazonaws.com',
+      domainPrefix: 'fixture',
+      http: {
+        method: 'GET',
+        path: `/trpc/${procedure}`,
+        protocol: 'HTTP/1.1',
+        sourceIp: '127.0.0.1',
+        userAgent: 'vitest',
+      },
+      requestId: 'fixture-request',
+      routeKey: 'ANY /trpc/{proxy+}',
+      stage: '$default',
+      time: '17/Jul/2026:12:00:00 +0000',
+      timeEpoch: 1_768_558_400_000,
+    },
+    pathParameters: { proxy: procedure },
+    isBase64Encoded: false,
+  };
+}
 
-    expect(response.statusCode).toBe(200);
-    const envelope = JSON.parse(response.body ?? '{}') as {
-      result?: { data?: unknown };
-    };
-    const health = healthResponseSchema.parse(envelope.result?.data);
-    expect(health).toMatchObject({
-      service: 'chief-api',
-      status: 'ok',
-      foundationOnly: true,
-    });
+function resultData(responseBody: string | undefined): unknown {
+  const envelope = JSON.parse(responseBody ?? '{}') as {
+    result?: { data?: unknown };
+  };
+  return envelope.result?.data;
+}
+
+const handler = createApiHandler({
+  productService: createFixtureProductService(),
+  requestContext: createFixtureRequestContext(),
+});
+
+describe('API Gateway tRPC Lambda integration', () => {
+  it('routes health and typed product queries through the official adapter', async () => {
+    const healthResponse = await handler(
+      eventFor('system.health'),
+      lambdaContext,
+    );
+    expect(healthResponse.statusCode).toBe(200);
+    expect(
+      healthResponseSchema.parse(resultData(healthResponse.body)),
+    ).toMatchObject({ service: 'chief-api', status: 'ok' });
+
+    const listResponse = await handler(
+      eventFor('communications.list', { input: { limit: 2 } }),
+      lambdaContext,
+    );
+    expect(listResponse.statusCode).toBe(200);
+    expect(
+      listCommunicationsResultSchema.parse(resultData(listResponse.body)).items,
+    ).toHaveLength(2);
+  });
+
+  it('returns bounded protocol errors for malformed input', async () => {
+    const response = await handler(
+      eventFor('communications.list', { input: { limit: 101 } }),
+      lambdaContext,
+    );
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body).not.toContain('tenant_public_assessment');
+  });
+
+  it('denies caller-selected tenant/account authority at the Lambda boundary', async () => {
+    const response = await handler(
+      eventFor('communications.list', {
+        input: { limit: 2 },
+        headers: {
+          'x-tenant-id': 'tenant-attacker',
+          'x-account-id': 'account-attacker',
+        },
+      }),
+      lambdaContext,
+    );
+
+    expect(response.statusCode).not.toBe(200);
+    expect(response.body).not.toContain('tenant_public_assessment');
+    expect(response.body).not.toContain('account-gmail-fixture');
+  });
+
+  it('rejects unknown direct-effect procedures', async () => {
+    const response = await handler(
+      eventFor('effects.send', { input: { provider: 'gmail' } }),
+      lambdaContext,
+    );
+
+    expect(response.statusCode).toBe(404);
   });
 });
