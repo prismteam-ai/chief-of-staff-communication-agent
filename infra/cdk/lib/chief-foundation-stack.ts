@@ -90,7 +90,6 @@ export class ChiefFoundationStack extends cdk.Stack {
         RETRIEVAL_TABLE_NAME: runtime.retrievalTableName,
         SNAPSHOT_BUCKET_NAME: runtime.snapshotBucketName,
       },
-      8,
     );
     const mcpFunction = this.createFunction(
       'McpFunction',
@@ -105,7 +104,6 @@ export class ChiefFoundationStack extends cdk.Stack {
         RETRIEVAL_TABLE_NAME: runtime.retrievalTableName,
         SNAPSHOT_BUCKET_NAME: runtime.snapshotBucketName,
       },
-      4,
     );
     this.grantApiRuntimeAccess(apiFunction, runtime);
     this.grantMcpRuntimeAccess(mcpFunction, runtime);
@@ -314,7 +312,6 @@ export class ChiefFoundationStack extends cdk.Stack {
     serviceName: string,
     logGroup: logs.LogGroup,
     runtimeEnvironment: Record<string, string>,
-    reservedConcurrentExecutions: number,
   ): nodejs.NodejsFunction {
     return new nodejs.NodejsFunction(this, id, {
       entry,
@@ -323,7 +320,6 @@ export class ChiefFoundationStack extends cdk.Stack {
       architecture: lambda.Architecture.ARM_64,
       memorySize: 512,
       timeout: cdk.Duration.seconds(25),
-      reservedConcurrentExecutions,
       tracing: lambda.Tracing.ACTIVE,
       logGroup,
       environment: {

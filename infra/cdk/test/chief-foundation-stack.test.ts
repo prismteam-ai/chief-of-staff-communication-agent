@@ -269,14 +269,20 @@ describe('Chief foundation stack', () => {
       },
       2,
     );
-    template.hasResourceProperties('AWS::Lambda::Function', {
-      ReservedConcurrentExecutions: 8,
-      Timeout: 25,
-    });
-    template.hasResourceProperties('AWS::Lambda::Function', {
-      ReservedConcurrentExecutions: 4,
-      Timeout: 25,
-    });
+    template.resourcePropertiesCountIs(
+      'AWS::Lambda::Function',
+      { Timeout: 25 },
+      2,
+    );
+    const functions = Object.values(
+      template.findResources('AWS::Lambda::Function'),
+    ) as LambdaTemplateResource[];
+    expect(
+      functions.every(
+        ({ Properties }) =>
+          Properties?.ReservedConcurrentExecutions === undefined,
+      ),
+    ).toBe(true);
     template.resourceCountIs('AWS::Logs::LogGroup', 3);
     template.resourcePropertiesCountIs(
       'AWS::Logs::LogGroup',
