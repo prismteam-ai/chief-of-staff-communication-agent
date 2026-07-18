@@ -127,11 +127,11 @@ preparation and approval. MCP has no approve, send, create-task, or update-task
 tool. The retained legacy `submit_for_approval` name fails deterministically
 with `TOOL_UNAVAILABLE`; it is not an alternate approval route.
 
-Known MCP presentation limitation: `submit_for_approval` is still listed as a
-legacy compatibility name even though every call fails with
-`TOOL_UNAVAILABLE`. Removing that confusing legacy name belongs to the MCP
-surface and is outside this bounded remediation; no listed MCP tool can approve
-or execute a send.
+`submit_for_approval` is retained only as a deprecated compatibility stub for
+older MCP clients. Its `tools/list` description says that it is unavailable,
+directs users to the HTTPS product draft-approval flow, and states that no
+effect is executed. Every call fails with the stable `TOOL_UNAVAILABLE` code;
+it cannot approve, send, create a task, or update a task.
 
 ## Evaluator walkthrough
 
@@ -186,8 +186,10 @@ It does not count as hosted proof.
 
 The hosted command requires three credential-free HTTPS deployment URLs. It
 rejects missing values, single-label/private/local/reserved/unspecified hosts,
-non-public IPv4/IPv6 ranges, URL credentials, query strings, and fragments; it
-has no local web server or skip path.
+non-public IPv4/IPv6 ranges, URL credentials, query strings, and fragments. It
+has no local web server or configuration path that skips a hosted-safe check;
+the two mock-dependent fixture-only scenarios remain explicitly excluded from
+the runnable hosted selection.
 
 ```powershell
 $env:CHIEF_BASE_URL = 'https://<parent-deployment-web-host>'
@@ -203,17 +205,19 @@ Expected parent deployment outputs:
 - MCP endpoint: `<ChiefFoundationStack.McpUrl>`
 - MCP health: `<ChiefFoundationStack.McpHealthUrl>`
 
-The current public baseline is deployed at
-`https://d3hgq3e86d3knk.cloudfront.net`, with API/MCP at
-`https://prjip3os8i.execute-api.us-east-2.amazonaws.com`. Before this bounded
-remediation, the strict command reported 20/20 against that deployment, but two
-of those scenarios intercepted tRPC and therefore were not honest hosted
-evidence. This remediation is local-only by instruction: it has not been
-deployed, and its hosted acceptance must be rerun after an approved deployment.
-The corrected strict selection contains 19 hosted-safe runnable checks (18
-network/product checks plus one interception guard) and two explicitly skipped
-fixture-only scenarios. It actively fails any attempt to install those mocks
-when hosted URLs are configured.
+The assessed `2ad8432a8c8a48f9e2e5d3864944eb7541d2c500` release is live at:
+
+- UI: `https://d3hgq3e86d3knk.cloudfront.net`
+- API base: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com`
+- API health: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com/trpc/system.health`
+- MCP endpoint: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com/mcp`
+- MCP health: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com/mcp/health`
+
+Both CloudFormation stacks are `UPDATE_COMPLETE`. The strict hosted suite
+finished with **19 runnable checks passed, 2 fixture-only checks skipped, and 0
+failed**. The runnable selection contains 18 network/product checks plus one
+interception guard; hosted mode refuses to install the mocks used by the two
+local fixture-only scenarios.
 
 ## Capability scope
 

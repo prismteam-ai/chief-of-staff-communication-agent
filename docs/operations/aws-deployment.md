@@ -1,7 +1,10 @@
 # AWS deployment
 
-Status: durable vertical implemented for parent deployment. This implementation
-lane did not deploy, seed AWS, or run hosted acceptance.
+Status: the assessed `2ad8432a8c8a48f9e2e5d3864944eb7541d2c500` release is
+deployed. `ChiefProductStack` and `ChiefFoundationStack` are both
+`UPDATE_COMPLETE`; scoped deterministic non-PII evaluator data is seeded; and
+strict hosted acceptance passed 19 runnable checks with 2 fixture-only skips
+and 0 failures.
 
 ## Runtime shape
 
@@ -440,19 +443,26 @@ policy. A direct UI route such as `/inbox/thread-q3-launch` must serve the SPA,
 while an unknown `/trpc/...`, unknown `/mcp/...`, and missing asset with a file
 extension must retain their origin error status and must not return HTML 200.
 
-Record evaluator endpoints as deployment outputs rather than committing a
-release-specific URL:
+Record evaluator endpoints as deployment outputs. The current assessed release
+uses:
 
-- UI: `<ChiefFoundationStack.WebUrl>`
-- API base: `<ChiefFoundationStack.ApiUrl>`
-- API health: `<ChiefFoundationStack.ApiHealthUrl>`
-- MCP endpoint: `<ChiefFoundationStack.McpUrl>`
-- MCP health: `<ChiefFoundationStack.McpHealthUrl>`
+- UI: `https://d3hgq3e86d3knk.cloudfront.net`
+- API base: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com`
+- API health: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com/trpc/system.health`
+- MCP endpoint: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com/mcp`
+- MCP health: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com/mcp/health`
 
-Then run the non-skippable hosted suite. Each value must be a deployed,
-credential-free HTTPS origin/base URL; the configuration rejects missing URLs,
+For a later release, read these values again from the matching
+`ChiefFoundationStack` outputs rather than assuming the current hostnames remain
+authoritative.
+
+Then run the strict hosted suite. Each value must be a deployed, credential-free
+HTTPS origin/base URL; the configuration rejects missing URLs,
 single-label/private/local/reserved/unspecified hosts, non-public IPv4/IPv6
-ranges, URL credentials, query strings, and fragments.
+ranges, URL credentials, query strings, and fragments. There is no
+configuration path that skips a hosted-safe check; two mock-dependent
+fixture-only scenarios remain explicitly excluded from the runnable hosted
+selection.
 
 ```powershell
 $env:CHIEF_BASE_URL = '<ChiefFoundationStack.WebUrl>'
@@ -461,8 +471,8 @@ $env:CHIEF_MCP_BASE_URL = '<ChiefFoundationStack.ApiUrl>'
 pnpm --filter @chief/e2e test:hosted
 ```
 
-The hosted suite has no local web server and no skip path. It requires the
-durable hosted banner, confirms the draft body is read-only, invokes **Create
+The hosted suite has no local web server. It requires the durable hosted banner,
+confirms the draft body is read-only, invokes **Create
 concise revision**, approves that exact immutable successor, captures its
 effect-disabled operation receipt, reloads the page, and confirms the same
 proposal/operation through API status. It also performs MCP
@@ -505,11 +515,12 @@ Hosted provider, Asana, model, and authenticated MCP acceptance remain separate
 deployment-dependent checks. A successful deterministic evaluator test is not
 evidence of a live provider effect.
 
-This implementation lane did not execute any command in this deployment or
-hosted-acceptance section. The parent workflow will deploy an exact reviewed
-snapshot, ingest the deterministic seed through the production
-register/enumerate/compact/promote path, and run these checks against the
-emitted URLs.
+For the current assessed release, the parent workflow deployed an exact clean
+snapshot, reseeded the synthetic scope through the production
+register/enumerate/compact/promote path, and completed strict hosted acceptance
+with 19 runnable checks passed, 2 fixture-only checks skipped, and 0 failures.
+Those results prove the deterministic effect-disabled evaluator vertical, not
+provider authentication, live provider delivery, or an Asana mutation.
 
 ## Operations and recovery
 

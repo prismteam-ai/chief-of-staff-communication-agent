@@ -230,9 +230,12 @@ pnpm --filter @chief/api-client test
 pnpm --filter @chief/browser-api test
 ```
 
-This lane proved the composition through focused local contract/integration
-tests only. It did not deploy AWS or run hosted acceptance; the parent workflow
-owns deployment, deterministic seeding, and hosted proof.
+The assessed `2ad8432a8c8a48f9e2e5d3864944eb7541d2c500` release is deployed at
+`https://d3hgq3e86d3knk.cloudfront.net`, with the product API at
+`https://prjip3os8i.execute-api.us-east-2.amazonaws.com`. The strict hosted run
+completed with **19 runnable checks passed, 2 fixture-only checks skipped, and
+0 failed**. The public corpus is deterministic non-PII fixture data persisted
+through the durable composition; it is not authenticated provider evidence.
 
 ## Team Kit provenance
 

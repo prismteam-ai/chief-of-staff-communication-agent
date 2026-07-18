@@ -63,7 +63,7 @@ promoted new-epoch snapshot.
 | `revise_draft`                | Persisted successor draft revision                     | None            |
 | `request_context`             | Focused missing-fact request                           | None            |
 | `prepare_asana_action`        | Prepared-only Asana handoff                            | None            |
-| `submit_for_approval`         | Legacy handoff contract; no approval authority         | None            |
+| `submit_for_approval`         | Deprecated compatibility stub; always unavailable      | None            |
 | `get_approval_status`         | Read-only durable proposal status                      | None            |
 | `get_connector_status`        | Truthful mode, health, and capability facts            | None            |
 | `get_sla_metrics`             | Bounded SLA snapshot                                   | None            |
@@ -75,10 +75,12 @@ draft body is read-only and its sole revision control is **Create concise
 revision**, submitting exactly `Make this draft concise while retaining all
 cited facts.` MCP can create/revise a durable draft and poll a proposal prepared
 by the product API, but it cannot approve. The legacy
-`submit_for_approval` tool is rejected deterministically with the stable
-`TOOL_UNAVAILABLE` code and guidance to use the exact persisted-draft route; it
-is not a second approval path. MCP draft creation/revision uses the shared API
-service's atomic revision, exact-lookup, and draft-head transaction.
+`submit_for_approval` tool is a deprecated compatibility stub. Its listed
+description states that it is unavailable, directs clients to the HTTPS product
+draft-approval flow, and says that no effect is executed. Calls are rejected
+deterministically with the stable `TOOL_UNAVAILABLE` code; it is not a second
+approval path. MCP draft creation/revision uses the shared API service's atomic
+revision, exact-lookup, and draft-head transaction.
 
 There is intentionally no `approve`, `send_message`, `create_task`,
 `update_task`, provider credential, raw table/path/SQL, arbitrary endpoint, or
@@ -152,7 +154,9 @@ pnpm --filter @chief/mcp build
 ## Strict hosted proof
 
 Use the root documented hosted command. It requires separate UI, API, and MCP
-credential-free HTTPS base URLs and has no local fallback or skip behavior:
+credential-free HTTPS base URLs and has no local fallback or configuration path
+that skips a hosted-safe check. Two mock-dependent fixture-only scenarios are
+explicitly excluded from the runnable hosted selection:
 
 ```powershell
 $env:CHIEF_BASE_URL = 'https://<parent-deployment-web-host>'
@@ -168,9 +172,13 @@ journey. Its representative `tools/call` is `get_approval_status` with the
 browser-created proposal ID; MCP must return structured content exactly equal
 to the API approval status for that same approved proposal.
 
-This implementation lane did not deploy AWS or run the hosted command. The
-parent workflow will deploy, seed deterministic non-PII evaluator data, and run
-hosted acceptance against the emitted URLs.
+The assessed `2ad8432a8c8a48f9e2e5d3864944eb7541d2c500` release is deployed at
+`https://d3hgq3e86d3knk.cloudfront.net`, with MCP at
+`https://prjip3os8i.execute-api.us-east-2.amazonaws.com/mcp`. After the scoped
+authoritative evaluator reseed, the strict hosted run completed with **19
+runnable checks passed, 2 fixture-only checks skipped, and 0 failed**. This is
+durable fixture evidence through the production-shaped storage interfaces; it
+is not live provider authentication or external-effect evidence.
 
 ## Tradeoffs
 
