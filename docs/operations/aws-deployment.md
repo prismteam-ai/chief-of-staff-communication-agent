@@ -1,6 +1,6 @@
 # AWS deployment
 
-Status: the assessed `2ad8432a8c8a48f9e2e5d3864944eb7541d2c500` release is
+Status: the assessed `fbfc0babb6c8c358ff6c4c8cc81b3e66865aad42` runtime release is
 deployed. `ChiefProductStack` and `ChiefFoundationStack` are both
 `UPDATE_COMPLETE`; scoped deterministic non-PII evaluator data is seeded; and
 strict hosted acceptance passed 19 runnable checks with 2 fixture-only skips
@@ -182,11 +182,11 @@ lookup, and the conditional head compare-and-swap in one DynamoDB transaction.
 An interrupted or losing writer cannot expose a draft head without the exact
 lookup required by approval and restart.
 
-The V2 evaluator projection contains seven account-scoped fixture connector
-cards over 1,120 synthetic primary messages in 160 threads and two brands. Its
-capability-mode legend still defines recorded and blocked, but both have zero
-hosted evidence in the deterministic seed and therefore no recorded or blocked
-connector cards.
+The V2 evaluator projection contains seven source-owned synthetic connector
+cards over 1,120 synthetic primary messages in 160 threads and two brands. Six
+cards use fixture mode; LinkedIn archive is honestly manual/recorded evidence.
+Blocked remains a capability-mode definition with zero hosted evidence, so no
+unavailable blocked card is fabricated.
 
 Recommendation/draft facts are the snapshot's canonical evidence text, and
 their provenance is the actual promoted manifest hash. Replay returns the
@@ -497,10 +497,10 @@ Also verify:
   canonical write;
 - all four effect switches are `disabled` on all four Lambdas;
 - API access logs and Lambda log groups retain 90 days;
-- the public UI shows seven account-scoped fixture connector cards plus
-  capability-mode definitions, reports zero hosted recorded/blocked evidence
-  without rendering unavailable cards, and never claims signed-out OAuth/account
-  setup;
+- the public UI shows seven source-owned synthetic connector cards (six fixture
+  mode and one manual/recorded LinkedIn archive card), reports zero hosted
+  blocked evidence without rendering unavailable cards, and never claims
+  signed-out OAuth/account setup;
 - the evaluator identity marker, approval/execution state, and current retrieval
   head are durable and contain only approved deterministic non-PII data; inbox
   rows and connector cards are regenerated from the source-owned V2 corpus;

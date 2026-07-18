@@ -4,7 +4,8 @@ Use this operator command after `ChiefProductStack` is deployed and before
 hosted acceptance. It seeds the fixed synthetic V2 retrieval corpus: 1,120
 messages in 160 threads across seven channels, seven account scopes, and two
 brand scopes. The product service regenerates the matching inbox rows and seven
-synthetic fixture connector cards from the source-owned V2 corpus; only its
+source-owned synthetic connector cards from the V2 corpus: six fixture-mode
+cards and one manual/recorded LinkedIn archive evidence card. Only its
 small identity/integrity marker, approval/execution state, and the separate
 retrieval head are durable. The command does not read `.config`, provider
 credentials, Gmail, or private archives.

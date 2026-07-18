@@ -64,9 +64,10 @@ credentialless, tenant scoped, and labeled `runtimeMode: fixture` where the
 contract describes data origin. `storageMode: durable` independently describes
 persisted approval/execution state. Deterministic data must not be relabeled as
 a live provider connection.
-The V2 connector result contains seven account-scoped fixture connector cards.
-Recorded and blocked remain capability-mode definitions with zero hosted
-evidence in this seed; the API does not fabricate cards for them.
+The V2 connector result contains seven source-owned synthetic connector cards:
+six fixture-mode cards and one manual/recorded LinkedIn archive evidence card.
+Blocked remains a capability-mode definition with zero hosted evidence; the API
+does not fabricate an unavailable card for it.
 
 ## Routes
 
@@ -233,7 +234,7 @@ pnpm --filter @chief/api-client test
 pnpm --filter @chief/browser-api test
 ```
 
-The assessed `2ad8432a8c8a48f9e2e5d3864944eb7541d2c500` release is deployed at
+The assessed `fbfc0babb6c8c358ff6c4c8cc81b3e66865aad42` runtime release is deployed at
 `https://d3hgq3e86d3knk.cloudfront.net`, with the product API at
 `https://prjip3os8i.execute-api.us-east-2.amazonaws.com`. The strict hosted run
 completed with **19 runnable checks passed, 2 fixture-only checks skipped, and

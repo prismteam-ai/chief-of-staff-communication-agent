@@ -101,9 +101,10 @@ product approval.
   credential-free CloudFront product origin. No tool accepts URL authority.
 - Deterministic non-PII evaluator data is labeled fixture-origin even though its
   product and approval state uses the production durable interfaces.
-- The V2 connector status contains seven account-scoped fixture connector cards.
-  Recorded and blocked are mode definitions with zero hosted evidence in the
-  deterministic seed, so clients must not infer unavailable connector cards.
+- The V2 connector status contains seven source-owned synthetic connector cards:
+  six fixture-mode cards and one manual/recorded LinkedIn archive evidence card.
+  Blocked remains a mode definition with zero hosted evidence, so clients must
+  not infer unavailable connector cards.
 
 The current public evaluator does not implement OAuth or account selection.
 Use the deployment URL directly without adding a token to the URL or source
@@ -172,7 +173,7 @@ journey. Its representative `tools/call` is `get_approval_status` with the
 browser-created proposal ID; MCP must return structured content exactly equal
 to the API approval status for that same approved proposal.
 
-The assessed `2ad8432a8c8a48f9e2e5d3864944eb7541d2c500` release is deployed at
+The assessed `fbfc0babb6c8c358ff6c4c8cc81b3e66865aad42` runtime release is deployed at
 `https://d3hgq3e86d3knk.cloudfront.net`, with MCP at
 `https://prjip3os8i.execute-api.us-east-2.amazonaws.com/mcp`. After the scoped
 authoritative evaluator reseed, the strict hosted run completed with **19

@@ -139,10 +139,11 @@ it cannot approve, send, create a task, or update a task.
 
 1. Open `/overview`; confirm the signed-out, deterministic, non-PII and
    effect-disabled labels and inspect SLA/channel metrics.
-2. Open `/connections`; inspect the seven account-scoped fixture connector cards
-   and the capability-mode definitions. Recorded and blocked both show zero
-   evidence in the deterministic seed, so no recorded or blocked connector card
-   is expected. This evaluator does not offer OAuth or account setup.
+2. Open `/connections`; inspect the seven source-owned synthetic connector cards
+   and the capability-mode definitions. Six cards use fixture mode; LinkedIn
+   archive is honestly manual/recorded evidence. Blocked shows zero evidence,
+   so no unavailable card is expected. This evaluator does not offer OAuth or
+   account setup.
 3. Open `/inbox/thread-q3-launch`; inspect the thread, related Asana reference,
    cited recommendation, style-grounded draft, and focused-context action.
 4. Confirm the persisted draft body is read-only, then choose **Create concise
@@ -207,7 +208,7 @@ Expected parent deployment outputs:
 - MCP endpoint: `<ChiefFoundationStack.McpUrl>`
 - MCP health: `<ChiefFoundationStack.McpHealthUrl>`
 
-The assessed `2ad8432a8c8a48f9e2e5d3864944eb7541d2c500` release is live at:
+The assessed `fbfc0babb6c8c358ff6c4c8cc81b3e66865aad42` runtime release is live at:
 
 - UI: `https://d3hgq3e86d3knk.cloudfront.net`
 - API base: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com`
@@ -232,10 +233,11 @@ claim that the public runtime has authenticated or certified those providers.
 Public capability labels distinguish deterministic data, recorded evidence,
 and authorization-blocked providers. The V2 evaluator seed defined by this
 revision contains 1,120 synthetic primary messages in 160 threads across seven
-account-scoped fixture channels/connectors and two brands. It does not claim
-completed Gmail operator consent, live provider send, Twilio sender
-certification, or live Asana mutation evidence. Recorded and blocked modes have
-zero hosted evidence and do not produce connector cards.
+account-scoped source-owned connectors and two brands. Six cards use fixture
+mode; one synthetic LinkedIn archive card uses manual/recorded mode. It does not
+claim completed Gmail operator consent, live provider send, Twilio sender
+certification, or live Asana mutation evidence. Blocked mode has zero hosted
+evidence and does not produce a connector card.
 
 The private LinkedIn archive is not imported, exposed, or required by this
 public vertical. Live provider authentication and external-effect acceptance

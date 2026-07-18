@@ -4,7 +4,8 @@
 
 The Chief web application is a complete, signed-out evaluator journey over a
 deterministic multichannel projection: 1,120 synthetic primary messages in 160
-threads across seven account-scoped fixture channels/connectors and two brands.
+threads across seven account-scoped source-owned connectors and two brands.
+Six connectors use fixture mode; LinkedIn archive is manual/recorded evidence.
 It demonstrates the product shape without claiming a hosted Gmail connection,
 live provider send, or an Asana mutation surface.
 
