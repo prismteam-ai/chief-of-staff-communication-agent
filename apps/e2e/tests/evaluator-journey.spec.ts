@@ -12,6 +12,62 @@ const hostedBaseUrlsConfigured = [
   process.env.CHIEF_MCP_BASE_URL,
 ].some((value) => value !== undefined && value.trim().length > 0);
 
+const fixtureConnectorCapabilities = {
+  read: true,
+  send: false,
+  webhook: false,
+  poll: false,
+  threads: true,
+  attachments: true,
+  deliveryFeedback: false,
+  multipleAccounts: true,
+  historicalBackfill: true,
+  externalEffect: false,
+  replyCorrelation: true,
+  complaintFeedback: false,
+  unsubscribeFeedback: false,
+  optOutFeedback: false,
+  reconsentFeedback: false,
+  consentWindowEligibility: false,
+} as const;
+
+const fixtureConnectors = [
+  ['gmail', 'account-gmail-fixture', 'brand-northstar'],
+  [
+    'microsoft_graph',
+    'account-tenant-demo-northstar-microsoft_graph-01',
+    'brand-harbor',
+  ],
+  ['sms', 'account-tenant-demo-northstar-sms-02', 'brand-northstar'],
+  ['whatsapp', 'account-tenant-demo-northstar-whatsapp-03', 'brand-harbor'],
+  ['x', 'account-tenant-demo-northstar-x-04', 'brand-northstar'],
+  [
+    'linkedin_archive',
+    'account-tenant-demo-northstar-linkedin_archive-05',
+    'brand-harbor',
+  ],
+  [
+    'future_demo',
+    'account-tenant-demo-northstar-future_demo-06',
+    'brand-northstar',
+  ],
+].map(([channel, accountId, brandId]) => ({
+  accountId,
+  brandId,
+  connectorId: channel === 'gmail' ? 'gmail' : `demo-${channel}`,
+  displayLabel: `${channel?.replaceAll('_', ' ')} synthetic evaluator fixture`,
+  provider: channel === 'microsoft_graph' ? 'microsoft' : channel,
+  connectorKind: 'communication',
+  channel,
+  status: 'active',
+  health: 'healthy',
+  runtimeMode: 'fixture',
+  selectionState: 'selected',
+  capabilities: fixtureConnectorCapabilities,
+  lastSyncAt: '2026-07-17T09:00:00.000Z',
+  productUrl: `https://chief.example/settings/connectors/${channel}`,
+}));
+
 const fixtureProjectionResponses: Readonly<Record<string, unknown>> = {
   'system.health': {
     service: 'chief-api',
@@ -20,17 +76,25 @@ const fixtureProjectionResponses: Readonly<Record<string, unknown>> = {
     foundationOnly: false,
   },
   'dashboard.metrics': {
-    totalCommunications: 2,
+    totalCommunications: 1_120,
     pendingApprovalCount: 0,
-    channelBreakdown: [{ channel: 'email', count: 2 }],
+    channelBreakdown: [
+      { channel: 'gmail', count: 161 },
+      { channel: 'microsoft_graph', count: 161 },
+      { channel: 'sms', count: 161 },
+      { channel: 'whatsapp', count: 161 },
+      { channel: 'x', count: 161 },
+      { channel: 'linkedin_archive', count: 161 },
+      { channel: 'future_demo', count: 154 },
+    ],
     snapshot: {
       schemaVersion: '1',
       window: '7d',
       measuredAt: '2026-07-17T12:00:00.000Z',
-      pendingCount: 1,
-      overdueCount: 1,
-      answeredCount: 0,
-      resolvedCount: 0,
+      pendingCount: 201,
+      overdueCount: 201,
+      answeredCount: 618,
+      resolvedCount: 100,
       responseTimeP50Ms: 42_000,
       responseTimeP95Ms: 118_000,
       ingestionLagP95Ms: 24_000,
@@ -45,6 +109,9 @@ const fixtureProjectionResponses: Readonly<Record<string, unknown>> = {
         threadId: 'thread-1',
         direction: 'inbound',
         status: 'overdue',
+        channel: 'gmail',
+        accountId: 'account-gmail-fixture',
+        brandId: 'brand-northstar',
         senderDisplayName: 'Jordan Lee',
         recipientDisplayNames: ['Public evaluator'],
         subject: 'Friday launch decision',
@@ -60,6 +127,9 @@ const fixtureProjectionResponses: Readonly<Record<string, unknown>> = {
         threadId: 'thread-2',
         direction: 'inbound',
         status: 'pending',
+        channel: 'gmail',
+        accountId: 'account-gmail-fixture',
+        brandId: 'brand-northstar',
         senderDisplayName: 'Priya Shah',
         recipientDisplayNames: ['Public evaluator'],
         subject: 'Board update numbers',
@@ -70,9 +140,11 @@ const fixtureProjectionResponses: Readonly<Record<string, unknown>> = {
         productUrl: 'https://chief.example/communications/message-revision-2-1',
       },
     ],
+    totalCount: 1_120,
+    nextCursor: 'fixture-page-2',
   },
   'connectors.status': {
-    connectors: [],
+    connectors: fixtureConnectors,
   },
   'approvals.status': {
     proposalId: 'proposal-route-approved',
@@ -140,7 +212,7 @@ async function expectModeSpecificReadOnlyBody(page: Page): Promise<void> {
 }
 
 test.describe('signed-out evaluator journey', () => {
-  test('renders fixture projection counts without implying hosted evidence', async ({
+  test('renders exact V2 fixture projection without external-effect claims', async ({
     page,
   }) => {
     test.skip(
@@ -155,32 +227,45 @@ test.describe('signed-out evaluator journey', () => {
     ).toBeVisible();
     await expect(
       page.getByTestId('metric-volume').locator('strong'),
-    ).toHaveText('2');
+    ).toHaveText('1,120');
     await expect(page.getByTestId('metric-pending')).toContainText(
       '0 awaiting approval',
     );
     await expect(page.getByTestId('nav-pending-approval-count')).toHaveText(
       '0',
     );
-    await expect(page.getByRole('link', { name: 'View all 2' })).toBeVisible();
+    await expect(
+      page.getByRole('link', { name: 'View all 1,120' }),
+    ).toBeVisible();
     await expect(page.getByTestId('activity-source-label')).toContainText(
-      /demonstration only.*hosted fixed-scope email projection/i,
+      /demonstration only.*hosted multichannel corpus/i,
     );
 
     await page.goto('/inbox');
     await expect(
-      page.getByText('Fixed-scope email communications'),
+      page.getByText('Server-authoritative multichannel corpus'),
     ).toBeVisible();
     await expect(page.getByRole('main')).toContainText(
-      /two fixed-scope email seed communications/i,
+      /complete deterministic 1,120-message corpus across seven channels/i,
+    );
+    await expect(page.getByRole('main')).toContainText(
+      /showing 2 of 1,120 matching communications/i,
+    );
+    await expect(
+      page.getByTestId('inbox-channel-filter').locator('option'),
+    ).toHaveCount(8);
+
+    await page.goto('/connections');
+    await expect(page.getByTestId('connector-card')).toHaveCount(7);
+    await expect(page.getByTestId('hosted-seed-fixture-count')).toHaveText(
+      '7 hosted connector cards',
     );
 
     await page.goto('/evidence');
     await expect(page.getByRole('main')).toContainText(
-      /fixed-scope email communication queue/i,
+      /1,120-message corpus across seven hosted synthetic channels/i,
     );
     await expect(page.getByRole('main')).toContainText(/demonstration-only/i);
-    await expect(page.getByRole('main')).not.toContainText(/cross-channel/i);
 
     await page.goto('/approvals');
     await expect(page.getByTestId('approval-pending-count')).toHaveText(
@@ -200,6 +285,7 @@ test.describe('signed-out evaluator journey', () => {
   test('loads an honest executive dashboard with actionable metrics', async ({
     page,
   }) => {
+    if (!hostedBaseUrlsConfigured) await mockFixtureProjection(page);
     await page.goto('/overview');
 
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -216,8 +302,9 @@ test.describe('signed-out evaluator journey', () => {
     );
 
     await page.goto('/connections');
+    await expect(page.getByTestId('connector-card')).toHaveCount(7);
     await expect(page.getByTestId('hosted-seed-fixture-count')).toHaveText(
-      '1 fixed-scope hosted connector card',
+      '7 hosted connector cards',
     );
     await expect(page.getByTestId('hosted-seed-recorded-count')).toHaveText(
       '0 hosted evidence cards',
@@ -227,11 +314,11 @@ test.describe('signed-out evaluator journey', () => {
     );
     await expect(
       page.getByTestId('hosted-connector-seed-summary'),
-    ).toContainText(/mode legend defines other states/i);
+    ).toContainText(/seven account-scoped fixture connectors/i);
     const modeLabels = await page
       .locator('[data-testid^="capability-mode-"]')
       .allTextContents();
-    expect(modeLabels.length).toBeGreaterThanOrEqual(4);
+    expect(modeLabels.length).toBe(12);
     expect(modeLabels.map((label) => label.trim().toLowerCase())).toEqual(
       expect.arrayContaining(['fixture', 'recorded evidence', 'blocked']),
     );

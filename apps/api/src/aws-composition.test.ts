@@ -6,7 +6,7 @@ import {
   type InProcessQueryVector,
 } from '@chief/rag';
 import {
-  deterministicEvaluatorIdentityV1,
+  deterministicEvaluatorIdentityV2,
   type RetrievalQuery,
 } from '@chief/contracts';
 
@@ -19,18 +19,18 @@ describe('AWS durable API composition', () => {
   it('derives the durable request scope from the shared evaluator identity', () => {
     const context = createDurableRequestContext();
     expect(context.actor).toMatchObject({
-      tenantId: deterministicEvaluatorIdentityV1.tenantId,
-      userId: deterministicEvaluatorIdentityV1.userId,
-      accountScopes: [deterministicEvaluatorIdentityV1.accountId],
-      brandScopes: [deterministicEvaluatorIdentityV1.brandId],
+      tenantId: deterministicEvaluatorIdentityV2.tenantId,
+      userId: deterministicEvaluatorIdentityV2.userId,
+      accountScopes: deterministicEvaluatorIdentityV2.accountIds,
+      brandScopes: deterministicEvaluatorIdentityV2.brandIds,
     });
     expect(context.retrievalScope).toEqual({
       derivation: 'server_grants',
-      tenantId: deterministicEvaluatorIdentityV1.tenantId,
-      accountIds: [deterministicEvaluatorIdentityV1.accountId],
-      brandIds: [deterministicEvaluatorIdentityV1.brandId],
-      authorizationEpoch: deterministicEvaluatorIdentityV1.authorizationEpoch,
-      scopeHash: deterministicEvaluatorIdentityV1.scopeHash,
+      tenantId: deterministicEvaluatorIdentityV2.tenantId,
+      accountIds: deterministicEvaluatorIdentityV2.accountIds,
+      brandIds: deterministicEvaluatorIdentityV2.brandIds,
+      authorizationEpoch: deterministicEvaluatorIdentityV2.authorizationEpoch,
+      scopeHash: deterministicEvaluatorIdentityV2.scopeHash,
     });
   });
 

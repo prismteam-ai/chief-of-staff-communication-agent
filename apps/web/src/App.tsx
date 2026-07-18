@@ -176,6 +176,25 @@ const navItems = [
 const conciseRevisionInstruction =
   'Make this draft concise while retaining all cited facts.';
 
+const channelLabels: Readonly<Record<string, string>> = Object.freeze({
+  gmail: 'Gmail',
+  microsoft_graph: 'Microsoft Graph',
+  sms: 'SMS',
+  whatsapp: 'WhatsApp',
+  x: 'X',
+  linkedin_archive: 'LinkedIn archive',
+  future_demo: 'Demo channel',
+});
+
+function formatChannel(channel: string): string {
+  return (
+    channelLabels[channel] ??
+    channel
+      .replaceAll('_', ' ')
+      .replace(/\b\w/gu, (letter) => letter.toUpperCase())
+  );
+}
+
 function hostedCommunicationToView(
   communication: CommunicationSummaryView,
 ): CommunicationFixture {
@@ -187,19 +206,18 @@ function hostedCommunicationToView(
   );
   const ageMinutes = Math.floor(ageSeconds / 60);
   const remainingSeconds = ageSeconds % 60;
-  const channel = communication.threadId === 'thread-3' ? 'SMS' : 'Email';
 
   return {
     id:
       hostedEvaluatorRoutes[communication.messageRevisionId] ??
-      `${communication.threadId}--${communication.messageRevisionId}`,
+      communication.messageRevisionId,
     threadId: communication.threadId,
     messageRevisionId: communication.messageRevisionId,
     sender: communication.senderDisplayName ?? 'Unknown sender',
     subject: communication.subject ?? 'Communication without subject',
     excerpt: communication.excerpt,
-    channel,
-    account: 'Hosted assessment fixture',
+    channel: formatChannel(communication.channel),
+    account: `${communication.accountId} · ${communication.brandId}`,
     status: communication.status,
     received: sourceDate.toLocaleTimeString('en-GB', {
       hour: '2-digit',
@@ -508,7 +526,7 @@ function OverviewPage({
               <h2 id="priority-heading">Needs your attention</h2>
             </div>
             <Link className="text-link" to="/inbox">
-              View all {attentionCount.toLocaleString('en-US')}
+              View all {totalCommunications.toLocaleString('en-US')}
             </Link>
           </div>
           <div className="queue-list">
@@ -630,7 +648,7 @@ function OverviewPage({
             Demonstration only · these static activity examples are not part of
             the{' '}
             {isHosted
-              ? 'hosted fixed-scope email projection.'
+              ? 'hosted multichannel corpus.'
               : 'local fallback communication records.'}
           </p>
           <ol className="activity-list" data-testid="audit-timeline">
@@ -674,11 +692,107 @@ function OverviewPage({
   );
 }
 
-function InboxPage({ projection }: { readonly projection: ProductProjection }) {
+function InboxPage({
+  api,
+  projection,
+}: {
+  readonly api: BrowserApi;
+  readonly projection: ProductProjection;
+}) {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<InboxFilter>('all');
   const [query, setQuery] = useState('');
-  const filtered = projection.communications.filter((item) => {
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [channel, setChannel] = useState('all');
+  const [hostedPage, setHostedPage] = useState<{
+    readonly kind: 'idle' | 'loading' | 'ready' | 'error';
+    readonly items: readonly CommunicationSummaryView[];
+    readonly totalCount: number;
+    readonly nextCursor?: string;
+  }>({ kind: 'idle', items: [], totalCount: 0 });
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setDebouncedQuery(query.trim()),
+      250,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [query]);
+
+  const hostedStatus =
+    filter === 'pending' ||
+    filter === 'answered' ||
+    filter === 'overdue' ||
+    filter === 'resolved'
+      ? filter
+      : undefined;
+  const hostedRequestFilters = useMemo(
+    () => ({
+      ...(hostedStatus === undefined ? {} : { status: hostedStatus }),
+      ...(debouncedQuery.length === 0 ? {} : { query: debouncedQuery }),
+      ...(channel === 'all' ? {} : { channel }),
+    }),
+    [channel, debouncedQuery, hostedStatus],
+  );
+  const hostedRequestKey = JSON.stringify(hostedRequestFilters);
+  const hostedRequestKeyRef = useRef(hostedRequestKey);
+  const hostedRequestGenerationRef = useRef(0);
+  hostedRequestKeyRef.current = hostedRequestKey;
+
+  useEffect(() => {
+    const requestGeneration = ++hostedRequestGenerationRef.current;
+    if (projection.source !== 'hosted_durable') return;
+    let active = true;
+    const requestKey = hostedRequestKey;
+    setHostedPage((current) => ({
+      kind: 'loading',
+      items: current.items,
+      totalCount: current.totalCount,
+      ...(current.nextCursor === undefined
+        ? {}
+        : { nextCursor: current.nextCursor }),
+    }));
+    void api
+      .listCommunications({
+        limit: 100,
+        ...hostedRequestFilters,
+      })
+      .then((result) => {
+        if (
+          !active ||
+          hostedRequestGenerationRef.current !== requestGeneration ||
+          hostedRequestKeyRef.current !== requestKey
+        )
+          return;
+        setHostedPage({
+          kind: 'ready',
+          items: result.items,
+          totalCount: result.totalCount,
+          ...(result.nextCursor === undefined
+            ? {}
+            : { nextCursor: result.nextCursor }),
+        });
+      })
+      .catch(() => {
+        if (
+          !active ||
+          hostedRequestGenerationRef.current !== requestGeneration ||
+          hostedRequestKeyRef.current !== requestKey
+        )
+          return;
+        setHostedPage((current) => ({
+          kind: 'error',
+          items: current.items,
+          totalCount: current.totalCount,
+        }));
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, hostedRequestFilters, hostedRequestKey, projection.source]);
+
+  const localFiltered = projection.communications.filter((item) => {
     const matchesStatus = filter === 'all' || item.status === filter;
     const normalized = query.trim().toLowerCase();
     const matchesQuery =
@@ -688,27 +802,72 @@ function InboxPage({ projection }: { readonly projection: ProductProjection }) {
         .includes(normalized);
     return matchesStatus && matchesQuery;
   });
+  const displayed =
+    projection.source === 'hosted_durable'
+      ? hostedPage.items.map(hostedCommunicationToView)
+      : localFiltered;
+  const matchingCount =
+    projection.source === 'hosted_durable'
+      ? hostedPage.totalCount
+      : localFiltered.length;
+  const channelOptions = projection.metrics?.channelBreakdown ?? [];
+
+  const loadMore = async () => {
+    if (
+      projection.source !== 'hosted_durable' ||
+      hostedPage.nextCursor === undefined ||
+      loadingMore
+    )
+      return;
+    const requestKey = hostedRequestKey;
+    const requestGeneration = hostedRequestGenerationRef.current;
+    const cursor = hostedPage.nextCursor;
+    setLoadingMore(true);
+    try {
+      const result = await api.listCommunications({
+        limit: 100,
+        cursor,
+        ...hostedRequestFilters,
+      });
+      setHostedPage((current) =>
+        hostedRequestGenerationRef.current !== requestGeneration ||
+        hostedRequestKeyRef.current !== requestKey ||
+        current.nextCursor !== cursor
+          ? current
+          : {
+              kind: 'ready',
+              items: [...current.items, ...result.items],
+              totalCount: result.totalCount,
+              ...(result.nextCursor === undefined
+                ? {}
+                : { nextCursor: result.nextCursor }),
+            },
+      );
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   return (
     <div className="page">
       <PageHeader
         eyebrow={
           projection.source === 'hosted_durable'
-            ? 'Fixed-scope email communications'
+            ? 'Server-authoritative multichannel corpus'
             : 'Local multi-channel demonstration'
         }
         title="Inbox"
         description={
           projection.source === 'hosted_durable'
-            ? 'A durable queue containing the two fixed-scope email seed communications. It does not demonstrate additional channels.'
+            ? 'Search and filter the complete deterministic 1,120-message corpus across seven channels. Results are selected and paginated by the typed API.'
             : 'A local fallback demonstration queue with channel-shaped examples. These records are not hosted evidence.'
         }
         action={
           <span className="fixture-summary">
             <ModeChip mode="fixture" />
-            {projection.communications.length.toLocaleString('en-US')}{' '}
+            {matchingCount.toLocaleString('en-US')}{' '}
             {projection.source === 'hosted_durable'
-              ? 'durable hosted seed records'
+              ? 'matching hosted records'
               : 'local fallback records'}
           </span>
         }
@@ -742,12 +901,34 @@ function InboxPage({ projection }: { readonly projection: ProductProjection }) {
               <option value="all">All</option>
               <option value="pending">Pending</option>
               <option value="overdue">Overdue</option>
-              <option value="context">Needs context</option>
+              {projection.source === 'hosted_durable' ? null : (
+                <option value="context">Needs context</option>
+              )}
               <option value="answered">Answered</option>
               <option value="resolved">Resolved</option>
             </select>
             <ChevronDown aria-hidden="true" size={15} />
           </label>
+          {projection.source === 'hosted_durable' ? (
+            <label className="select-control" htmlFor="inbox-channel-filter">
+              <Waypoints aria-hidden="true" size={16} />
+              <span>Channel</span>
+              <select
+                id="inbox-channel-filter"
+                data-testid="inbox-channel-filter"
+                value={channel}
+                onChange={(event) => setChannel(event.target.value)}
+              >
+                <option value="all">All channels</option>
+                {channelOptions.map((item) => (
+                  <option key={item.channel} value={item.channel}>
+                    {formatChannel(item.channel)} ({item.count})
+                  </option>
+                ))}
+              </select>
+              <ChevronDown aria-hidden="true" size={15} />
+            </label>
+          ) : null}
         </div>
         <h2 className="sr-only" id="inbox-table-heading">
           Communication queue
@@ -759,17 +940,23 @@ function InboxPage({ projection }: { readonly projection: ProductProjection }) {
           <span>Age</span>
         </div>
         <div className="inbox-list">
-          {filtered.length === 0 ? (
+          {hostedPage.kind === 'loading' && displayed.length === 0 ? (
+            <div className="inbox-loading" role="status">
+              Loading authoritative communication results…
+            </div>
+          ) : displayed.length === 0 ? (
             <EmptyState filter={filter} />
           ) : (
-            filtered.map((item) => (
+            displayed.map((item) => (
               <button
                 className="inbox-row"
                 data-testid={`inbox-row-${item.id}`}
                 key={item.id}
                 type="button"
                 onClick={() => {
-                  void navigate(`/inbox/${item.id}`);
+                  void navigate(`/inbox/${item.id}`, {
+                    state: { communication: item },
+                  });
                 }}
                 aria-label={`Open ${item.subject} from ${item.sender}`}
               >
@@ -803,6 +990,24 @@ function InboxPage({ projection }: { readonly projection: ProductProjection }) {
             ))
           )}
         </div>
+        {projection.source === 'hosted_durable' ? (
+          <div className="inbox-pagination" aria-live="polite">
+            <span>
+              Showing {displayed.length.toLocaleString('en-US')} of{' '}
+              {matchingCount.toLocaleString('en-US')} matching communications
+            </span>
+            {hostedPage.nextCursor === undefined ? null : (
+              <button
+                className="button button--secondary"
+                type="button"
+                disabled={loadingMore}
+                onClick={() => void loadMore()}
+              >
+                {loadingMore ? 'Loading…' : 'Load 100 more'}
+              </button>
+            )}
+          </div>
+        ) : null}
       </section>
     </div>
   );
@@ -828,6 +1033,7 @@ function RoutedThreadPage({
   readonly projection: ProductProjection;
 }) {
   const { threadId = '' } = useParams();
+  const location = useLocation();
   if (projection.source === 'checking') {
     return (
       <div className="page not-found" role="status">
@@ -838,9 +1044,12 @@ function RoutedThreadPage({
       </div>
     );
   }
-  const communication = projection.communications.find(
-    ({ id }) => id === threadId,
-  );
+  const routedCommunication = (
+    location.state as { readonly communication?: CommunicationFixture } | null
+  )?.communication;
+  const communication =
+    projection.communications.find(({ id }) => id === threadId) ??
+    (routedCommunication?.id === threadId ? routedCommunication : undefined);
 
   if (
     projection.source === 'local_fallback' &&
@@ -2341,7 +2550,7 @@ function ConnectionsPage({
       <PageHeader
         eyebrow="Onboarding & capability truth"
         title="Connections"
-        description="Inspect the fixed-scope hosted connector card, then use the legend to understand mode definitions—including modes with zero hosted evidence."
+        description="Inspect the seven deterministic hosted communication connectors and their exact effect-disabled capabilities."
         action={
           <Link className="button button--secondary" to="/evidence#connections">
             <Plus aria-hidden="true" size={17} /> Connection guide
@@ -2354,14 +2563,14 @@ function ConnectionsPage({
       >
         <strong>Hosted evaluator seed</strong>
         <p>
-          Inspect the fixed-scope fixture connector card below. The mode legend
-          defines other states; it does not claim additional hosted connectors.
+          Seven account-scoped fixture connectors back the hosted multichannel
+          corpus. Every card is synthetic, deterministic, and effect-disabled.
         </p>
         <dl>
           <div>
             <dt>Fixture</dt>
             <dd data-testid="hosted-seed-fixture-count">
-              {hostedSeedCounts.fixture} fixed-scope hosted connector card
+              {hostedSeedCounts.fixture} hosted connector cards
             </dd>
           </div>
           <div>
@@ -2429,7 +2638,7 @@ function ConnectionsPage({
           </span>
           <div>
             <strong>1. Review hosted scope</strong>
-            <small>One fixed-scope fixture connector</small>
+            <small>Seven account-scoped fixture connectors</small>
           </div>
         </div>
         <div className="onboarding-line" />
@@ -2550,11 +2759,15 @@ function EvidencePage({
           <h2>What this public session proves</h2>
           <p>
             {projection.source === 'hosted_durable'
-              ? 'A deterministic evaluator can inspect a fixed-scope email communication queue, grounded recommendation, style-matched durable revision, explicit server-authorized approval, outbox receipt, Asana preparation, SLA, and audit trail without gaining external-effect authority. Local multi-channel examples elsewhere are demonstration-only and are not hosted evidence.'
+              ? 'A deterministic evaluator can inspect and search a 1,120-message corpus across seven hosted synthetic channels, then exercise the two typed evidence anchors through grounded recommendation, durable revision, server-authorized approval, outbox receipt, Asana preparation, SLA, and audit flows without gaining external-effect authority.'
               : projection.source === 'local_fallback'
                 ? 'The local fallback demonstrates the interface with static multi-channel examples only. It is not durable hosted evidence and cannot grant approval or external-effect authority.'
-                : 'The evaluator is checking the hosted fixed-scope email projection. No hosted evidence is claimed until that read succeeds.'}
+                : 'The evaluator is checking the hosted multichannel projection. No hosted evidence is claimed until that read succeeds.'}
           </p>
+          <small>
+            Demonstration-only synthetic data; external provider effects remain
+            disabled.
+          </small>
         </div>
         <dl>
           <div>
@@ -2564,9 +2777,12 @@ function EvidencePage({
           <div>
             <dt>Dataset</dt>
             <dd>
-              {projection.communications.length.toLocaleString('en-US')}{' '}
+              {(
+                projection.metrics?.totalCommunications ??
+                projection.communications.length
+              ).toLocaleString('en-US')}{' '}
               {projection.source === 'hosted_durable'
-                ? 'durable hosted fixed-scope email communications'
+                ? 'durable hosted multichannel communications'
                 : 'local fallback demonstration communications'}
             </dd>
           </div>
@@ -2601,9 +2817,9 @@ function EvidencePage({
               <div>
                 <strong>Capability truth</strong>
                 <p>
-                  Open Connections and inspect the fixed-scope fixture connector
-                  card. Then review the recorded and blocked definitions; both
-                  have zero hosted cards in this seed.
+                  Open Connections and inspect the seven fixture connector
+                  cards. Each card is account-scoped, synthetic, and
+                  effect-disabled.
                 </p>
               </div>
               <Link to="/connections">
@@ -2894,7 +3110,10 @@ export function App() {
           path="/overview"
           element={<OverviewPage projection={projection} />}
         />
-        <Route path="/inbox" element={<InboxPage projection={projection} />} />
+        <Route
+          path="/inbox"
+          element={<InboxPage api={api} projection={projection} />}
+        />
         <Route
           path="/inbox/:threadId"
           element={

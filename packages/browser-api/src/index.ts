@@ -32,6 +32,10 @@ import {
 
 export interface CommunicationListInput {
   readonly status?: 'pending' | 'answered' | 'overdue' | 'resolved';
+  readonly query?: string;
+  readonly channel?: string;
+  readonly accountFilter?: string;
+  readonly brandFilter?: string;
   readonly limit: number;
   readonly cursor?: string;
 }
@@ -94,6 +98,7 @@ export interface BrowserApi {
   slaMetrics(window: '24h' | '7d' | '30d'): Promise<SlaSnapshot>;
   listCommunications(input: CommunicationListInput): Promise<{
     readonly items: CommunicationSummaryView[];
+    readonly totalCount: number;
     readonly nextCursor?: string;
   }>;
   getCommunication(messageRevisionId: string): Promise<CommunicationDetailView>;

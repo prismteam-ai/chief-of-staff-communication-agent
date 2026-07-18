@@ -13,7 +13,7 @@ import {
 } from '@chief/rag';
 import {
   citationSchema,
-  deterministicEvaluatorIdentityV1,
+  deterministicEvaluatorIdentityV2,
   retrievalCandidateSchema,
   serverRequestContextSchema,
   type RetrievalQuery,
@@ -66,8 +66,8 @@ export function createDurableRequestContext() {
       authoritySource: 'verified_identity' as const,
       tenantId: durableEvaluatorAuthority.tenantId,
       userId: durableEvaluatorAuthority.userId,
-      accountScopes: [durableEvaluatorAuthority.accountId],
-      brandScopes: [durableEvaluatorAuthority.brandId],
+      accountScopes: durableEvaluatorAuthority.accountIds,
+      brandScopes: durableEvaluatorAuthority.brandIds,
       grants: [
         'communications:read',
         'knowledge:read',
@@ -81,10 +81,10 @@ export function createDurableRequestContext() {
     retrievalScope: {
       derivation: 'server_grants' as const,
       tenantId: durableEvaluatorAuthority.tenantId,
-      accountIds: [durableEvaluatorAuthority.accountId],
-      brandIds: [durableEvaluatorAuthority.brandId],
-      authorizationEpoch: deterministicEvaluatorIdentityV1.authorizationEpoch,
-      scopeHash: deterministicEvaluatorIdentityV1.scopeHash,
+      accountIds: durableEvaluatorAuthority.accountIds,
+      brandIds: durableEvaluatorAuthority.brandIds,
+      authorizationEpoch: deterministicEvaluatorIdentityV2.authorizationEpoch,
+      scopeHash: deterministicEvaluatorIdentityV2.scopeHash,
     },
   });
 }

@@ -56,14 +56,17 @@ epoch item. Staging and persisted query-vector entity names include the epoch;
 the head/domain partition remains stable so a new-epoch compaction can replace
 the prior head without reading old-epoch staging as current input.
 
-The fixed non-PII evaluator projection is written through the durable
-repository on first access. It is deterministic, credentialless, tenant scoped,
-and labeled `runtimeMode: fixture` where the contract describes data origin.
-`storageMode: durable` independently describes persisted approval/execution
-state. Deterministic data must not be relabeled as a live provider connection.
-The hosted connector result contains one fixture connector card. Recorded and
-blocked remain capability-mode definitions with zero hosted evidence in this
-seed; the API does not fabricate cards for them.
+The fixed non-PII evaluator projection is regenerated from the source-owned V2
+corpus when the product service starts. The durable repository stores a small
+identity/integrity marker plus approval and execution state; it does not store
+all 1,120 inbox rows or seven connector cards. The projection is deterministic,
+credentialless, tenant scoped, and labeled `runtimeMode: fixture` where the
+contract describes data origin. `storageMode: durable` independently describes
+persisted approval/execution state. Deterministic data must not be relabeled as
+a live provider connection.
+The V2 connector result contains seven account-scoped fixture connector cards.
+Recorded and blocked remain capability-mode definitions with zero hosted
+evidence in this seed; the API does not fabricate cards for them.
 
 ## Routes
 

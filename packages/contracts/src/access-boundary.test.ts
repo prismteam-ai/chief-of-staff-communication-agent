@@ -17,6 +17,9 @@ const communicationSummary = {
   threadId: 'thread-a',
   direction: 'inbound',
   status: 'pending',
+  channel: 'gmail',
+  accountId: 'account-a',
+  brandId: 'brand-a',
   senderDisplayName: 'Customer',
   recipientDisplayNames: ['Chief of Staff'],
   subject: 'Quarterly review',
@@ -30,6 +33,7 @@ describe('client-safe read projections', () => {
   it('serializes communication views without persistence references', () => {
     const list = listCommunicationsResultSchema.parse({
       items: [communicationSummary],
+      totalCount: 1,
     });
     const detail = getCommunicationResultSchema.parse({
       communication: {
@@ -86,6 +90,7 @@ describe('client-safe read projections', () => {
       expect(
         listCommunicationsResultSchema.safeParse({
           items: [{ ...communicationSummary, [internalField]: secretSentinel }],
+          totalCount: 1,
         }).success,
       ).toBe(false);
     }

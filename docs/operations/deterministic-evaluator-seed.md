@@ -1,9 +1,13 @@
 # Deterministic evaluator retrieval seed
 
-Use this operator command once after `ChiefProductStack` is deployed and before
-hosted acceptance. It seeds only the fixed, synthetic two-email evaluator
-corpus. It does not read `.config`, provider credentials, Gmail, or private
-archives.
+Use this operator command after `ChiefProductStack` is deployed and before
+hosted acceptance. It seeds the fixed synthetic V2 retrieval corpus: 1,120
+messages in 160 threads across seven channels, seven account scopes, and two
+brand scopes. The product service regenerates the matching inbox rows and seven
+synthetic fixture connector cards from the source-owned V2 corpus; only its
+small identity/integrity marker, approval/execution state, and the separate
+retrieval head are durable. The command does not read `.config`, provider
+credentials, Gmail, or private archives.
 
 ## Run
 
@@ -31,16 +35,31 @@ pnpm seed:evaluator-retrieval -- --table-name '<table>' --bucket-name '<bucket>'
 The command emits one non-secret JSON result line:
 
 ```json
-{"schemaVersion":"1","seedVersion":"chief-evaluator-retrieval-seed.v1","seedId":"e35428221407a13f6b01d5196abab9c7357c5bfbd3c76b9ee284197180bf8217","status":"seeded","scopeHash":"b591109c0ddfc4a602f56768cbbd7df2eb9606f7d45dc986cf5ca6f914dca4f1","authorizationEpoch":1,"manifestHash":"<deployment-bound-sha256>","generation":2,"chunkCount":2,"sourceCount":2}
+{"schemaVersion":"1","seedVersion":"chief-evaluator-retrieval-seed.v2","seedId":"e6755bf3f2cd96a4b4af9c395e6a9a89775f311c0a14680e9ac700ce31e96af3","status":"seeded","scopeHash":"78f117a88b1fc73ce8c394e2045888eb102fd34ee3e8c77fbaa75cb21d9a8e3d","authorizationEpoch":1,"manifestHash":"<deployment-bound-sha256>","generation":1,"chunkCount":1120,"sourceCount":1120,"threadCount":160,"accountCount":7,"brandCount":2,"channelCounts":{"gmail":161,"microsoft_graph":161,"sms":161,"whatsapp":161,"x":161,"linkedin_archive":161,"future_demo":154},"brandCounts":{"brand-northstar":637,"brand-harbor":483}}
 ```
 
-On an exact rerun, `status` is `already_current` and the manifest identity and
-generation remain unchanged. The recovery suite proves both an exact partial
-catalog with no head and a valid one-record promoted head: each converges to the
-same readable two-record authority, and its next run is idempotent. A recovery
-from other valid partial generations may retain a different generation number.
-The stable corpus identity is `seedId`; the manifest hash also binds the
-deployed bucket/object versions.
+`generation: 1` is the fresh-state example, not a required value for every
+deployment. The stable corpus identity is `seedId`; the manifest hash also
+binds the deployed bucket and immutable object versions.
+
+## Rerun, recovery, and rollback
+
+- An exact rerun returns `status: already_current` and preserves the promoted
+  manifest hash and generation.
+- An exact partial V2 catalog with no head is completed and promoted with
+  `status: seeded`.
+- A valid partial promoted head is completed as a new generation. The recovery
+  test advances the one-record generation 1 head to a full generation 2 head;
+  its next run returns `already_current` without another advance.
+- Foreign scope, stale epoch, extra or conflicting records, mixed catalog
+  state, or corrupt staged/snapshot objects fail closed. The command does not
+  delete the current head, guess a rollback target, or offer a destructive
+  force-reset path.
+- Rolling application code back does not roll retained DynamoDB/S3 state back.
+  Redeploy the reviewed release and run the seeder belonging to that release;
+  do not delete retained tables, immutable objects, or Object-Locked snapshots.
+  The V2 command neither garbage-collects older scopes/generations nor converts
+  incompatible state in place.
 
 ## Fail-closed behavior
 

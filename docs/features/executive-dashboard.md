@@ -3,9 +3,10 @@
 ## Outcome
 
 The Chief web application is a complete, signed-out evaluator journey over a
-deterministic, fixed-scope email projection. It demonstrates the product shape
-without claiming a hosted Gmail connection, multi-channel inbox, provider send,
-or Asana mutation surface.
+deterministic multichannel projection: 1,120 synthetic primary messages in 160
+threads across seven account-scoped fixture channels/connectors and two brands.
+It demonstrates the product shape without claiming a hosted Gmail connection,
+live provider send, or an Asana mutation surface.
 
 The public flow covers:
 

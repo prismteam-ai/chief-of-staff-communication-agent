@@ -138,6 +138,9 @@ function makeSummary(input: {
   readonly attachments?: number;
   readonly direction?: 'inbound' | 'outbound';
 }): CommunicationSummaryView {
+  const channel = THREAD_CHANNELS[`thread-${input.thread}`];
+  if (channel === undefined)
+    throw new Error('Fixture thread channel is missing.');
   return communicationSummaryViewSchema.parse({
     messageId: `message-${input.index}`,
     messageRevisionId: `message-revision-${input.index}-1`,
@@ -145,6 +148,10 @@ function makeSummary(input: {
     threadId: `thread-${input.thread}`,
     direction: input.direction ?? 'inbound',
     status: input.status,
+    channel,
+    accountId:
+      channel === 'sms' ? 'account-twilio-fixture' : 'account-gmail-fixture',
+    brandId: 'brand-executive',
     senderDisplayName: input.sender,
     recipientDisplayNames: ['Avery Morgan'],
     subject: input.subject,
@@ -458,7 +465,7 @@ function draftFor(
   });
 }
 
-function decodeCursor(cursor: string | undefined, status: string | undefined) {
+function decodeCursor(cursor: string | undefined, binding: string | undefined) {
   if (cursor === undefined) return 0;
   try {
     const decoded = Buffer.from(cursor, 'base64url').toString('utf8');
@@ -468,7 +475,7 @@ function decodeCursor(cursor: string | undefined, status: string | undefined) {
       version !== 'fixture-v1' ||
       !Number.isSafeInteger(offset) ||
       offset < 0 ||
-      cursorStatus !== (status ?? '*')
+      cursorStatus !== (binding ?? '*')
     ) {
       throw new Error('invalid');
     }
@@ -478,9 +485,27 @@ function decodeCursor(cursor: string | undefined, status: string | undefined) {
   }
 }
 
-function encodeCursor(offset: number, status: string | undefined): string {
-  return Buffer.from(`fixture-v1:${offset}:${status ?? '*'}`, 'utf8').toString(
+function encodeCursor(offset: number, binding: string | undefined): string {
+  return Buffer.from(`fixture-v1:${offset}:${binding ?? '*'}`, 'utf8').toString(
     'base64url',
+  );
+}
+
+function communicationListCursorBinding(input: {
+  readonly status?: string;
+  readonly query?: string;
+  readonly channel?: string;
+  readonly accountFilter?: string;
+  readonly brandFilter?: string;
+}): string {
+  return sha256(
+    JSON.stringify({
+      status: input.status ?? null,
+      query: input.query?.trim().toLocaleLowerCase('en-US') ?? null,
+      channel: input.channel ?? null,
+      accountFilter: input.accountFilter ?? null,
+      brandFilter: input.brandFilter ?? null,
+    }),
   );
 }
 
@@ -567,18 +592,51 @@ export class FixtureMcpToolService implements McpToolService {
     switch (toolName) {
       case 'list_pending_communications': {
         const input = listCommunicationsInputSchema.parse(rawInput);
-        const filtered =
-          input.status === undefined
-            ? this.#summaries
-            : this.#summaries.filter(({ status }) => status === input.status);
-        const offset = decodeCursor(input.cursor, input.status);
+        const normalizedQuery = input.query?.trim().toLocaleLowerCase('en-US');
+        const filtered = this.#summaries.filter((communication) => {
+          if (
+            input.status !== undefined &&
+            communication.status !== input.status
+          )
+            return false;
+          if (
+            input.channel !== undefined &&
+            communication.channel !== input.channel
+          )
+            return false;
+          if (
+            input.accountFilter !== undefined &&
+            communication.accountId !== input.accountFilter
+          )
+            return false;
+          if (
+            input.brandFilter !== undefined &&
+            communication.brandId !== input.brandFilter
+          )
+            return false;
+          if (normalizedQuery === undefined) return true;
+          return [
+            communication.senderDisplayName,
+            ...communication.recipientDisplayNames,
+            communication.subject,
+            communication.excerpt,
+            communication.channel,
+            communication.accountId,
+            communication.brandId,
+          ].some((value) =>
+            value?.toLocaleLowerCase('en-US').includes(normalizedQuery),
+          );
+        });
+        const binding = communicationListCursorBinding(input);
+        const offset = decodeCursor(input.cursor, binding);
         if (offset > filtered.length) throw new McpToolError('INVALID_CURSOR');
         const items = filtered.slice(offset, offset + input.limit);
         const nextOffset = offset + items.length;
         return {
           items,
+          totalCount: filtered.length,
           ...(nextOffset < filtered.length
-            ? { nextCursor: encodeCursor(nextOffset, input.status) }
+            ? { nextCursor: encodeCursor(nextOffset, binding) }
             : {}),
         };
       }

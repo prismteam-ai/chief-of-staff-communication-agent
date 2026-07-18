@@ -457,6 +457,8 @@ describe('Chief remote MCP Lambda', () => {
     );
     const items = [...firstOutput.items, ...secondOutput.items];
 
+    expect(firstOutput.totalCount).toBe(5);
+    expect(secondOutput.totalCount).toBe(5);
     expect(items.map(({ messageRevisionId }) => messageRevisionId)).toEqual([
       'message-revision-1-1',
       'message-revision-2-1',
@@ -472,6 +474,33 @@ describe('Chief remote MCP Lambda', () => {
       'resolved',
     ]);
     expect(secondOutput.nextCursor).toBeUndefined();
+
+    const filtered = mcpListPendingResultSchema.parse(
+      (
+        await callTool(
+          'list_pending_communications',
+          {
+            limit: 10,
+            query: 'customer escalation',
+            channel: 'sms',
+            accountFilter: 'account-twilio-fixture',
+            brandFilter: 'brand-executive',
+          },
+          fixtureHandler,
+        )
+      ).result?.structuredContent,
+    );
+    expect(filtered).toMatchObject({
+      totalCount: 1,
+      items: [
+        {
+          messageRevisionId: 'message-revision-3-1',
+          channel: 'sms',
+          accountId: 'account-twilio-fixture',
+          brandId: 'brand-executive',
+        },
+      ],
+    });
 
     const emailThread = mcpGetThreadContextResultSchema.parse(
       (

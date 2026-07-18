@@ -15,7 +15,9 @@ import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import {
   canonicalRetrievalSourceAuthoritySchema,
   immutableBlobRefSchema,
+  retrievalScopeSchema,
   type ImmutableBlobRef,
+  type RetrievalScope,
 } from '@chief/contracts';
 import { DynamoPersistence, KeyCodec } from '@chief/persistence-dynamodb';
 import {
@@ -227,12 +229,42 @@ export class S3RetrievalMutationSink implements RetrievalMutationSink {
   public constructor(
     private readonly objects: ImmutableRetrievalArtifactStore,
     private readonly embeddings: EffectDisabledEmbeddingProducer = new DeterministicEffectDisabledEmbedding(),
+    private readonly authorizedScope?: RetrievalScope,
   ) {}
 
   public async stage(input: {
     readonly workItem: IngestionWorkItem;
     readonly canonical: CanonicalWrite;
   }): Promise<StagedRetrievalMutationV1> {
+    const itemScope = retrievalScopeSchema.parse({
+      derivation: 'server_grants',
+      tenantId: input.workItem.tenantId,
+      accountIds: [input.workItem.accountId],
+      brandIds: [...(input.workItem.brandIds ?? [])],
+      authorizationEpoch: input.workItem.authorizationEpoch,
+      scopeHash: input.workItem.scopeHash,
+      role: 'factual',
+    });
+    const scope =
+      this.authorizedScope === undefined
+        ? itemScope
+        : retrievalScopeSchema.parse(this.authorizedScope);
+    if (
+      scope.tenantId !== input.workItem.tenantId ||
+      scope.authorizationEpoch !== input.workItem.authorizationEpoch ||
+      scope.scopeHash !== input.workItem.scopeHash ||
+      scope.role !== 'factual' ||
+      !scope.accountIds.some(
+        (accountId) => accountId === input.workItem.accountId,
+      ) ||
+      (input.workItem.brandIds ?? []).some(
+        (brandId) =>
+          !scope.brandIds.some(
+            (authorizedBrandId) => authorizedBrandId === brandId,
+          ),
+      )
+    )
+      throw new BoundedRetrievalError('ACCESS_DENIED');
     const operation = input.canonical.deleted ? 'delete' : 'upsert';
     const text =
       input.canonical.source === 'asana'
@@ -308,15 +340,7 @@ export class S3RetrievalMutationSink implements RetrievalMutationSink {
     return validateStagedRetrievalMutation({
       contractVersion: 'chief-retrieval.v1',
       kind: 'staged-mutation',
-      scope: {
-        derivation: 'server_grants',
-        tenantId: input.workItem.tenantId,
-        accountIds: [input.workItem.accountId],
-        brandIds: [...(input.workItem.brandIds ?? [])],
-        authorizationEpoch: input.workItem.authorizationEpoch,
-        scopeHash: input.workItem.scopeHash,
-        role: 'factual',
-      },
+      scope,
       mutationId: sha256Bytes(bytes),
       stagingOrdinal,
       changeCount: 1,

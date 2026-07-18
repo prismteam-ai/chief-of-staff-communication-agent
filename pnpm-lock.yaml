@@ -244,6 +244,9 @@ importers:
       '@chief/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@chief/demo-fixtures':
+        specifier: workspace:*
+        version: link:../../packages/demo-fixtures
       '@chief/domain':
         specifier: workspace:*
         version: link:../../packages/domain

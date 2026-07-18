@@ -172,17 +172,21 @@ no console write or hosted in-memory retrieval fallback is required.
 
 ### Durable API approval composition
 
-The fixed deterministic non-PII evaluator projection is seeded through the core
-repository on first access. Recommendations, cited drafts, draft successors,
-and proposals use immutable revisions plus conditional heads in the same core
-table. Each draft create/revise commits the immutable revision, its exact
-revision lookup, and the conditional head compare-and-swap in one DynamoDB
-transaction. An interrupted or losing writer cannot expose a draft head without
-the exact lookup required by approval and restart.
+The fixed deterministic non-PII evaluator projection is regenerated from the
+source-owned V2 corpus when the product service starts. The core repository
+stores only its small identity/integrity marker, not all 1,120 inbox rows or
+seven connector cards. Recommendations, cited drafts, draft successors, and
+proposals use immutable revisions plus conditional heads in the same core table.
+Each draft create/revise commits the immutable revision, its exact revision
+lookup, and the conditional head compare-and-swap in one DynamoDB transaction.
+An interrupted or losing writer cannot expose a draft head without the exact
+lookup required by approval and restart.
 
-The hosted projection contains one fixture connector card. Its capability-mode
-legend still defines recorded and blocked, but both have zero hosted evidence in
-the deterministic seed and therefore no hosted connector cards.
+The V2 evaluator projection contains seven account-scoped fixture connector
+cards over 1,120 synthetic primary messages in 160 threads and two brands. Its
+capability-mode legend still defines recorded and blocked, but both have zero
+hosted evidence in the deterministic seed and therefore no recorded or blocked
+connector cards.
 
 Recommendation/draft facts are the snapshot's canonical evidence text, and
 their provenance is the actual promoted manifest hash. Replay returns the
@@ -493,11 +497,13 @@ Also verify:
   canonical write;
 - all four effect switches are `disabled` on all four Lambdas;
 - API access logs and Lambda log groups retain 90 days;
-- the public UI shows the one fixture connector card plus capability-mode
-  definitions, reports zero hosted recorded/blocked evidence without rendering
-  unavailable cards, and never claims signed-out OAuth/account setup;
-- the evaluator projection and current retrieval head are durable and contain
-  only the approved deterministic non-PII seed;
+- the public UI shows seven account-scoped fixture connector cards plus
+  capability-mode definitions, reports zero hosted recorded/blocked evidence
+  without rendering unavailable cards, and never claims signed-out OAuth/account
+  setup;
+- the evaluator identity marker, approval/execution state, and current retrieval
+  head are durable and contain only approved deterministic non-PII data; inbox
+  rows and connector cards are regenerated from the source-owned V2 corpus;
 - **Create concise revision** sends the exact bounded instruction, produces a
   different, shorter immutable revision 2 with unchanged citations/factual
   count and passed validation, then prepare -> approve creates only an

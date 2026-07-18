@@ -112,6 +112,15 @@ describe('foundation contracts', () => {
       }).success,
     ).toBe(false);
     expect(
+      listCommunicationsInputSchema.safeParse({
+        limit: 10,
+        query: 'board update',
+        channel: 'gmail',
+        accountFilter: 'account-a',
+        brandFilter: 'brand-a',
+      }).success,
+    ).toBe(true);
+    expect(
       mcpSearchKnowledgeInputSchema.safeParse({
         queryText: 'delivery date',
         exactEntityRefs: [],

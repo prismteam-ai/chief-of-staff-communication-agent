@@ -57,6 +57,9 @@ export const communicationSummaryViewSchema = z
     threadId: threadIdSchema,
     direction: z.enum(['inbound', 'outbound']),
     status: communicationStatusSchema,
+    channel: z.string().trim().min(1).max(80),
+    accountId: accountIdSchema,
+    brandId: brandIdSchema,
     senderDisplayName: z.string().min(1).max(200).optional(),
     recipientDisplayNames: z.array(z.string().min(1).max(200)),
     subject: z.string().max(998).optional(),
@@ -128,6 +131,10 @@ export const connectorStatusViewSchema = z
 export const listCommunicationsInputSchema = z
   .object({
     status: z.enum(['pending', 'answered', 'overdue', 'resolved']).optional(),
+    query: z.string().trim().min(1).max(200).optional(),
+    channel: z.string().trim().min(1).max(80).optional(),
+    accountFilter: accountIdSchema.optional(),
+    brandFilter: brandIdSchema.optional(),
     limit: z.number().int().positive().max(100),
     cursor: z.string().min(1).optional(),
   })
@@ -136,6 +143,7 @@ export const listCommunicationsInputSchema = z
 export const listCommunicationsResultSchema = z
   .object({
     items: z.array(communicationSummaryViewSchema),
+    totalCount: z.number().int().nonnegative(),
     nextCursor: z.string().min(1).optional(),
   })
   .strict();

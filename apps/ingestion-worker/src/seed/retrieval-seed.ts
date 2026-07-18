@@ -1,9 +1,6 @@
-import { createHash } from 'node:crypto';
-
 import {
-  deterministicEvaluatorIdentityV1,
+  deterministicEvaluatorIdentityV2,
   immutableBlobRefSchema,
-  type ConnectorSnapshot,
   type ImmutableBlobRef,
 } from '@chief/contracts';
 import {
@@ -32,10 +29,7 @@ import {
   type StagedMutationDocumentV1,
 } from '@chief/rag';
 
-import {
-  CompactingRetrievalRegistrar,
-  S3RetrievalMutationSink,
-} from '../aws-composition.js';
+import { S3RetrievalMutationSink } from '../aws-composition.js';
 import {
   DeterministicRetrievalMutationSink,
   InMemoryIngestionStore,
@@ -44,50 +38,37 @@ import {
 import { CanonicalIngestionPipeline } from '../pipeline.js';
 import type {
   CanonicalWrite,
-  GmailRecord,
   IngestionEvent,
   IngestionWorkItem,
 } from '../types.js';
+import {
+  buildHostedEvaluatorCorpusV2,
+  HOSTED_CORPUS_SEED_AT,
+  hostedEvaluatorBrandCountsV2,
+  hostedEvaluatorChannelCountsV2,
+} from './hosted-corpus.js';
 
-const SEED_AT = '2026-07-17T12:00:00.000Z';
-const SEED_VERSION = 'chief-evaluator-retrieval-seed.v1';
+const SEED_VERSION = 'chief-evaluator-retrieval-seed.v2';
 const NON_SECRET_DIGEST_BYTE = 71;
 
 export const evaluatorRetrievalScope = retrievalScopeSchema.parse({
   derivation: 'server_grants',
-  tenantId: deterministicEvaluatorIdentityV1.tenantId,
-  accountIds: [deterministicEvaluatorIdentityV1.accountId],
-  brandIds: [deterministicEvaluatorIdentityV1.brandId],
-  authorizationEpoch: deterministicEvaluatorIdentityV1.authorizationEpoch,
-  scopeHash: deterministicEvaluatorIdentityV1.scopeHash,
+  tenantId: deterministicEvaluatorIdentityV2.tenantId,
+  accountIds: deterministicEvaluatorIdentityV2.accountIds,
+  brandIds: deterministicEvaluatorIdentityV2.brandIds,
+  authorizationEpoch: deterministicEvaluatorIdentityV2.authorizationEpoch,
+  scopeHash: deterministicEvaluatorIdentityV2.scopeHash,
   role: 'factual',
 });
-
-const corpus = Object.freeze([
-  Object.freeze({
-    providerMessageId: 'evaluator-message-1',
-    providerThreadId: 'evaluator-thread-1',
-    sourceTimestamp: '2026-07-17T10:52:00.000Z',
-    sender: 'synthetic-jordan@example.invalid',
-    subject: 'Friday launch decision',
-    body: 'Can we confirm the Friday launch and the owner for QA? The Friday launch decision is pending confirmation of the QA owner.',
-  }),
-  Object.freeze({
-    providerMessageId: 'evaluator-message-2',
-    providerThreadId: 'evaluator-thread-2',
-    sourceTimestamp: '2026-07-17T11:06:00.000Z',
-    sender: 'synthetic-priya@example.invalid',
-    subject: 'Board update numbers',
-    body: 'Please send the approved pipeline numbers for the board note.',
-  }),
-]);
 
 export const evaluatorRetrievalSeedId = sha256Bytes(
   canonicalJson({
     seedVersion: SEED_VERSION,
-    identity: deterministicEvaluatorIdentityV1,
+    identity: deterministicEvaluatorIdentityV2,
     scope: evaluatorRetrievalScope,
-    corpus,
+    corpus: deterministicEvaluatorIdentityV2.corpus,
+    channelCounts: hostedEvaluatorChannelCountsV2,
+    brandCounts: hostedEvaluatorBrandCountsV2,
   }),
 );
 
@@ -111,8 +92,13 @@ export interface EvaluatorRetrievalSeedResult {
   readonly authorizationEpoch: 1;
   readonly manifestHash: string;
   readonly generation: number;
-  readonly chunkCount: 2;
-  readonly sourceCount: 2;
+  readonly chunkCount: 1_120;
+  readonly sourceCount: 1_120;
+  readonly threadCount: 160;
+  readonly accountCount: 7;
+  readonly brandCount: 2;
+  readonly channelCounts: typeof hostedEvaluatorChannelCountsV2;
+  readonly brandCounts: typeof hostedEvaluatorBrandCountsV2;
 }
 
 export class EvaluatorRetrievalSeedError extends Error {
@@ -161,74 +147,13 @@ class PreviewArtifactStore implements ImmutableRetrievalArtifactStore {
   }
 }
 
-function sha256(value: string): string {
-  return createHash('sha256').update(value, 'utf8').digest('hex');
-}
-
-function workItem(
-  item: (typeof corpus)[number],
-  index: number,
-): IngestionWorkItem {
-  const record: GmailRecord = {
-    kind: 'gmail',
-    id: item.providerMessageId,
-    threadId: item.providerThreadId,
-    internalDate: String(Date.parse(item.sourceTimestamp)),
-    labels: ['INBOX'],
-    direction: 'inbound',
-    headers: {
-      From: item.sender,
-      To: 'public-evaluator@example.invalid',
-      Subject: item.subject,
-    },
-    textBody: item.body,
-    attachments: [],
-  };
-  const serializedRecord = canonicalJson(record);
-  const rawContentHash = sha256(serializedRecord);
-  const connectorSnapshot: ConnectorSnapshot = {
-    connectorId: deterministicEvaluatorIdentityV1.connector.connectorId,
-    descriptorVersion:
-      deterministicEvaluatorIdentityV1.connector.descriptorVersion,
-    accountId: deterministicEvaluatorIdentityV1.accountId,
-    capabilitySnapshotHash:
-      deterministicEvaluatorIdentityV1.connector.capabilitySnapshotHash,
-    runtimeMode: deterministicEvaluatorIdentityV1.connector.runtimeMode,
-    selectionState: 'selected',
-  };
-  return {
-    schemaVersion: '1',
-    workItemId: `evaluator-seed-work-${String(index + 1)}`,
-    source: 'gmail',
-    tenantId: deterministicEvaluatorIdentityV1.tenantId,
-    accountId: deterministicEvaluatorIdentityV1.accountId,
-    connectorSnapshot,
-    rawReference: immutableBlobRefSchema.parse({
-      schemaVersion: '1',
-      tenantId: deterministicEvaluatorIdentityV1.tenantId,
-      bucketRef: 'deterministic-evaluator-fixture',
-      objectKey: `synthetic/gmail/${item.providerMessageId}`,
-      objectVersion: rawContentHash,
-      contentHash: rawContentHash,
-      byteLength: new TextEncoder().encode(serializedRecord).byteLength,
-      mediaType: 'application/json',
-      encryptionKeyRef: 'deterministic-evaluator-fixture',
-      retentionPolicyVersion: '1',
-    }),
-    record,
-    authorizationEpoch: evaluatorRetrievalScope.authorizationEpoch,
-    scopeHash: evaluatorRetrievalScope.scopeHash,
-    brandIds: [deterministicEvaluatorIdentityV1.brandId],
-  };
-}
-
 async function canonicalSeedWrites(): Promise<
   readonly {
     readonly workItem: IngestionWorkItem;
     readonly canonical: CanonicalWrite;
   }[]
 > {
-  const workItems = corpus.map(workItem);
+  const workItems = buildHostedEvaluatorCorpusV2().workItems;
   const store = new InMemoryIngestionStore();
   const pipeline = new CanonicalIngestionPipeline({
     store,
@@ -240,34 +165,46 @@ async function canonicalSeedWrites(): Promise<
     }),
     retrievalSink: new DeterministicRetrievalMutationSink(),
     retrievalRegistrar: new RecordingRetrievalIndex(),
-    now: () => new Date(SEED_AT),
+    now: () => new Date(HOSTED_CORPUS_SEED_AT),
   });
-  const event: IngestionEvent = {
-    schemaVersion: '1',
-    invocationId: 'deterministic-evaluator-retrieval-seed-v1',
-    receivedAt: SEED_AT,
-    workItems,
-  };
-  const result = await pipeline.process(event);
+  let processed = 0;
+  for (let offset = 0; offset < workItems.length; offset += 1_000) {
+    const event: IngestionEvent = {
+      schemaVersion: '1',
+      invocationId: `deterministic-evaluator-retrieval-seed-v2-${String(
+        offset / 1_000 + 1,
+      )}`,
+      receivedAt: HOSTED_CORPUS_SEED_AT,
+      workItems: workItems.slice(offset, offset + 1_000),
+    };
+    const result = await pipeline.process(event);
+    if (result.status !== 'complete' || result.quarantined !== 0)
+      throw new EvaluatorRetrievalSeedError('SEED_CANONICALIZATION_FAILED');
+    processed += result.processed;
+  }
   if (
-    result.status !== 'complete' ||
-    result.quarantined !== 0 ||
-    store.writes.length !== corpus.length
+    processed !== workItems.length ||
+    store.writes.length !== workItems.length
   )
     throw new EvaluatorRetrievalSeedError('SEED_CANONICALIZATION_FAILED');
-  return store.writes.map((write, index) => {
-    const identity = deterministicEvaluatorIdentityV1.communications[index];
+  const writes = store.writes.map((write, index) => ({
+    workItem: workItems[index] as IngestionWorkItem,
+    canonical: write.canonical,
+  }));
+  for (const anchor of deterministicEvaluatorIdentityV2.anchorOverlays) {
+    const write = writes.find(
+      ({ workItem }) =>
+        workItem.record.kind === 'gmail' &&
+        workItem.record.id === anchor.providerMessageId,
+    );
     if (
-      identity === undefined ||
+      write === undefined ||
       write.canonical.source === 'asana' ||
-      write.canonical.thread.threadId !== identity.retrievalExactEntityRef
+      write.canonical.thread.threadId !== anchor.retrievalExactEntityRef
     )
       throw new EvaluatorRetrievalSeedError('SEED_IDENTITY_DRIFT');
-    return {
-      workItem: workItems[index] as IngestionWorkItem,
-      canonical: write.canonical,
-    };
-  });
+  }
+  return Object.freeze(writes);
 }
 
 function withoutSchemaVersion(
@@ -426,14 +363,6 @@ function sameScope(left: RetrievalScope, right: RetrievalScope): boolean {
 export async function seedEvaluatorRetrieval(
   dependencies: EvaluatorRetrievalSeedDependencies,
 ): Promise<EvaluatorRetrievalSeedResult> {
-  const producer = new DeterministicEffectDisabledEmbedding();
-  const writes = await canonicalSeedWrites();
-  const expectedDocumentsValue = await expectedDocuments(writes, producer);
-  const expected = expectedDocumentsValue.map(({ record }) =>
-    withoutSchemaVersion(record),
-  );
-  if (expected.length !== 2)
-    throw new EvaluatorRetrievalSeedError('SEED_CORPUS_INVALID');
   const memory = dependencies.memory.sample();
   if (
     !Number.isFinite(memory.rssBytes) ||
@@ -443,14 +372,20 @@ export async function seedEvaluatorRetrieval(
     memory.rssBytes / memory.limitBytes >= 0.6
   )
     throw new EvaluatorRetrievalSeedError('SEED_MEMORY_LIMIT');
-
   const epoch = await dependencies.readAuthorizationEpoch();
   if (
     epoch !== undefined &&
     epoch !== evaluatorRetrievalScope.authorizationEpoch
   )
     throw new EvaluatorRetrievalSeedError('SEED_AUTHORIZATION_EPOCH_DRIFT');
-
+  const producer = new DeterministicEffectDisabledEmbedding();
+  const writes = await canonicalSeedWrites();
+  const expectedDocumentsValue = await expectedDocuments(writes, producer);
+  const expected = expectedDocumentsValue.map(({ record }) =>
+    withoutSchemaVersion(record),
+  );
+  if (expected.length !== deterministicEvaluatorIdentityV2.corpus.messageCount)
+    throw new EvaluatorRetrievalSeedError('SEED_CORPUS_INVALID');
   let head;
   try {
     head = await dependencies.authority.getHead(evaluatorRetrievalScope);
@@ -484,16 +419,55 @@ export async function seedEvaluatorRetrieval(
     embeddingProfileManifestHash: producer.profileManifestHash,
     embeddingProfileId: producer.profileId,
     vectorDimension: producer.dimension,
-    now: () => new Date(SEED_AT),
+    now: () => new Date(HOSTED_CORPUS_SEED_AT),
   });
-  const registrar = new CompactingRetrievalRegistrar(
-    dependencies.authority,
-    compactor,
+  const writer = new S3RetrievalMutationSink(
+    dependencies.artifacts,
+    producer,
+    evaluatorRetrievalScope,
   );
-  const writer = new S3RetrievalMutationSink(dependencies.artifacts, producer);
-  for (const write of writes) {
-    await registrar.register(await writer.stage(write));
+  for (let offset = 0; offset < writes.length; offset += 16) {
+    const batch = writes.slice(offset, offset + 16);
+    await Promise.all(
+      batch.map(async (write) => {
+        await dependencies.authority.register(await writer.stage(write));
+      }),
+    );
   }
+  const completeStaged = await listBoundedStagedRetrieval({
+    catalog: dependencies.authority,
+    scope: evaluatorRetrievalScope,
+  });
+  if (completeStaged.length !== expectedDocumentsValue.length)
+    throw new EvaluatorRetrievalSeedError('SEED_CATALOG_PARTIAL');
+  let compacted = false;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const currentHead = await dependencies.authority.getHead(
+      evaluatorRetrievalScope,
+    );
+    try {
+      await compactor.compactAndPromote({
+        scope: evaluatorRetrievalScope,
+        staged: completeStaged,
+        ...(currentHead === undefined
+          ? {}
+          : {
+              expectedHeadManifestHash: currentHead.manifest.manifestHash,
+            }),
+      });
+      compacted = true;
+      break;
+    } catch (error) {
+      if (
+        !(error instanceof BoundedRetrievalError) ||
+        error.code !== 'INDEX_REFRESH_REQUIRED' ||
+        attempt === 2
+      )
+        throw error;
+    }
+  }
+  if (!compacted)
+    throw new EvaluatorRetrievalSeedError('SEED_COMPACTION_FAILED');
 
   const finalEpoch = await dependencies.readAuthorizationEpoch();
   if (finalEpoch !== evaluatorRetrievalScope.authorizationEpoch)
@@ -515,8 +489,10 @@ export async function seedEvaluatorRetrieval(
   if (canonicalJson(finalRecords) !== canonicalJson(expected))
     throw new EvaluatorRetrievalSeedError('SEED_FINAL_SNAPSHOT_DRIFT');
   if (
-    finalHead.manifest.chunkCount !== 2 ||
-    finalHead.manifest.sourceCount !== 2
+    finalHead.manifest.chunkCount !==
+      deterministicEvaluatorIdentityV2.corpus.messageCount ||
+    finalHead.manifest.sourceCount !==
+      deterministicEvaluatorIdentityV2.corpus.messageCount
   )
     throw new EvaluatorRetrievalSeedError('SEED_FINAL_IDENTITY_DRIFT');
 
@@ -529,7 +505,12 @@ export async function seedEvaluatorRetrieval(
     authorizationEpoch: 1,
     manifestHash: finalHead.manifest.manifestHash,
     generation: finalHead.generation,
-    chunkCount: 2,
-    sourceCount: 2,
+    chunkCount: deterministicEvaluatorIdentityV2.corpus.messageCount,
+    sourceCount: deterministicEvaluatorIdentityV2.corpus.messageCount,
+    threadCount: deterministicEvaluatorIdentityV2.corpus.threadCount,
+    accountCount: deterministicEvaluatorIdentityV2.corpus.accountCount,
+    brandCount: deterministicEvaluatorIdentityV2.corpus.brandCount,
+    channelCounts: hostedEvaluatorChannelCountsV2,
+    brandCounts: hostedEvaluatorBrandCountsV2,
   });
 }

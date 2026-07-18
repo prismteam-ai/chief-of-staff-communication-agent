@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   citationSchema,
   deterministicEvaluatorIdentityV1,
+  deterministicEvaluatorIdentityV2,
   messageRevisionIdSchema,
   retrievalCandidateSchema,
   serverRequestContextSchema,
   tenantIdSchema,
+  type CommunicationSummaryView,
 } from '@chief/contracts';
 import type { RecommendationArtifact } from '@chief/agent/application-agent';
 import { deterministicId } from '@chief/agent/canonical';
@@ -137,6 +139,191 @@ function topicalBoundaryRetrieval(
 }
 
 describe('durable hosted product vertical', () => {
+  it('migrates to a small V2 marker and exposes the exact primary synthetic corpus', async () => {
+    const repository = new MemoryDurableProductRepository();
+    const service = new DurableProductService(
+      repository,
+      { search: () => Promise.reject(new Error('MUST_NOT_QUERY')) },
+      'https://chief.example.test',
+    );
+    const context = createDurableRequestContext();
+    const communications: CommunicationSummaryView[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await service.listCommunications(context, {
+        limit: 100,
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      expect(page.totalCount).toBe(1_120);
+      communications.push(...page.items);
+      cursor = page.nextCursor;
+    } while (cursor !== undefined);
+
+    expect(communications).toHaveLength(1_120);
+    expect(new Set(communications.map(({ threadId }) => threadId)).size).toBe(
+      160,
+    );
+    expect(
+      communications
+        .slice(0, 2)
+        .map(({ messageRevisionId }) => messageRevisionId),
+    ).toEqual(
+      deterministicEvaluatorIdentityV2.anchorOverlays.map(
+        ({ messageRevisionId }) => messageRevisionId,
+      ),
+    );
+    expect(JSON.stringify(communications)).not.toContain(
+      'tenant-demo-isolation',
+    );
+    expect(
+      communications.every(
+        ({ channel, accountId, brandId }) =>
+          channel.length > 0 && accountId.length > 0 && brandId.length > 0,
+      ),
+    ).toBe(true);
+
+    const searched = await service.listCommunications(context, {
+      query: 'Friday launch decision',
+      limit: 100,
+    });
+    expect(searched).toMatchObject({
+      totalCount: 1,
+      items: [{ messageRevisionId: 'message-revision-1-1', channel: 'gmail' }],
+    });
+    const gmail = await service.listCommunications(context, {
+      channel: 'gmail',
+      limit: 100,
+    });
+    expect(gmail.totalCount).toBe(161);
+    expect(gmail.items.every(({ channel }) => channel === 'gmail')).toBe(true);
+    const account = await service.listCommunications(context, {
+      accountFilter: deterministicEvaluatorIdentityV2.accountIds[1],
+      limit: 100,
+    });
+    expect(account.totalCount).toBe(161);
+    expect(
+      account.items.every(
+        ({ accountId }) =>
+          accountId === deterministicEvaluatorIdentityV2.accountIds[1],
+      ),
+    ).toBe(true);
+    const brand = await service.listCommunications(context, {
+      brandFilter: 'brand-harbor',
+      limit: 100,
+    });
+    expect(brand.totalCount).toBe(483);
+    expect(brand.items.every(({ brandId }) => brandId === 'brand-harbor')).toBe(
+      true,
+    );
+    const gmailFirst = await service.listCommunications(context, {
+      channel: 'gmail',
+      limit: 1,
+    });
+    expect(gmailFirst.nextCursor).toBeDefined();
+    const gmailSecond = await service.listCommunications(context, {
+      channel: 'gmail',
+      limit: 1,
+      cursor: gmailFirst.nextCursor,
+    });
+    expect(gmailSecond.items[0]?.messageRevisionId).not.toBe(
+      gmailFirst.items[0]?.messageRevisionId,
+    );
+    await expect(
+      service.listCommunications(context, {
+        channel: 'sms',
+        limit: 1,
+        cursor: gmailFirst.nextCursor,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_CURSOR' });
+
+    await expect(
+      service.dashboardMetrics(context, { window: '7d' }),
+    ).resolves.toMatchObject({
+      totalCommunications: 1_120,
+      channelBreakdown: [
+        { channel: 'gmail', count: 161 },
+        { channel: 'microsoft_graph', count: 161 },
+        { channel: 'sms', count: 161 },
+        { channel: 'whatsapp', count: 161 },
+        { channel: 'x', count: 161 },
+        { channel: 'linkedin_archive', count: 161 },
+        { channel: 'future_demo', count: 154 },
+      ],
+    });
+    const connectorResult = await service.getConnectorStatus(context, {});
+    expect(connectorResult.connectors).toHaveLength(7);
+    expect(
+      connectorResult.connectors.map(({ accountId }) => accountId),
+    ).toEqual(deterministicEvaluatorIdentityV2.accountIds);
+    expect(
+      new Set(connectorResult.connectors.map(({ brandId }) => brandId)),
+    ).toEqual(new Set(deterministicEvaluatorIdentityV2.brandIds));
+    expect(
+      connectorResult.connectors.every(
+        ({ runtimeMode, capabilities }) =>
+          (runtimeMode === 'fixture' || runtimeMode === 'manual') &&
+          !capabilities.externalEffect,
+      ),
+    ).toBe(true);
+    await expect(
+      service.getThreadContext(context, { threadId: 'thread-1', limit: 100 }),
+    ).resolves.toMatchObject({ thread: { channel: 'gmail' } });
+
+    const marker = await repository.getCurrent(
+      deterministicEvaluatorIdentityV2.tenantId,
+      'hosted-projection-marker',
+      'public-evaluator-v2',
+    );
+    expect(marker).toMatchObject({
+      revisionId: 'hosted-projection-marker-v2',
+      value: {
+        projectionVersion: 'chief-hosted-projection.v2',
+        corpusHash: deterministicEvaluatorIdentityV2.corpus.corpusHash,
+        messageCount: 1_120,
+      },
+    });
+    expect(Buffer.byteLength(JSON.stringify(marker?.value))).toBeLessThan(
+      1_024,
+    );
+    await expect(
+      service.listCommunications(context, { limit: 1 }),
+    ).resolves.toMatchObject({
+      items: [{ messageRevisionId: 'message-revision-1-1' }],
+    });
+    await expect(
+      repository.getCurrent(
+        deterministicEvaluatorIdentityV2.tenantId,
+        'hosted-projection',
+        'public-evaluator',
+      ),
+    ).resolves.toBeUndefined();
+  }, 30_000);
+
+  it('fails closed when the durable V2 marker is partial or drifted', async () => {
+    const repository = new MemoryDurableProductRepository();
+    await repository.putRevision(deterministicEvaluatorIdentityV2.tenantId, {
+      entityType: 'hosted-projection-marker',
+      entityId: 'public-evaluator-v2',
+      revisionId: 'hosted-projection-marker-v2',
+      version: 1,
+      committedAt: deterministicEvaluatorIdentityV2.corpus.generatedAt,
+      value: {
+        schemaVersion: '1',
+        projectionVersion: 'chief-hosted-projection.v2',
+        corpusHash: '0'.repeat(64),
+        messageCount: 2,
+      },
+    });
+    const service = new DurableProductService(
+      repository,
+      { search: () => Promise.reject(new Error('MUST_NOT_QUERY')) },
+      'https://chief.example.test',
+    );
+    await expect(
+      service.listCommunications(createDurableRequestContext(), { limit: 1 }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+  });
+
   it('creates a cited draft from two production-shaped same-source facts', async () => {
     const chunkIds = [
       'h1_deterministic_evaluator_seed_v1_JGYh0xduVhg2BiF1PyZrcgLcyji29sijg1ilMuD-qFY:3ec5dd5bdc24a0edef761555d9100bc853213236ec37ed74a80923f287fcc4cc',

@@ -5,6 +5,11 @@ import { userEvent } from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
+import {
+  communicationSummaryViewSchema,
+  type CommunicationSummaryView,
+} from '@chief/contracts';
+
 import { App } from './App.js';
 
 const {
@@ -93,9 +98,17 @@ function arrangeHostedProjection() {
     foundationOnly: false,
   });
   browserApiMock.dashboardMetrics.mockResolvedValue({
-    totalCommunications: 2,
+    totalCommunications: 1_120,
     pendingApprovalCount: 0,
-    channelBreakdown: [{ channel: 'email', count: 2 }],
+    channelBreakdown: [
+      { channel: 'gmail', count: 161 },
+      { channel: 'microsoft_graph', count: 161 },
+      { channel: 'sms', count: 161 },
+      { channel: 'whatsapp', count: 161 },
+      { channel: 'x', count: 161 },
+      { channel: 'linkedin_archive', count: 161 },
+      { channel: 'future_demo', count: 154 },
+    ],
     snapshot: {
       schemaVersion: '1',
       window: '7d',
@@ -117,6 +130,9 @@ function arrangeHostedProjection() {
         threadId: 'thread-1',
         direction: 'inbound',
         status: 'overdue',
+        channel: 'gmail',
+        accountId: 'account-gmail-fixture',
+        brandId: 'brand-northstar',
         senderDisplayName: 'Jordan Lee',
         recipientDisplayNames: ['Avery Morgan'],
         subject: 'Friday launch decision',
@@ -132,6 +148,9 @@ function arrangeHostedProjection() {
         threadId: 'thread-2',
         direction: 'inbound',
         status: 'pending',
+        channel: 'microsoft_graph',
+        accountId: 'account-graph-fixture',
+        brandId: 'brand-harbor',
         senderDisplayName: 'Priya Shah',
         recipientDisplayNames: ['Avery Morgan'],
         subject: 'Board update numbers',
@@ -142,16 +161,26 @@ function arrangeHostedProjection() {
         productUrl: 'https://chief.example/communications/message-revision-2-1',
       },
     ],
+    totalCount: 1_120,
+    nextCursor: 'page-2',
   });
-  browserApiMock.getConnectorStatus.mockResolvedValue([
-    {
-      accountId: 'account-evaluator',
-      brandId: 'brand-evaluator',
-      connectorId: 'gmail',
-      displayLabel: 'Deterministic evaluator Gmail data',
-      provider: 'gmail',
+  browserApiMock.getConnectorStatus.mockResolvedValue(
+    [
+      ['gmail', 'account-gmail-fixture', 'brand-northstar'],
+      ['microsoft_graph', 'account-graph-fixture', 'brand-harbor'],
+      ['sms', 'account-sms-fixture', 'brand-northstar'],
+      ['whatsapp', 'account-whatsapp-fixture', 'brand-harbor'],
+      ['x', 'account-x-fixture', 'brand-northstar'],
+      ['linkedin_archive', 'account-linkedin-fixture', 'brand-harbor'],
+      ['future_demo', 'account-demo-fixture', 'brand-northstar'],
+    ].map(([channel, accountId, brandId]) => ({
+      accountId,
+      brandId,
+      connectorId: channel,
+      displayLabel: `${channel} synthetic evaluator fixture`,
+      provider: channel,
       connectorKind: 'communication',
-      channel: 'email',
+      channel,
       status: 'active',
       health: 'healthy',
       runtimeMode: 'fixture',
@@ -164,8 +193,8 @@ function arrangeHostedProjection() {
         threads: true,
         attachments: true,
         deliveryFeedback: false,
-        multipleAccounts: false,
-        historicalBackfill: false,
+        multipleAccounts: true,
+        historicalBackfill: true,
         externalEffect: false,
         replyCorrelation: true,
         complaintFeedback: false,
@@ -175,9 +204,9 @@ function arrangeHostedProjection() {
         consentWindowEligibility: false,
       },
       lastSyncAt: '2026-07-17T12:00:00.000Z',
-      productUrl: 'https://chief.example/settings/connectors/gmail',
-    },
-  ]);
+      productUrl: `https://chief.example/settings/connectors/${channel}`,
+    })),
+  );
 }
 
 function arrangeHostedThread() {
@@ -374,14 +403,14 @@ describe('executive evaluator application', () => {
     expect(
       await screen.findByText('Durable hosted evaluator data.'),
     ).toBeTruthy();
-    expect(screen.getByTestId('metric-volume').textContent).toContain('2');
+    expect(screen.getByTestId('metric-volume').textContent).toContain('1,120');
     expect(screen.getByTestId('metric-pending').textContent).toContain(
       '0 awaiting approval',
     );
     expect(screen.getByTestId('nav-pending-approval-count').textContent).toBe(
       '0',
     );
-    expect(screen.getByRole('link', { name: 'View all 2' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'View all 1,120' })).toBeTruthy();
     expect(
       screen
         .getByText('Friday launch decision')
@@ -391,7 +420,7 @@ describe('executive evaluator application', () => {
     expect(screen.queryByText('Taylor Reed')).toBeNull();
   });
 
-  it('labels hosted evidence as fixed-scope email and static activity as demonstration-only', async () => {
+  it('labels the hosted multichannel corpus and static activity truthfully', async () => {
     arrangeHostedProjection();
     renderRoute('/overview');
 
@@ -402,25 +431,151 @@ describe('executive evaluator application', () => {
       'Demonstration only',
     );
     expect(screen.getByTestId('activity-source-label').textContent).toContain(
-      'hosted fixed-scope email projection',
+      'hosted multichannel corpus',
     );
 
     cleanup();
     renderRoute('/inbox');
     expect(
-      await screen.findByText('Fixed-scope email communications'),
+      await screen.findByText('Server-authoritative multichannel corpus'),
     ).toBeTruthy();
     expect(
-      screen.getByText(/two fixed-scope email seed communications/i),
+      screen.getByText(/complete deterministic 1,120-message corpus/i),
+    ).toBeTruthy();
+    expect(await screen.findByText(/showing 2 of 1,120/i)).toBeTruthy();
+    expect(screen.getByText('Gmail')).toBeTruthy();
+    expect(
+      screen.getByText(/account-gmail-fixture · brand-northstar/i),
     ).toBeTruthy();
 
     cleanup();
     renderRoute('/evidence');
     expect(
-      await screen.findByText(/fixed-scope email communication queue/i),
+      await screen.findByText(/1,120-message corpus across seven hosted/i),
     ).toBeTruthy();
     expect(screen.getByText(/demonstration-only/i)).toBeTruthy();
-    expect(document.body.textContent).not.toMatch(/cross-channel/i);
+  });
+
+  it('uses server-side channel and query filters with authoritative totals', async () => {
+    const user = userEvent.setup();
+    arrangeHostedProjection();
+    renderRoute('/inbox');
+
+    expect(
+      await screen.findByText(/showing 2 of 1,120 matching communications/i),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Load 100 more' })).toBeTruthy();
+    await user.selectOptions(
+      screen.getByTestId('inbox-channel-filter'),
+      'microsoft_graph',
+    );
+    await user.type(screen.getByLabelText('Search communications'), 'board');
+
+    await waitFor(() => {
+      expect(browserApiMock.listCommunications).toHaveBeenCalledWith({
+        limit: 100,
+        query: 'board',
+        channel: 'microsoft_graph',
+      });
+    });
+  });
+
+  it('discards a stale pagination response across an A-B-A server filter cycle', async () => {
+    const user = userEvent.setup();
+    arrangeHostedProjection();
+    renderRoute('/inbox');
+
+    expect(
+      await screen.findByText(/showing 2 of 1,120 matching communications/i),
+    ).toBeTruthy();
+
+    type PageResult = Readonly<{
+      items: readonly CommunicationSummaryView[];
+      totalCount: number;
+      nextCursor?: string;
+    }>;
+    let resolveStalePage!: (value: PageResult) => void;
+    const stalePage = new Promise<PageResult>((resolve) => {
+      resolveStalePage = resolve;
+    });
+    browserApiMock.listCommunications
+      .mockImplementationOnce(() => stalePage)
+      .mockResolvedValueOnce({
+        items: [
+          communicationSummaryViewSchema.parse({
+            messageId: 'message-filtered',
+            messageRevisionId: 'message-revision-filtered-1',
+            revision: 1,
+            threadId: 'thread-filtered',
+            direction: 'inbound',
+            status: 'pending',
+            channel: 'microsoft_graph',
+            accountId: 'account-graph-fixture',
+            brandId: 'brand-harbor',
+            senderDisplayName: 'Priya Shah',
+            recipientDisplayNames: ['Avery Morgan'],
+            subject: 'Filtered board update',
+            excerpt: 'Only the filtered Graph result should remain visible.',
+            attachmentCount: 0,
+            sourceTimestamp: '2026-07-17T11:07:00.000Z',
+            productUrl:
+              'https://chief.example/communications/message-revision-filtered-1',
+          }),
+        ],
+        totalCount: 1,
+      });
+
+    await user.click(screen.getByRole('button', { name: 'Load 100 more' }));
+    await user.selectOptions(
+      screen.getByTestId('inbox-channel-filter'),
+      'microsoft_graph',
+    );
+
+    expect(
+      await screen.findByText(/showing 1 of 1 matching communications/i),
+    ).toBeTruthy();
+    expect(screen.getByText('Filtered board update')).toBeTruthy();
+
+    await user.selectOptions(screen.getByTestId('inbox-channel-filter'), 'all');
+    expect(
+      await screen.findByText(/showing 2 of 1,120 matching communications/i),
+    ).toBeTruthy();
+
+    resolveStalePage({
+      items: [
+        communicationSummaryViewSchema.parse({
+          messageId: 'message-stale-page',
+          messageRevisionId: 'message-revision-stale-page-1',
+          revision: 1,
+          threadId: 'thread-stale-page',
+          direction: 'inbound',
+          status: 'pending',
+          channel: 'gmail',
+          accountId: 'account-gmail-fixture',
+          brandId: 'brand-northstar',
+          senderDisplayName: 'Stale Sender',
+          recipientDisplayNames: ['Avery Morgan'],
+          subject: 'Stale unfiltered page',
+          excerpt: 'This response completed after the filter changed.',
+          attachmentCount: 0,
+          sourceTimestamp: '2026-07-17T11:08:00.000Z',
+          productUrl:
+            'https://chief.example/communications/message-revision-stale-page-1',
+        }),
+      ],
+      totalCount: 1_120,
+      nextCursor: 'stale-page-3',
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Stale unfiltered page')).toBeNull();
+      expect(
+        screen.getByText(/showing 2 of 1,120 matching communications/i),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: 'Load 100 more' }),
+      ).toBeTruthy();
+    });
   });
 
   it('labels approval examples separately from the zero-pending durable projection', async () => {
@@ -554,13 +709,13 @@ describe('executive evaluator application', () => {
     expect(apiClientMock.approvals.status.query).toHaveBeenCalledTimes(3);
   });
 
-  it('separates the one hosted fixture connector from zero-card mode definitions', async () => {
+  it('shows all seven hosted V2 fixture connectors', async () => {
     arrangeHostedProjection();
     renderRoute('/connections');
 
-    expect(await screen.findAllByTestId('connector-card')).toHaveLength(1);
+    expect(await screen.findAllByTestId('connector-card')).toHaveLength(7);
     expect(screen.getByTestId('hosted-seed-fixture-count').textContent).toBe(
-      '1 fixed-scope hosted connector card',
+      '7 hosted connector cards',
     );
     expect(screen.getByTestId('hosted-seed-recorded-count').textContent).toBe(
       '0 hosted evidence cards',

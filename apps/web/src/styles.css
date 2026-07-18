@@ -943,6 +943,7 @@ main {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .search-control {
@@ -1009,6 +1010,25 @@ main {
 
 .select-control > svg:last-child {
   pointer-events: none;
+}
+
+.inbox-loading {
+  min-height: 140px;
+  padding: 48px 20px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.inbox-pagination {
+  display: flex;
+  min-height: 64px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 11px;
 }
 
 .inbox-heading,

@@ -30,6 +30,7 @@
     "@chief/connector-twilio": "workspace:*",
     "@chief/connector-x": "workspace:*",
     "@chief/contracts": "workspace:*",
+    "@chief/demo-fixtures": "workspace:*",
     "@chief/domain": "workspace:*",
     "@chief/observability": "workspace:*",
     "@chief/persistence-dynamodb": "workspace:*",

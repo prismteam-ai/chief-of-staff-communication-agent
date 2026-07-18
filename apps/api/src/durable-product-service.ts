@@ -15,6 +15,7 @@ import {
   connectorSnapshotSchema,
   contextRequestSchema,
   deterministicEvaluatorIdentityV1,
+  deterministicEvaluatorIdentityV2,
   getApprovalStatusResultSchema,
   getCommunicationResultSchema,
   getConnectorStatusResultSchema,
@@ -35,6 +36,7 @@ import {
   type Citation,
   type RetrievalCandidate,
 } from '@chief/contracts';
+import { resetDemoCorpus } from '@chief/demo-fixtures';
 import {
   buildImmutableApprovalBundle,
   type OperationApprovalBinding,
@@ -62,10 +64,12 @@ import {
   type ProductService,
 } from './product-service.js';
 
-const TENANT_ID = deterministicEvaluatorIdentityV1.tenantId;
-const USER_ID = deterministicEvaluatorIdentityV1.userId;
-const ACCOUNT_ID = deterministicEvaluatorIdentityV1.accountId;
-const BRAND_ID = deterministicEvaluatorIdentityV1.brandId;
+const TENANT_ID = deterministicEvaluatorIdentityV2.tenantId;
+const USER_ID = deterministicEvaluatorIdentityV2.userId;
+const ACCOUNT_ID = deterministicEvaluatorIdentityV2.accountId;
+const BRAND_ID = deterministicEvaluatorIdentityV2.brandId;
+const ACCOUNT_IDS = deterministicEvaluatorIdentityV2.accountIds;
+const BRAND_IDS = deterministicEvaluatorIdentityV2.brandIds;
 const SEED_AT = '2026-07-17T12:00:00.000Z';
 const EXPIRES_AT = '2099-01-01T00:00:00.000Z';
 const RECIPIENT_DIGEST = `h1_v1_${'A'.repeat(43)}`;
@@ -373,6 +377,20 @@ interface SeedProjection {
   readonly communications: readonly CommunicationSummaryView[];
   readonly details: readonly CommunicationDetailView[];
   readonly connectors: readonly ConnectorStatusView[];
+  readonly channelByThread: Readonly<Record<string, string>>;
+  readonly marker: HostedProjectionMarkerV2;
+}
+
+interface HostedProjectionMarkerV2 {
+  readonly schemaVersion: '1';
+  readonly projectionVersion: 'chief-hosted-projection.v2';
+  readonly corpusHash: string;
+  readonly generatedAt: string;
+  readonly messageCount: 1_120;
+  readonly threadCount: 160;
+  readonly channelCount: 7;
+  readonly accountCount: 7;
+  readonly brandCount: 2;
 }
 
 interface StoredDraft {
@@ -405,120 +423,401 @@ function citation(sourceId: string, chunkId: string, label: string): Citation {
   });
 }
 
+const expectedChannelCounts = Object.freeze({
+  gmail: 161,
+  microsoft_graph: 161,
+  sms: 161,
+  whatsapp: 161,
+  x: 161,
+  linkedin_archive: 161,
+  future_demo: 154,
+});
+
+const anchorByCorpusRevision = new Map<
+  string,
+  (typeof deterministicEvaluatorIdentityV2.anchorOverlays)[number]
+>(
+  deterministicEvaluatorIdentityV2.anchorOverlays.map((anchor) => [
+    anchor.corpusMessageRevisionId,
+    anchor,
+  ]),
+);
+
+const anchorThreadByCorpusThread = new Map<string, string>(
+  deterministicEvaluatorIdentityV2.anchorOverlays.map((anchor) => [
+    anchor.corpusThreadId,
+    anchor.productThreadAlias,
+  ]),
+);
+
+function hostedAccountId(accountId: string): string {
+  return accountId === 'account-tenant-demo-northstar-gmail-00'
+    ? deterministicEvaluatorIdentityV2.accountId
+    : accountId;
+}
+
+function hostedThreadId(threadId: string): string {
+  return anchorThreadByCorpusThread.get(threadId) ?? threadId;
+}
+
+function connectorCapabilities(channel: string) {
+  const email = channel === 'gmail' || channel === 'microsoft_graph';
+  return {
+    read: true,
+    send: false,
+    webhook: false,
+    poll: false,
+    threads: true,
+    attachments: email,
+    deliveryFeedback: false,
+    multipleAccounts: true,
+    historicalBackfill: true,
+    externalEffect: false,
+    replyCorrelation: true,
+    complaintFeedback: false,
+    unsubscribeFeedback: false,
+    optOutFeedback: channel === 'sms' || channel === 'whatsapp',
+    reconsentFeedback: false,
+    consentWindowEligibility: channel === 'whatsapp',
+  } as const;
+}
+
 function createSeed(baseUrl: string): SeedProjection {
-  const launchIdentity = deterministicEvaluatorIdentityV1.communications[0];
-  const boardIdentity = deterministicEvaluatorIdentityV1.communications[1];
-  const summaries = [
-    communicationSummaryViewSchema.parse({
-      messageId: launchIdentity.messageId,
-      messageRevisionId: launchIdentity.messageRevisionId,
-      revision: 1,
-      threadId: launchIdentity.productThreadAlias,
-      direction: 'inbound',
-      status: 'overdue',
-      senderDisplayName: 'Jordan Lee',
-      recipientDisplayNames: ['Public evaluator'],
-      subject: 'Friday launch decision',
-      excerpt: 'Can we confirm the Friday launch and the owner for QA?',
-      attachmentCount: 1,
-      sourceTimestamp: '2026-07-17T10:52:00.000Z',
-      productUrl: productUrl(baseUrl, '/communications/message-revision-1-1'),
-    }),
-    communicationSummaryViewSchema.parse({
-      messageId: boardIdentity.messageId,
-      messageRevisionId: boardIdentity.messageRevisionId,
-      revision: 1,
-      threadId: boardIdentity.productThreadAlias,
-      direction: 'inbound',
-      status: 'pending',
-      senderDisplayName: 'Priya Shah',
-      recipientDisplayNames: ['Public evaluator'],
-      subject: 'Board update numbers',
-      excerpt: 'Please send the approved pipeline numbers for the board note.',
-      attachmentCount: 0,
-      sourceTimestamp: '2026-07-17T11:06:00.000Z',
-      productUrl: productUrl(baseUrl, '/communications/message-revision-2-1'),
-    }),
-  ];
-  const details = summaries.map((summary, index) =>
-    communicationDetailViewSchema.parse({
-      ...summary,
-      authoredText: summary.excerpt,
-      normalizedText: summary.excerpt,
-      attachments:
-        index === 0
-          ? [
-              {
-                attachmentId: 'attachment-launch-readiness',
-                fileName: 'launch-readiness.pdf',
-                mediaType: 'application/pdf',
-                byteLength: 24_576,
-                malwareState: 'clean',
-                productUrl: productUrl(
-                  baseUrl,
-                  '/attachments/attachment-launch-readiness',
-                ),
-              },
-            ]
-          : [],
-      citations: [
-        citation(
-          `source-communication-${index + 1}`,
-          `chunk-communication-${index + 1}`,
-          summary.subject ?? 'Communication',
-        ),
-      ],
-    }),
+  const corpus = resetDemoCorpus();
+  if (
+    corpus.manifest.corpusHash !==
+      deterministicEvaluatorIdentityV2.corpus.corpusHash ||
+    corpus.manifest.seed !== deterministicEvaluatorIdentityV2.corpus.seed ||
+    corpus.manifest.generatedAt !==
+      deterministicEvaluatorIdentityV2.corpus.generatedAt ||
+    corpus.manifest.resetVersion !==
+      deterministicEvaluatorIdentityV2.corpus.resetVersion ||
+    corpus.manifest.syntheticOnly !== true
+  )
+    throw new ProductServiceError(
+      'STALE_REVISION',
+      'The deterministic evaluator corpus manifest drifted.',
+    );
+
+  const primaryTenant = deterministicEvaluatorIdentityV2.corpus.primaryTenantId;
+  const revisions = new Map(
+    corpus.messageRevisions
+      .filter(({ tenantId }) => tenantId === primaryTenant)
+      .map((revision) => [revision.revisionId, revision]),
   );
-  const connectors = [
-    connectorStatusViewSchema.parse({
-      accountId: ACCOUNT_ID,
-      brandId: BRAND_ID,
-      connectorId: deterministicEvaluatorIdentityV1.connector.connectorId,
-      displayLabel: 'Deterministic evaluator Gmail data',
-      provider: 'gmail',
+  const states = new Map(
+    corpus.communicationStates
+      .filter(({ tenantId }) => tenantId === primaryTenant)
+      .map((state) => [state.messageRevisionId, state]),
+  );
+  const bodies = new Map(
+    corpus.bodies
+      .filter(
+        ({ tenantId, classification }) =>
+          tenantId === primaryTenant && classification === 'communication',
+      )
+      .map((body) => [body.sourceRef, body]),
+  );
+  const attachments = new Map(
+    corpus.attachments
+      .filter(({ tenantId }) => tenantId === primaryTenant)
+      .map((attachment) => [attachment.attachmentId, attachment]),
+  );
+  const accounts = corpus.accounts.filter(
+    ({ tenantId, channel }) =>
+      tenantId === primaryTenant && channel !== 'asana',
+  );
+  const accountById = new Map(
+    accounts.map((account) => [account.accountId, account]),
+  );
+  const channelCounts = new Map<string, number>();
+  const channelByThread: Record<string, string> = {};
+  const details: CommunicationDetailView[] = [];
+
+  for (const message of corpus.messages.filter(
+    ({ tenantId }) => tenantId === primaryTenant,
+  )) {
+    const revision = revisions.get(message.currentRevisionId);
+    const state = states.get(message.currentRevisionId);
+    if (revision === undefined || state === undefined)
+      throw new ProductServiceError(
+        'STALE_REVISION',
+        'The deterministic evaluator communication projection is partial.',
+      );
+    const account = accountById.get(revision.connectorSnapshot.accountId);
+    const body = bodies.get(revision.fullNormalizedBody.objectKey);
+    if (account === undefined || body === undefined)
+      throw new ProductServiceError(
+        'STALE_REVISION',
+        'The deterministic evaluator communication authority is partial.',
+      );
+    if (account.brandId === undefined)
+      throw new ProductServiceError(
+        'STALE_REVISION',
+        'The deterministic evaluator communication brand authority is partial.',
+      );
+    const channel = account.channel;
+    const accountId = hostedAccountId(account.accountId);
+    const threadId = hostedThreadId(revision.threadId);
+    const anchor = anchorByCorpusRevision.get(revision.revisionId);
+    const messageId = anchor?.messageId ?? revision.messageId;
+    const messageRevisionId = anchor?.messageRevisionId ?? revision.revisionId;
+    const anchorBody =
+      anchor === deterministicEvaluatorIdentityV2.anchorOverlays[0]
+        ? 'Can we confirm the Friday launch and the owner for QA? The Friday launch decision is pending confirmation of the QA owner.'
+        : anchor === deterministicEvaluatorIdentityV2.anchorOverlays[1]
+          ? 'Please send the approved pipeline numbers for the board note.'
+          : undefined;
+    const normalizedBody = anchorBody ?? body.bodyText;
+    const authoredText =
+      anchorBody ?? revision.currentAuthoredSegment.authoredText;
+    const subject =
+      anchor === deterministicEvaluatorIdentityV2.anchorOverlays[0]
+        ? 'Friday launch decision'
+        : anchor === deterministicEvaluatorIdentityV2.anchorOverlays[1]
+          ? 'Board update numbers'
+          : revision.subject;
+    const senderDisplayName =
+      anchor === deterministicEvaluatorIdentityV2.anchorOverlays[0]
+        ? 'Jordan Lee'
+        : anchor === deterministicEvaluatorIdentityV2.anchorOverlays[1]
+          ? 'Priya Shah'
+          : revision.sender.displayName;
+    const sourceTimestamp =
+      anchor === deterministicEvaluatorIdentityV2.anchorOverlays[0]
+        ? '2026-07-17T10:52:00.000Z'
+        : anchor === deterministicEvaluatorIdentityV2.anchorOverlays[1]
+          ? '2026-07-17T11:06:00.000Z'
+          : revision.sourceTimestamp;
+    const status =
+      anchor === deterministicEvaluatorIdentityV2.anchorOverlays[0]
+        ? 'overdue'
+        : anchor === deterministicEvaluatorIdentityV2.anchorOverlays[1]
+          ? 'pending'
+          : state.responseStatus === 'no_action'
+            ? 'resolved'
+            : state.responseStatus;
+    const summary = communicationSummaryViewSchema.parse({
+      messageId,
+      messageRevisionId,
+      revision: 1,
+      threadId,
+      direction: revision.direction,
+      status,
+      channel,
+      accountId,
+      brandId: account.brandId,
+      ...(senderDisplayName === undefined ? {} : { senderDisplayName }),
+      recipientDisplayNames: revision.recipients.map(
+        ({ displayName }) => displayName ?? 'Synthetic recipient',
+      ),
+      ...(subject === undefined ? {} : { subject }),
+      excerpt: authoredText.slice(0, 1_000),
+      attachmentCount:
+        anchor === deterministicEvaluatorIdentityV2.anchorOverlays[0]
+          ? 1
+          : revision.attachmentIds.length,
+      sourceTimestamp,
+      productUrl: productUrl(
+        baseUrl,
+        `/communications/${encodeURIComponent(messageRevisionId)}`,
+      ),
+    });
+    const viewAttachments =
+      anchor === deterministicEvaluatorIdentityV2.anchorOverlays[0]
+        ? [
+            {
+              attachmentId: 'attachment-launch-readiness',
+              fileName: 'launch-readiness.pdf',
+              mediaType: 'application/pdf',
+              byteLength: 24_576,
+              malwareState: 'clean' as const,
+              productUrl: productUrl(
+                baseUrl,
+                '/attachments/attachment-launch-readiness',
+              ),
+            },
+          ]
+        : revision.attachmentIds.map((attachmentId) => {
+            const attachment = attachments.get(attachmentId);
+            if (attachment === undefined)
+              throw new ProductServiceError(
+                'STALE_REVISION',
+                'The deterministic evaluator attachment projection is partial.',
+              );
+            return {
+              attachmentId: attachment.attachmentId,
+              fileName: attachment.fileName,
+              mediaType: attachment.mediaType,
+              byteLength: attachment.byteLength,
+              malwareState: attachment.malwareState,
+              productUrl: productUrl(
+                baseUrl,
+                `/attachments/${encodeURIComponent(attachment.attachmentId)}`,
+              ),
+            };
+          });
+    const sourceOrdinal =
+      anchor === deterministicEvaluatorIdentityV2.anchorOverlays[0]
+        ? '1'
+        : anchor === deterministicEvaluatorIdentityV2.anchorOverlays[1]
+          ? '2'
+          : sha256(messageRevisionId).slice(0, 24);
+    details.push(
+      communicationDetailViewSchema.parse({
+        ...summary,
+        authoredText,
+        normalizedText: normalizedBody,
+        attachments: viewAttachments,
+        citations: [
+          citation(
+            `source-communication-${sourceOrdinal}`,
+            `chunk-communication-${sourceOrdinal}`,
+            subject ?? `${channel} synthetic communication`,
+          ),
+        ],
+      }),
+    );
+    channelByThread[threadId] = channel;
+    channelCounts.set(channel, (channelCounts.get(channel) ?? 0) + 1);
+  }
+
+  const anchorOrder = new Map(
+    deterministicEvaluatorIdentityV2.anchorOverlays.map((anchor, index) => [
+      anchor.messageRevisionId,
+      index,
+    ]),
+  );
+  details.sort((left, right) => {
+    const leftAnchor = anchorOrder.get(left.messageRevisionId);
+    const rightAnchor = anchorOrder.get(right.messageRevisionId);
+    if (leftAnchor !== undefined || rightAnchor !== undefined)
+      return (leftAnchor ?? 2) - (rightAnchor ?? 2);
+    return (
+      left.sourceTimestamp.localeCompare(right.sourceTimestamp) ||
+      left.messageRevisionId.localeCompare(right.messageRevisionId)
+    );
+  });
+  const communications = details.map(
+    ({
+      authoredText: _authored,
+      normalizedText: _normalized,
+      attachments: _attachments,
+      citations: _citations,
+      ...summary
+    }) => communicationSummaryViewSchema.parse(summary),
+  );
+  const observedChannelCounts = Object.fromEntries(
+    [...channelCounts.entries()].sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
+  );
+  const expectedSortedChannelCounts = Object.fromEntries(
+    Object.entries(expectedChannelCounts).sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
+  );
+  if (
+    communications.length !==
+      deterministicEvaluatorIdentityV2.corpus.messageCount ||
+    new Set(communications.map(({ threadId }) => threadId)).size !==
+      deterministicEvaluatorIdentityV2.corpus.threadCount ||
+    accounts.length !== deterministicEvaluatorIdentityV2.corpus.accountCount ||
+    new Set(accounts.map(({ brandId }) => brandId)).size !==
+      deterministicEvaluatorIdentityV2.corpus.brandCount ||
+    canonicalSha256(observedChannelCounts) !==
+      canonicalSha256(expectedSortedChannelCounts) ||
+    deterministicEvaluatorIdentityV2.anchorOverlays.some(
+      ({ messageRevisionId }) =>
+        !communications.some(
+          (communication) =>
+            communication.messageRevisionId === messageRevisionId,
+        ),
+    )
+  )
+    throw new ProductServiceError(
+      'STALE_REVISION',
+      'The deterministic evaluator corpus count or anchor contract drifted.',
+    );
+
+  const connectors = accounts.map((account) => {
+    const accountId = hostedAccountId(account.accountId);
+    const gmail = account.channel === 'gmail';
+    return connectorStatusViewSchema.parse({
+      accountId,
+      brandId: account.brandId,
+      connectorId: gmail
+        ? deterministicEvaluatorIdentityV1.connector.connectorId
+        : account.snapshot.connectorId,
+      displayLabel: `${account.channel.replaceAll('_', ' ')} synthetic evaluator fixture`,
+      provider: account.provider,
       connectorKind: 'communication',
-      channel: 'email',
+      channel: account.channel,
       status: 'active',
       health: 'healthy',
-      runtimeMode: deterministicEvaluatorIdentityV1.connector.runtimeMode,
+      runtimeMode: gmail
+        ? deterministicEvaluatorIdentityV1.connector.runtimeMode
+        : account.snapshot.runtimeMode,
       selectionState: 'selected',
-      capabilities: {
-        read: true,
-        send: false,
-        webhook: false,
-        poll: false,
-        threads: true,
-        attachments: true,
-        deliveryFeedback: false,
-        multipleAccounts: false,
-        historicalBackfill: false,
-        externalEffect: false,
-        replyCorrelation: true,
-        complaintFeedback: false,
-        unsubscribeFeedback: false,
-        optOutFeedback: false,
-        reconsentFeedback: false,
-        consentWindowEligibility: false,
-      },
-      lastSyncAt: SEED_AT,
-      productUrl: productUrl(baseUrl, '/settings/connectors/gmail'),
-    }),
-  ];
-  return { communications: summaries, details, connectors };
+      capabilities: connectorCapabilities(account.channel),
+      lastSyncAt: corpus.manifest.generatedAt,
+      productUrl: productUrl(
+        baseUrl,
+        `/settings/connectors/${encodeURIComponent(account.snapshot.connectorId)}`,
+      ),
+    });
+  });
+  if (
+    canonicalSha256(connectors.map(({ accountId }) => accountId)) !==
+      canonicalSha256(ACCOUNT_IDS) ||
+    connectors.some(
+      ({ brandId }) => brandId === undefined || !BRAND_IDS.includes(brandId),
+    )
+  )
+    throw new ProductServiceError(
+      'STALE_REVISION',
+      'The deterministic evaluator connector authority drifted.',
+    );
+
+  const marker = Object.freeze({
+    schemaVersion: '1' as const,
+    projectionVersion: 'chief-hosted-projection.v2' as const,
+    corpusHash: deterministicEvaluatorIdentityV2.corpus.corpusHash,
+    generatedAt: deterministicEvaluatorIdentityV2.corpus.generatedAt,
+    messageCount: deterministicEvaluatorIdentityV2.corpus.messageCount,
+    threadCount: deterministicEvaluatorIdentityV2.corpus.threadCount,
+    channelCount: deterministicEvaluatorIdentityV2.corpus.channelCount,
+    accountCount: deterministicEvaluatorIdentityV2.corpus.accountCount,
+    brandCount: deterministicEvaluatorIdentityV2.corpus.brandCount,
+  });
+  return Object.freeze({
+    communications: Object.freeze(communications),
+    details: Object.freeze(details),
+    connectors: Object.freeze(connectors),
+    channelByThread: Object.freeze(channelByThread),
+    marker,
+  });
 }
 
-function encodeCursor(offset: number): string {
-  return Buffer.from(JSON.stringify({ offset }), 'utf8').toString('base64url');
+function encodeCursor(offset: number, binding: string): string {
+  return Buffer.from(
+    JSON.stringify({ version: 2, offset, binding }),
+    'utf8',
+  ).toString('base64url');
 }
 
-function decodeCursor(cursor: string | undefined): number {
+function decodeCursor(cursor: string | undefined, binding: string): number {
   if (cursor === undefined) return 0;
   try {
     const value = JSON.parse(
       Buffer.from(cursor, 'base64url').toString('utf8'),
-    ) as { offset?: unknown };
-    if (!Number.isSafeInteger(value.offset) || Number(value.offset) < 0)
+    ) as { version?: unknown; offset?: unknown; binding?: unknown };
+    if (
+      value.version !== 2 ||
+      value.binding !== binding ||
+      !Number.isSafeInteger(value.offset) ||
+      Number(value.offset) < 0
+    )
       throw new Error('bad');
     return Number(value.offset);
   } catch {
@@ -526,17 +825,33 @@ function decodeCursor(cursor: string | undefined): number {
   }
 }
 
+function communicationListBinding(input: {
+  readonly status?: string;
+  readonly query?: string;
+  readonly channel?: string;
+  readonly accountFilter?: string;
+  readonly brandFilter?: string;
+}): string {
+  return canonicalSha256({
+    status: input.status ?? null,
+    query: input.query?.trim().toLocaleLowerCase('en-US') ?? null,
+    channel: input.channel ?? null,
+    accountFilter: input.accountFilter ?? null,
+    brandFilter: input.brandFilter ?? null,
+  });
+}
+
 function evaluatorTopicForMessage(
   messageRevisionId: string,
 ): DeterministicEvidenceTopic | null {
   if (
     messageRevisionId ===
-    deterministicEvaluatorIdentityV1.communications[0].messageRevisionId
+    deterministicEvaluatorIdentityV2.anchorOverlays[0].messageRevisionId
   )
     return 'release_readiness';
   if (
     messageRevisionId ===
-    deterministicEvaluatorIdentityV1.communications[1].messageRevisionId
+    deterministicEvaluatorIdentityV2.anchorOverlays[1].messageRevisionId
   )
     return 'board_metrics';
   return null;
@@ -557,29 +872,41 @@ export class DurableProductService implements ProductService {
 
   async #projection(context: ProductRequestContext): Promise<SeedProjection> {
     this.#assertContext(context);
-    const existing = await this.repository.getCurrent<SeedProjection>(
+    const existing = await this.repository.getCurrent<HostedProjectionMarkerV2>(
       TENANT_ID,
-      'hosted-projection',
-      'public-evaluator',
+      'hosted-projection-marker',
+      'public-evaluator-v2',
     );
-    if (existing !== undefined) return existing.value;
-    await this.repository.putRevision(TENANT_ID, {
-      entityType: 'hosted-projection',
-      entityId: 'public-evaluator',
-      revisionId: 'hosted-projection-v1',
-      version: 1,
-      committedAt: SEED_AT,
-      value: this.#seed,
-    });
-    return (
-      (
-        await this.repository.getCurrent<SeedProjection>(
-          TENANT_ID,
-          'hosted-projection',
-          'public-evaluator',
-        )
-      )?.value ?? this.#seed
-    );
+    if (existing === undefined) {
+      try {
+        await this.repository.putRevision(TENANT_ID, {
+          entityType: 'hosted-projection-marker',
+          entityId: 'public-evaluator-v2',
+          revisionId: 'hosted-projection-marker-v2',
+          version: 1,
+          committedAt: deterministicEvaluatorIdentityV2.corpus.generatedAt,
+          value: this.#seed.marker,
+        });
+      } catch (error) {
+        if (!(error instanceof PersistenceConflictError)) throw error;
+      }
+    }
+    const persisted =
+      existing ??
+      (await this.repository.getCurrent<HostedProjectionMarkerV2>(
+        TENANT_ID,
+        'hosted-projection-marker',
+        'public-evaluator-v2',
+      ));
+    if (
+      persisted === undefined ||
+      canonicalSha256(persisted.value) !== canonicalSha256(this.#seed.marker)
+    )
+      throw new ProductServiceError(
+        'STALE_REVISION',
+        'The durable evaluator corpus marker is partial or drifted.',
+      );
+    return this.#seed;
   }
 
   #assertContext(context: ProductRequestContext): void {
@@ -591,10 +918,10 @@ export class DurableProductService implements ProductService {
       scope === undefined ||
       scope.tenantId !== TENANT_ID ||
       scope.authorizationEpoch !==
-        deterministicEvaluatorIdentityV1.authorizationEpoch ||
-      scope.scopeHash !== deterministicEvaluatorIdentityV1.scopeHash ||
-      !exactStringSetEquals(safe.actor.accountScopes, [ACCOUNT_ID]) ||
-      !exactStringSetEquals(safe.actor.brandScopes, [BRAND_ID]) ||
+        deterministicEvaluatorIdentityV2.authorizationEpoch ||
+      scope.scopeHash !== deterministicEvaluatorIdentityV2.scopeHash ||
+      !exactStringSetEquals(safe.actor.accountScopes, ACCOUNT_IDS) ||
+      !exactStringSetEquals(safe.actor.brandScopes, BRAND_IDS) ||
       !exactStringSetEquals(scope.accountIds, safe.actor.accountScopes) ||
       !exactStringSetEquals(scope.brandIds, safe.actor.brandScopes) ||
       !safe.actor.grants.includes('communications:read') ||
@@ -619,7 +946,7 @@ export class DurableProductService implements ProductService {
     const detail = this.#seed.details.find(
       ({ messageRevisionId }) => messageRevisionId === sourceMessageRevisionId,
     );
-    const identity = deterministicEvaluatorIdentityV1.communications.find(
+    const identity = deterministicEvaluatorIdentityV2.anchorOverlays.find(
       ({ messageRevisionId }) => messageRevisionId === sourceMessageRevisionId,
     );
     const topic = evaluatorTopicForMessage(sourceMessageRevisionId);
@@ -645,9 +972,9 @@ export class DurableProductService implements ProductService {
       snapshot,
       totalCommunications: projection.communications.length,
       pendingApprovalCount: 0,
-      channelBreakdown: [
-        { channel: 'email', count: projection.communications.length },
-      ],
+      channelBreakdown: Object.entries(expectedChannelCounts).map(
+        ([channel, count]) => ({ channel, count }),
+      ),
     });
   }
 
@@ -678,23 +1005,60 @@ export class DurableProductService implements ProductService {
     context: ProductRequestContext,
     input: {
       readonly status?: 'pending' | 'answered' | 'overdue' | 'resolved';
+      readonly query?: string;
+      readonly channel?: string;
+      readonly accountFilter?: string;
+      readonly brandFilter?: string;
       readonly limit: number;
       readonly cursor?: string;
     },
   ) {
     const projection = await this.#projection(context);
-    const all =
-      input.status === undefined
-        ? projection.communications
-        : projection.communications.filter(
-            ({ status }) => status === input.status,
-          );
-    const offset = decodeCursor(input.cursor);
+    const normalizedQuery = input.query?.trim().toLocaleLowerCase('en-US');
+    const all = projection.communications.filter((communication) => {
+      if (input.status !== undefined && communication.status !== input.status)
+        return false;
+      if (
+        input.channel !== undefined &&
+        communication.channel !== input.channel
+      )
+        return false;
+      if (
+        input.accountFilter !== undefined &&
+        communication.accountId !== input.accountFilter
+      )
+        return false;
+      if (
+        input.brandFilter !== undefined &&
+        communication.brandId !== input.brandFilter
+      )
+        return false;
+      if (normalizedQuery === undefined) return true;
+      return [
+        communication.senderDisplayName,
+        ...communication.recipientDisplayNames,
+        communication.subject,
+        communication.excerpt,
+        communication.channel,
+        communication.accountId,
+        communication.brandId,
+      ].some((value) =>
+        value?.toLocaleLowerCase('en-US').includes(normalizedQuery),
+      );
+    });
+    const binding = communicationListBinding(input);
+    const offset = decodeCursor(input.cursor, binding);
+    if (offset > all.length)
+      throw new ProductServiceError(
+        'BAD_CURSOR',
+        'The cursor is past the filtered communication result set.',
+      );
     const items = all.slice(offset, offset + input.limit);
     const next = offset + items.length;
     return listCommunicationsResultSchema.parse({
       items,
-      ...(next < all.length ? { nextCursor: encodeCursor(next) } : {}),
+      totalCount: all.length,
+      ...(next < all.length ? { nextCursor: encodeCursor(next, binding) } : {}),
     });
   }
 
@@ -728,12 +1092,12 @@ export class DurableProductService implements ProductService {
     );
     if (all.length === 0)
       throw new ProductServiceError('NOT_FOUND', 'Thread was not found.');
-    const offset = decodeCursor(input.cursor);
+    const offset = decodeCursor(input.cursor, `thread:${input.threadId}`);
     const communications = all.slice(offset, offset + input.limit);
     const latest = all.at(-1) as CommunicationSummaryView;
     const thread = threadContextViewSchema.parse({
       threadId: input.threadId,
-      channel: 'email',
+      channel: projection.channelByThread[input.threadId] ?? 'unknown',
       subject: all[0]?.subject,
       participantDisplayNames: ['Public evaluator'],
       status: 'active',
@@ -813,7 +1177,7 @@ export class DurableProductService implements ProductService {
         'Communication revision is stale.',
       );
     const communicationIdentity =
-      deterministicEvaluatorIdentityV1.communications.find(
+      deterministicEvaluatorIdentityV2.anchorOverlays.find(
         ({ messageRevisionId }) =>
           messageRevisionId === detail.messageRevisionId,
       );
@@ -1607,4 +1971,6 @@ export const durableEvaluatorAuthority = Object.freeze({
   userId: USER_ID,
   accountId: ACCOUNT_ID,
   brandId: BRAND_ID,
+  accountIds: ACCOUNT_IDS,
+  brandIds: BRAND_IDS,
 });

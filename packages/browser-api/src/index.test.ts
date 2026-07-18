@@ -71,13 +71,25 @@ describe('browser API facade', () => {
   it('passes only bounded product inputs and never injects tenant authority', async () => {
     mockClient.communications.list.query.mockResolvedValue({
       items: [],
+      totalCount: 0,
     });
     const api = createBrowserApi('https://chief.example.test');
 
-    await api.listCommunications({ status: 'pending', limit: 20 });
+    await api.listCommunications({
+      status: 'pending',
+      query: 'board',
+      channel: 'gmail',
+      accountFilter: 'account-a',
+      brandFilter: 'brand-a',
+      limit: 20,
+    });
 
     expect(mockClient.communications.list.query).toHaveBeenCalledWith({
       status: 'pending',
+      query: 'board',
+      channel: 'gmail',
+      accountFilter: 'account-a',
+      brandFilter: 'brand-a',
       limit: 20,
     });
     expect(
@@ -86,5 +98,8 @@ describe('browser API facade', () => {
     expect(
       mockClient.communications.list.query.mock.calls[0]?.[0],
     ).not.toHaveProperty('accountId');
+    expect(
+      mockClient.communications.list.query.mock.calls[0]?.[0],
+    ).not.toHaveProperty('brandId');
   });
 });

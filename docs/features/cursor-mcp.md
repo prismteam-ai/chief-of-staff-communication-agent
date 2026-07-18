@@ -51,22 +51,22 @@ promoted new-epoch snapshot.
 
 ## Tool surface
 
-| Tool                          | Durable behavior                                       | External effect |
-| ----------------------------- | ------------------------------------------------------ | --------------- |
-| `list_pending_communications` | Bounded, filtered, cursor-paginated durable projection | None            |
-| `get_communication`           | One authorized communication revision with citations   | None            |
-| `get_thread_context`          | Bounded thread chronology                              | None            |
-| `search_knowledge`            | Promoted-head bounded retrieval and citations          | None            |
-| `get_related_asana_work`      | Read-only related task/project context                 | None            |
-| `recommend_action`            | Persisted cited recommendation                         | None            |
-| `create_draft`                | Persisted cited immutable draft                        | None            |
-| `revise_draft`                | Persisted successor draft revision                     | None            |
-| `request_context`             | Focused missing-fact request                           | None            |
-| `prepare_asana_action`        | Prepared-only Asana handoff                            | None            |
-| `submit_for_approval`         | Deprecated compatibility stub; always unavailable      | None            |
-| `get_approval_status`         | Read-only durable proposal status                      | None            |
-| `get_connector_status`        | Truthful mode, health, and capability facts            | None            |
-| `get_sla_metrics`             | Bounded SLA snapshot                                   | None            |
+| Tool                          | Durable behavior                                         | External effect |
+| ----------------------------- | -------------------------------------------------------- | --------------- |
+| `list_pending_communications` | Bounded, filtered, cursor-paginated generated projection | None            |
+| `get_communication`           | One authorized communication revision with citations     | None            |
+| `get_thread_context`          | Bounded thread chronology                                | None            |
+| `search_knowledge`            | Promoted-head bounded retrieval and citations            | None            |
+| `get_related_asana_work`      | Read-only related task/project context                   | None            |
+| `recommend_action`            | Persisted cited recommendation                           | None            |
+| `create_draft`                | Persisted cited immutable draft                          | None            |
+| `revise_draft`                | Persisted successor draft revision                       | None            |
+| `request_context`             | Focused missing-fact request                             | None            |
+| `prepare_asana_action`        | Prepared-only Asana handoff                              | None            |
+| `submit_for_approval`         | Deprecated compatibility stub; always unavailable        | None            |
+| `get_approval_status`         | Read-only durable proposal status                        | None            |
+| `get_connector_status`        | Truthful mode, health, and capability facts              | None            |
+| `get_sla_metrics`             | Bounded SLA snapshot                                     | None            |
 
 The durable exact-draft approval ceremony lives on the fixed-scope,
 server-authorized product API (`approvals.prepareDraft` and
@@ -101,9 +101,9 @@ product approval.
   credential-free CloudFront product origin. No tool accepts URL authority.
 - Deterministic non-PII evaluator data is labeled fixture-origin even though its
   product and approval state uses the production durable interfaces.
-- The hosted connector status contains one fixture connector card. Recorded and
-  blocked are mode definitions with zero hosted evidence in the deterministic
-  seed, so clients must not infer unavailable connector cards.
+- The V2 connector status contains seven account-scoped fixture connector cards.
+  Recorded and blocked are mode definitions with zero hosted evidence in the
+  deterministic seed, so clients must not infer unavailable connector cards.
 
 The current public evaluator does not implement OAuth or account selection.
 Use the deployment URL directly without adding a token to the URL or source
@@ -188,5 +188,7 @@ is not live provider authentication or external-effect evidence.
   explicit MCP-to-API workspace dependency.
 - **Product-owned approval:** keeps approval outside Cursor auto-run and ensures
   the exact revision/timestamp ceremony has one durable authority boundary.
-- **Deterministic public data with durable storage:** gives reproducible grading
-  without claiming a live provider connection or exposing PII.
+- **Deterministic generated public projection with durable authority state:**
+  gives reproducible grading without claiming that inbox rows are stored, a live
+  provider connection, or exposed PII. Only the integrity marker,
+  approval/execution state, and retrieval head are durable.

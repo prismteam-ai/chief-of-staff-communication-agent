@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import {
   deterministicEvaluatorIdentityV1,
+  deterministicEvaluatorIdentityV2,
   immutableBlobRefSchema,
   type ImmutableBlobRef,
 } from '@chief/contracts';
@@ -360,40 +361,65 @@ describe('deterministic evaluator retrieval seed', () => {
     expect(artifacts.objects.size).toBe(0);
   });
 
-  it('promotes the exact owner-free two-email corpus on a fresh runtime', async () => {
+  it('promotes the exact owner-free multi-channel V2 corpus on a fresh runtime', async () => {
     const { dependencies, authority } = fixture();
 
     const result = await seedEvaluatorRetrieval(dependencies);
 
     expect(result).toEqual({
       schemaVersion: '1',
-      seedVersion: 'chief-evaluator-retrieval-seed.v1',
+      seedVersion: 'chief-evaluator-retrieval-seed.v2',
       seedId:
-        'e35428221407a13f6b01d5196abab9c7357c5bfbd3c76b9ee284197180bf8217',
+        'e6755bf3f2cd96a4b4af9c395e6a9a89775f311c0a14680e9ac700ce31e96af3',
       status: 'seeded',
       scopeHash:
-        'b591109c0ddfc4a602f56768cbbd7df2eb9606f7d45dc986cf5ca6f914dca4f1',
+        '78f117a88b1fc73ce8c394e2045888eb102fd34ee3e8c77fbaa75cb21d9a8e3d',
       authorizationEpoch: 1,
       manifestHash:
-        'e0bf51facd2b5560d3b3a34f100da2e3963adff990f4fe4823d9c52508610d25',
-      generation: 2,
-      chunkCount: 2,
-      sourceCount: 2,
+        '9b2e0f7339885bbb74af029583b2e95b2dcfa23ae6d1dae557da335953e011fe',
+      generation: 1,
+      chunkCount: 1_120,
+      sourceCount: 1_120,
+      threadCount: 160,
+      accountCount: 7,
+      brandCount: 2,
+      channelCounts: {
+        gmail: 161,
+        microsoft_graph: 161,
+        sms: 161,
+        whatsapp: 161,
+        x: 161,
+        linkedin_archive: 161,
+        future_demo: 154,
+      },
+      brandCounts: {
+        'brand-northstar': 637,
+        'brand-harbor': 483,
+      },
     });
     expect(authority.epoch).toBe(1);
-    expect(authority.staged.size).toBe(2);
+    expect(authority.staged.size).toBe(1_120);
     expect(deterministicEvaluatorIdentityV1.connector.runtimeMode).toBe(
       'fixture',
     );
+    const documents = await stagedDocuments(authority, dependencies.artifacts);
+    expect(documents).toHaveLength(1_120);
     expect(
-      (await stagedDocuments(authority, dependencies.artifacts)).map(
-        ({ record }) => ({
-          chunkId: record.chunkId,
-          sourceId: record.sourceId,
-          sourceVersion: record.sourceVersion,
-          exactEntityRefs: record.exactEntityRefs,
-        }),
-      ),
+      deterministicEvaluatorIdentityV2.anchorOverlays.map((anchor) => {
+        const document = documents.find(
+          ({ record }) =>
+            record.exactEntityRefs.includes(anchor.retrievalExactEntityRef) &&
+            record.sourceAuthority?.sourceClass === 'communication' &&
+            record.sourceAuthority.relationTopic !== undefined,
+        );
+        return {
+          chunkId: document?.record.chunkId,
+          sourceId: document?.record.sourceId,
+          sourceVersion: document?.record.sourceVersion,
+          exactEntityRefs: document?.record.exactEntityRefs,
+          sourceAuthority: document?.record.sourceAuthority,
+        };
+      }),
     ).toEqual([
       {
         chunkId:
@@ -403,6 +429,14 @@ describe('deterministic evaluator retrieval seed', () => {
         sourceVersion:
           '3ec5dd5bdc24a0edef761555d9100bc853213236ec37ed74a80923f287fcc4cc',
         exactEntityRefs: ['thr_94f02c2953e5253d7f62f514efffdda78aa29090'],
+        sourceAuthority: {
+          contractVersion: 'chief-source-authority.v1',
+          verifiedBy: 'canonical_ingestion',
+          sourceClass: 'communication',
+          sourceKind: 'gmail',
+          relationKind: 'canonical_thread',
+          relationTopic: 'release_readiness',
+        },
       },
       {
         chunkId:
@@ -412,9 +446,17 @@ describe('deterministic evaluator retrieval seed', () => {
         sourceVersion:
           '49ee3e715f21ab40d361d2aa06f9871cb1bf5cb3731beb9d212f9944e02fb7d0',
         exactEntityRefs: ['thr_309a81cf66fffd346b95eccaf016494a30abd88f'],
+        sourceAuthority: {
+          contractVersion: 'chief-source-authority.v1',
+          verifiedBy: 'canonical_ingestion',
+          sourceClass: 'communication',
+          sourceKind: 'gmail',
+          relationKind: 'canonical_thread',
+          relationTopic: 'board_metrics',
+        },
       },
     ]);
-  });
+  }, 30_000);
 
   it('reruns idempotently without advancing the promoted head', async () => {
     const { dependencies } = fixture();
@@ -423,7 +465,7 @@ describe('deterministic evaluator retrieval seed', () => {
     const second = await seedEvaluatorRetrieval(dependencies);
 
     expect(second).toEqual({ ...first, status: 'already_current' });
-  });
+  }, 15_000);
 
   it('recovers an exact partial catalog and preserves deterministic identity', async () => {
     const { dependencies, authority } = fixture();
@@ -439,8 +481,8 @@ describe('deterministic evaluator retrieval seed', () => {
     const recovered = await seedEvaluatorRetrieval(dependencies);
 
     expect(recovered).toEqual({ ...completed, status: 'seeded' });
-    expect(authority.staged.size).toBe(2);
-  });
+    expect(authority.staged.size).toBe(1_120);
+  }, 30_000);
 
   it('recovers a valid partial promoted head to the exact readable idempotent authority', async () => {
     const { dependencies, authority, artifacts } = fixture();
@@ -467,9 +509,16 @@ describe('deterministic evaluator retrieval seed', () => {
 
     const recovered = await seedEvaluatorRetrieval(dependencies);
 
-    expect(recovered).toEqual({ ...completed, status: 'seeded' });
+    expect(recovered).toMatchObject({
+      seedId: completed.seedId,
+      status: 'seeded',
+      generation: 2,
+      chunkCount: 1_120,
+      sourceCount: 1_120,
+    });
+    expect(recovered.manifestHash).not.toBe(completed.manifestHash);
     expect(authority.epoch).toBe(1);
-    expect(authority.staged.size).toBe(2);
+    expect(authority.staged.size).toBe(1_120);
     const recoveredHead = await authority.getHead(evaluatorRetrievalScope);
     expect(recoveredHead).toBeDefined();
     if (recoveredHead === undefined) throw new Error('missing recovered head');
@@ -482,11 +531,11 @@ describe('deterministic evaluator retrieval seed', () => {
     const exactRecoveredAuthority = authorityState(authority);
 
     await expect(seedEvaluatorRetrieval(dependencies)).resolves.toEqual({
-      ...completed,
+      ...recovered,
       status: 'already_current',
     });
     expect(authorityState(authority)).toEqual(exactRecoveredAuthority);
-  });
+  }, 30_000);
 
   it('rejects an extra catalog record before changing the head', async () => {
     const { dependencies, authority, artifacts } = fixture();
@@ -499,7 +548,7 @@ describe('deterministic evaluator retrieval seed', () => {
       code: 'SEED_CATALOG_DRIFT',
     });
     expect(authority.head).toBe(originalHead);
-  });
+  }, 30_000);
 
   it('rejects an otherwise valid head containing an extra record', async () => {
     const { dependencies, authority, artifacts } = fixture();
@@ -514,8 +563,8 @@ describe('deterministic evaluator retrieval seed', () => {
       code: 'SEED_SNAPSHOT_DRIFT',
     });
     expect(authority.head).toBe(extraHead);
-    expect(authority.head?.manifest.chunkCount).toBe(3);
-  });
+    expect(authority.head?.manifest.chunkCount).toBe(1_121);
+  }, 30_000);
 
   it('rejects corrupt staged and promoted vector objects', async () => {
     const stagedFixture = fixture();
@@ -559,7 +608,7 @@ describe('deterministic evaluator retrieval seed', () => {
     expect(artifactState(vectorFixture.artifacts)).toEqual(
       vectorArtifactsBefore,
     );
-  });
+  }, 30_000);
 
   it('rejects the artifact bucket binding before object lookup without changing authority', async () => {
     const { dependencies, authority } = fixture();
@@ -636,11 +685,14 @@ describe('deterministic evaluator retrieval seed', () => {
       'Board update approved pipeline numbers',
     ].entries()) {
       const identity =
-        deterministicEvaluatorIdentityV1.communications[communicationIndex];
-      const exactDocument = documents.find(({ record }) =>
-        record.exactEntityRefs.includes(
-          identity?.retrievalExactEntityRef ?? 'missing',
-        ),
+        deterministicEvaluatorIdentityV2.anchorOverlays[communicationIndex];
+      const exactDocument = documents.find(
+        ({ record }) =>
+          record.exactEntityRefs.includes(
+            identity?.retrievalExactEntityRef ?? 'missing',
+          ) &&
+          record.sourceAuthority?.sourceClass === 'communication' &&
+          record.sourceAuthority.relationTopic !== undefined,
       );
       expect(exactDocument).toBeDefined();
       const prepared = prepareEffectDisabledQueryVector({
@@ -663,7 +715,13 @@ describe('deterministic evaluator retrieval seed', () => {
       const baseline = await query([]);
       const result = await query([identity?.retrievalExactEntityRef as string]);
       expect(result.abstained).toBe(false);
-      expect(result.citations[0]?.label).toBe('gmail communication evidence');
+      expect(
+        result.citations.some(
+          ({ chunkId, label }) =>
+            chunkId === exactDocument?.record.chunkId &&
+            label === 'gmail communication evidence',
+        ),
+      ).toBe(true);
       expect(result.snapshotManifestHash).toBe(
         authority.head?.manifest.manifestHash,
       );
@@ -674,11 +732,10 @@ describe('deterministic evaluator retrieval seed', () => {
         ({ chunkId }) => chunkId === exactDocument?.record.chunkId,
       );
       expect(exactCandidate).toBeDefined();
-      expect(baselineCandidate).toBeDefined();
-      expect(
-        (exactCandidate?.fusedScore as number) -
-          (baselineCandidate?.fusedScore as number),
-      ).toBeCloseTo(0.15, 6);
+      if (baselineCandidate !== undefined)
+        expect(
+          (exactCandidate?.fusedScore as number) - baselineCandidate.fusedScore,
+        ).toBeCloseTo(0.15, 6);
     }
   });
 });

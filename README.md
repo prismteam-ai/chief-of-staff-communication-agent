@@ -26,10 +26,12 @@ fixed server-derived evaluator authority, DynamoDB revision/head records, and
 bounded DynamoDB/S3 retrieval path. They do not default to the old fixture-only
 product or MCP services.
 
-The deterministic evaluator projection is seeded through the durable product
-repository on first access. It is fixed to one public tenant/account/brand,
-contains no private archive or provider credential, and is clearly labeled as
-non-live. The local browser fallback remains useful for UI development, but it
+The deterministic evaluator projection is regenerated from the source-owned V2
+corpus when the product service starts. The durable product repository stores a
+small identity/integrity marker plus approval and execution state; it does not
+store all 1,120 inbox rows or seven connector cards. The projection contains no
+private archive or provider credential and is clearly labeled as non-live. The
+local browser fallback remains useful for UI development, but it
 cannot approve anything and is rejected by the strict hosted acceptance suite.
 
 ## Retrieval contract
@@ -137,8 +139,8 @@ it cannot approve, send, create a task, or update a task.
 
 1. Open `/overview`; confirm the signed-out, deterministic, non-PII and
    effect-disabled labels and inspect SLA/channel metrics.
-2. Open `/connections`; inspect the one hosted fixture connector card and the
-   capability-mode definitions. Recorded and blocked both show zero hosted
+2. Open `/connections`; inspect the seven account-scoped fixture connector cards
+   and the capability-mode definitions. Recorded and blocked both show zero
    evidence in the deterministic seed, so no recorded or blocked connector card
    is expected. This evaluator does not offer OAuth or account setup.
 3. Open `/inbox/thread-q3-launch`; inspect the thread, related Asana reference,
@@ -228,11 +230,12 @@ approval/outbox and execution guards; tRPC/browser clients; remote MCP; CDK;
 and responsive evaluator UI/E2E coverage. These code-level adapters are not a
 claim that the public runtime has authenticated or certified those providers.
 Public capability labels distinguish deterministic data, recorded evidence,
-and authorization-blocked providers. The current hosted seed contains two
-fixed-scope email communications and one fixture connector card; it has no
-completed Gmail operator consent, multichannel hosted inbox, live provider
-send, Twilio sender certification, or live Asana mutation evidence. Recorded
-and blocked modes have zero hosted evidence and do not produce connector cards.
+and authorization-blocked providers. The V2 evaluator seed defined by this
+revision contains 1,120 synthetic primary messages in 160 threads across seven
+account-scoped fixture channels/connectors and two brands. It does not claim
+completed Gmail operator consent, live provider send, Twilio sender
+certification, or live Asana mutation evidence. Recorded and blocked modes have
+zero hosted evidence and do not produce connector cards.
 
 The private LinkedIn archive is not imported, exposed, or required by this
 public vertical. Live provider authentication and external-effect acceptance
