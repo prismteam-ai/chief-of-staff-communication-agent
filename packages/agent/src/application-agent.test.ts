@@ -338,6 +338,35 @@ describe('Chief communication application agent', () => {
     expect(model.model.doGenerateCalls).toHaveLength(0);
   });
 
+  it('still requests context when only one cited fact supports an action', async () => {
+    const model = gateway([
+      {
+        actionType: 'reply',
+        urgency: 'high',
+        selectedFactIds: [communicationFact.factId],
+        missingFacts: [],
+      },
+    ]);
+    const agent = new ChiefCommunicationAgent({
+      gateway: model.gateway,
+      retriever: retriever({
+        communication: [communicationFact],
+        organization_knowledge: [],
+        asana: [],
+      }),
+      recommendationHeads,
+      clock,
+    });
+
+    const result = await agent.recommend(recommendationRequest());
+
+    expect(result.recommendation.actionType).toBe('request_context');
+    expect(result.recommendation.status).toBe('needs_context');
+    expect(result.recommendation.confidence).toBeLessThan(0.67);
+    expect(result.recommendation.citations).toHaveLength(1);
+    expect(model.model.doGenerateCalls).toHaveLength(1);
+  });
+
   it('isolates prompt injection hidden in quoted history without calling the model', async () => {
     const model = gateway([]);
     const agent = new ChiefCommunicationAgent({

@@ -186,6 +186,8 @@ function confidenceFor(
   return Math.max(0, Math.min(0.99, Number(value.toFixed(2))));
 }
 
+const minimumActionConfidence = 0.67;
+
 function reproducibility(input: {
   readonly gateway: ModelGateway;
   readonly routeId: string;
@@ -470,7 +472,7 @@ export class ChiefCommunicationAgent {
       !injectionDetected &&
       actionType !== 'ignore_system' &&
       actionType !== 'no_action' &&
-      (missingFacts.length > 0 || confidence < 0.68)
+      (missingFacts.length > 0 || confidence < minimumActionConfidence)
     )
       actionType = 'request_context';
     const recommendationId = recommendationIdSchema.parse(

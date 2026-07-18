@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  citationSchema,
   deterministicEvaluatorIdentityV1,
   messageRevisionIdSchema,
+  retrievalCandidateSchema,
   serverRequestContextSchema,
   tenantIdSchema,
 } from '@chief/contracts';
@@ -62,6 +64,75 @@ async function preparePendingApproval(dependencies: ApiDependencies) {
 }
 
 describe('durable hosted product vertical', () => {
+  it('creates a cited draft from two production-shaped same-source facts', async () => {
+    const chunkIds = [
+      'h1_deterministic_evaluator_seed_v1_JGYh0xduVhg2BiF1PyZrcgLcyji29sijg1ilMuD-qFY:3ec5dd5bdc24a0edef761555d9100bc853213236ec37ed74a80923f287fcc4cc',
+      'h1_deterministic_evaluator_seed_v1_w-jMP3I_f0X_I-PR_WVXU58yeXq51BLW4zCS9JqKKSg:49ee3e715f21ab40d361d2aa06f9871cb1bf5cb3731beb9d212f9944e02fb7d0',
+    ] as const;
+    const citations = chunkIds.map((chunkId, index) =>
+      citationSchema.parse({
+        citationId: `gmail-source-${index}:${chunkId}:v1`,
+        sourceId: `gmail-source-${index}`,
+        sourceVersion: 'v1',
+        chunkId,
+        label: 'gmail communication evidence',
+        contentHash: String(index + 1).repeat(64),
+        hydratedUnderAuthorizationEpoch: 1,
+      }),
+    );
+    const retrieval: DurableRetrievalPort = {
+      search: (_context, input) =>
+        Promise.resolve({
+          candidates: chunkIds.slice(0, input.limit).map((chunkId, index) =>
+            retrievalCandidateSchema.parse({
+              chunkId,
+              sourceId: `gmail-source-${index}`,
+              lexicalScore: 1,
+              vectorScore: 0.8,
+              fusedScore: 0.9,
+              authorizationEpoch: 1,
+            }),
+          ),
+          citations: citations.slice(0, input.limit),
+          snapshotManifestHash: 'f'.repeat(64),
+          evidence: chunkIds.slice(0, input.limit).map((chunkId, index) => ({
+            chunkId,
+            citationId: citations[index]?.citationId as string,
+            text:
+              index === 0
+                ? 'The Friday launch is ready once the QA owner confirms.'
+                : 'The QA owner commitment is due before the Friday launch.',
+          })),
+        }),
+    };
+    const service = new DurableProductService(
+      new MemoryDurableProductRepository(),
+      retrieval,
+      'https://chief.example.test',
+    );
+    const context = createDurableRequestContext();
+    const recommendation = await service.recommendAction(context, {
+      messageRevisionId: messageRevisionIdSchema.parse('message-revision-1-1'),
+      expectedMessageRevision: 1,
+    });
+
+    expect(recommendation.recommendation).toMatchObject({
+      actionType: 'reply',
+      confidence: 0.67,
+      status: 'current',
+    });
+    await expect(
+      service.createDraft(context, {
+        recommendationId: recommendation.recommendation.recommendationId,
+        expectedRecommendationRevision: 1,
+      }),
+    ).resolves.toMatchObject({
+      result: {
+        draft: { citations },
+      },
+    });
+  });
+
   it('maps each public thread alias to its canonical exact retrieval entity and preserves tenant isolation', async () => {
     const context = createDurableRequestContext();
     for (const identity of deterministicEvaluatorIdentityV1.communications) {
