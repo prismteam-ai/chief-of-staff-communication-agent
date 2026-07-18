@@ -4,7 +4,7 @@ import type {
   DraftArtifact,
   RecommendationArtifact,
 } from '@chief/agent/application-agent';
-import { deterministicId } from '@chief/agent/canonical';
+import { deterministicId, immutableHash } from '@chief/agent/canonical';
 
 import {
   attemptIdSchema,
@@ -24,11 +24,10 @@ import {
   getThreadContextResultSchema,
   listCommunicationsResultSchema,
   proposalHandoffSchema,
-  retrievalCandidateSchema,
   searchKnowledgeResultSchema,
   serverRequestContextSchema,
+  sha256Schema,
   threadContextViewSchema,
-  workObjectFactSchema,
   type ActionPlan,
   type CommunicationDetailView,
   type CommunicationSummaryView,
@@ -73,10 +72,8 @@ const BRAND_IDS = deterministicEvaluatorIdentityV2.brandIds;
 const SEED_AT = '2026-07-17T12:00:00.000Z';
 const EXPIRES_AT = '2099-01-01T00:00:00.000Z';
 const RECIPIENT_DIGEST = `h1_v1_${'A'.repeat(43)}`;
-const EVALUATOR_RELATED_ASANA_TEXT =
-  'Launch readiness task SEC-4821 tracks the QA owner commitment.';
-const EVALUATOR_LAUNCH_COMMUNICATION_TEXT =
-  'The Friday launch decision is pending confirmation of the QA owner.';
+const RETRIEVAL_ROLE = 'factual';
+const RETRIEVAL_SCORING_PROFILE = 'chief-bounded-fusion-v1';
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -100,7 +97,25 @@ export interface DurableRetrievalResult {
     readonly text: string;
     readonly exactEntityRefs?: readonly string[];
     readonly sourceClass?: DurableEvidenceSourceClass;
+    readonly sourceAuthority?: DurableEvidenceSourceAuthority;
     readonly relation?: DurableEvidenceRelation;
+  }[];
+}
+
+export interface DurableManifestBinding {
+  readonly contractVersion: 'chief-validated-manifest-binding.v1';
+  readonly tenantId: string;
+  readonly scopeHash: string;
+  readonly authorizationEpoch: number;
+  readonly role: typeof RETRIEVAL_ROLE;
+  readonly manifestHash: string;
+  readonly scoringProfileVersion: typeof RETRIEVAL_SCORING_PROFILE;
+  readonly records: readonly {
+    readonly sourceId: string;
+    readonly chunkId: string;
+    readonly sourceVersion: string;
+    readonly authorizationEpoch: number;
+    readonly evidenceHash: string;
   }[];
 }
 
@@ -113,6 +128,11 @@ export interface DurableRetrievalPort {
       readonly limit: number;
     },
   ): Promise<DurableRetrievalResult>;
+  verifyManifestBinding?(
+    context: ProductRequestContext,
+    binding: DurableManifestBinding,
+    result: DurableRetrievalResult,
+  ): Promise<boolean>;
 }
 
 export type DeterministicEvidenceTopic = 'release_readiness' | 'board_metrics';
@@ -120,6 +140,20 @@ export type DurableEvidenceTopic =
   DeterministicEvidenceTopic | 'event_logistics';
 export type DurableEvidenceSourceClass =
   'communication' | 'organization_knowledge' | 'asana' | 'unclassified';
+export type DurableEvidenceSourceAuthority =
+  | {
+      readonly contractVersion: 'chief-source-authority.v1';
+      readonly verifiedBy: 'canonical_ingestion';
+      readonly sourceClass: 'communication' | 'asana';
+      readonly relationKind: 'canonical_thread' | 'explicit_related_work';
+      readonly relationTopic?: DurableEvidenceTopic;
+    }
+  | {
+      readonly contractVersion: 'legacy-unverified';
+      readonly verifiedBy: 'none';
+      readonly sourceClass: 'unclassified';
+      readonly relationKind: 'unverified';
+    };
 export interface VerifiedEvidenceRelation {
   readonly verified: true;
   readonly kind:
@@ -173,55 +207,143 @@ function exactStringSetEquals(
   );
 }
 
-function canonicalLegacyMetadata(input: {
-  readonly sourceId: string;
-  readonly chunkId: string;
-  readonly citationId: string;
-  readonly contentHash: string;
-  readonly text: string;
-  readonly exactEntityRef: string;
-}): {
+function resolveRetrievedCitation(
+  result: DurableRetrievalResult,
+  citation: Citation,
+): {
+  readonly candidate: RetrievalCandidate;
+  readonly evidence: DurableRetrievalResult['evidence'][number];
+} | null {
+  const candidates = result.candidates.filter(
+    (candidate) =>
+      candidate.chunkId === citation.chunkId &&
+      candidate.sourceId === citation.sourceId &&
+      candidate.authorizationEpoch === citation.hydratedUnderAuthorizationEpoch,
+  );
+  const evidence = result.evidence.filter(
+    (item) =>
+      item.chunkId === citation.chunkId &&
+      item.citationId === citation.citationId,
+  );
+  if (
+    !sha256Schema.safeParse(result.snapshotManifestHash).success ||
+    candidates.length !== 1 ||
+    evidence.length !== 1 ||
+    citation.citationId !==
+      `${citation.sourceId}:${citation.chunkId}:${citation.sourceVersion}` ||
+    citation.contentHash !== sha256((evidence[0] as { text: string }).text)
+  )
+    return null;
+  return {
+    candidate: candidates[0] as RetrievalCandidate,
+    evidence: evidence[0] as DurableRetrievalResult['evidence'][number],
+  };
+}
+
+function manifestBinding(
+  context: ProductRequestContext,
+  result: DurableRetrievalResult,
+): DurableManifestBinding | null {
+  const scope = context.retrievalScope;
+  if (
+    scope === undefined ||
+    !sha256Schema.safeParse(result.snapshotManifestHash).success ||
+    result.candidates.length !== result.citations.length ||
+    result.evidence.length !== result.citations.length
+  )
+    return null;
+  const records = result.citations.map((citation) => {
+    const resolved = resolveRetrievedCitation(result, citation);
+    if (resolved === null) return null;
+    return Object.freeze({
+      sourceId: citation.sourceId,
+      chunkId: citation.chunkId,
+      sourceVersion: citation.sourceVersion,
+      authorizationEpoch: citation.hydratedUnderAuthorizationEpoch,
+      evidenceHash: sha256(resolved.evidence.text),
+    });
+  });
+  if (
+    records.some((record) => record === null) ||
+    records.some(
+      (record) => record?.authorizationEpoch !== scope.authorizationEpoch,
+    ) ||
+    new Set(records.map((record) => canonicalSha256(record))).size !==
+      records.length
+  )
+    return null;
+  return Object.freeze({
+    contractVersion: 'chief-validated-manifest-binding.v1',
+    tenantId: scope.tenantId,
+    scopeHash: scope.scopeHash,
+    authorizationEpoch: scope.authorizationEpoch,
+    role: RETRIEVAL_ROLE,
+    manifestHash: result.snapshotManifestHash,
+    scoringProfileVersion: RETRIEVAL_SCORING_PROFILE,
+    records: Object.freeze(
+      (records as Exclude<(typeof records)[number], null>[]).sort(
+        (left, right) =>
+          left.sourceId.localeCompare(right.sourceId) ||
+          left.chunkId.localeCompare(right.chunkId) ||
+          left.sourceVersion.localeCompare(right.sourceVersion),
+      ),
+    ),
+  });
+}
+
+async function assertTrustedManifest(
+  retrieval: DurableRetrievalPort,
+  context: ProductRequestContext,
+  result: DurableRetrievalResult,
+): Promise<void> {
+  const binding = manifestBinding(context, result);
+  if (
+    binding === null ||
+    retrieval.verifyManifestBinding === undefined ||
+    !(await retrieval.verifyManifestBinding(context, binding, result))
+  )
+    throw new ProductServiceError(
+      'STALE_REVISION',
+      'Retrieval manifest lineage is not trusted.',
+    );
+}
+
+function sourceOwnedMetadata(
+  evidence: DurableRetrievalResult['evidence'][number],
+  relation: {
+    readonly exactEntityRef: string;
+    readonly topic: DeterministicEvidenceTopic;
+  },
+): {
   readonly sourceClass: 'communication' | 'asana';
   readonly relation: VerifiedEvidenceRelation;
 } | null {
-  const canonical = [
-    {
-      sourceId: 'source-communication-1',
-      chunkId: 'chunk-communication-1',
-      citationId: 'source-communication-1:chunk-communication-1:1',
-      contentHash: sha256(EVALUATOR_LAUNCH_COMMUNICATION_TEXT),
-      text: EVALUATOR_LAUNCH_COMMUNICATION_TEXT,
-      sourceClass: 'communication' as const,
-      kind: 'canonical_message' as const,
-    },
-    {
-      sourceId: 'source-asana-1',
-      chunkId: 'chunk-asana-1',
-      citationId: 'source-asana-1:chunk-asana-1:1',
-      contentHash: sha256(EVALUATOR_RELATED_ASANA_TEXT),
-      text: EVALUATOR_RELATED_ASANA_TEXT,
-      sourceClass: 'asana' as const,
-      kind: 'explicit_related_work' as const,
-    },
-  ].find(
-    (candidate) =>
-      candidate.sourceId === input.sourceId &&
-      candidate.chunkId === input.chunkId &&
-      candidate.citationId === input.citationId &&
-      candidate.contentHash === input.contentHash &&
-      candidate.text === input.text,
-  );
-  return canonical === undefined
-    ? null
-    : {
-        sourceClass: canonical.sourceClass,
-        relation: Object.freeze({
-          verified: true,
-          kind: canonical.kind,
-          topic: 'release_readiness',
-          exactEntityRefs: Object.freeze([input.exactEntityRef]),
-        }),
-      };
+  const authority = evidence.sourceAuthority;
+  const suppliedRelation = evidence.relation;
+  if (
+    authority === undefined ||
+    suppliedRelation === undefined ||
+    authority.contractVersion !== 'chief-source-authority.v1' ||
+    authority.verifiedBy !== 'canonical_ingestion' ||
+    authority.sourceClass !== evidence.sourceClass ||
+    authority.relationKind !== suppliedRelation.kind ||
+    authority.relationTopic !== relation.topic ||
+    suppliedRelation.verified !== true ||
+    suppliedRelation.topic !== relation.topic ||
+    !suppliedRelation.exactEntityRefs.includes(relation.exactEntityRef)
+  )
+    return null;
+  if (
+    (authority.sourceClass === 'communication' &&
+      authority.relationKind !== 'canonical_thread') ||
+    (authority.sourceClass === 'asana' &&
+      authority.relationKind !== 'explicit_related_work')
+  )
+    return null;
+  return {
+    sourceClass: authority.sourceClass,
+    relation: Object.freeze(suppliedRelation) as VerifiedEvidenceRelation,
+  };
 }
 
 function verifiedEvaluatorRetrieval(
@@ -229,58 +351,21 @@ function verifiedEvaluatorRetrieval(
   relation: {
     readonly exactEntityRef: string;
     readonly topic: DeterministicEvidenceTopic;
-    readonly includeRelatedAsana: boolean;
   },
 ): VerifiedDurableRetrievalPort {
   return {
     search: async (context, input) => {
       const result = await retrieval.search(context, input);
-      const candidatesByChunk = new Map(
-        result.candidates.map((candidate) => [candidate.chunkId, candidate]),
-      );
+      await assertTrustedManifest(retrieval, context, result);
       const verifiedEvidence: VerifiedDurableRetrievalResult['evidence'][number][] =
         [];
       const verifiedCitations: Citation[] = [];
       const verifiedCandidates: RetrievalCandidate[] = [];
       for (const citation of result.citations) {
-        const evidence = result.evidence.find(
-          (item) => item.citationId === citation.citationId,
-        );
-        const candidate = candidatesByChunk.get(citation.chunkId);
-        if (
-          evidence === undefined ||
-          candidate === undefined ||
-          evidence.chunkId !== citation.chunkId
-        )
-          continue;
-        const supplied =
-          evidence.sourceClass !== undefined &&
-          evidence.sourceClass !== 'unclassified' &&
-          evidence.relation?.verified === true &&
-          evidence.relation.exactEntityRefs.includes(relation.exactEntityRef) &&
-          evidence.relation.topic === relation.topic
-            ? {
-                sourceClass: evidence.sourceClass,
-                relation: Object.freeze(
-                  evidence.relation,
-                ) as VerifiedEvidenceRelation,
-              }
-            : null;
-        const legacy = canonicalLegacyMetadata({
-          sourceId: citation.sourceId,
-          chunkId: citation.chunkId,
-          citationId: citation.citationId,
-          contentHash: citation.contentHash,
-          text: evidence.text,
-          exactEntityRef: relation.exactEntityRef,
-        });
-        const reservedCanonicalCitation =
-          citation.citationId ===
-            'source-communication-1:chunk-communication-1:1' ||
-          citation.citationId === 'source-asana-1:chunk-asana-1:1';
-        const metadata = reservedCanonicalCitation
-          ? legacy
-          : (supplied ?? legacy);
+        const resolved = resolveRetrievedCitation(result, citation);
+        if (resolved === null) continue;
+        const { candidate, evidence } = resolved;
+        const metadata = sourceOwnedMetadata(evidence, relation);
         if (
           metadata === null ||
           metadata.relation.topic !== relation.topic ||
@@ -302,68 +387,11 @@ function verifiedEvaluatorRetrieval(
         verifiedCitations.push(citation);
         verifiedCandidates.push(candidate);
       }
-      const explicitlyRelatedAsanaExists = verifiedEvidence.some(
-        (evidence) => evidence.sourceClass === 'asana',
-      );
-      if (
-        !relation.includeRelatedAsana ||
-        !input.exactEntityRefs.includes(relation.exactEntityRef) ||
-        explicitlyRelatedAsanaExists ||
-        verifiedEvidence.length >= 2 ||
-        verifiedEvidence.length >= input.limit
-      )
-        return Object.freeze({
-          candidates: Object.freeze(verifiedCandidates),
-          citations: Object.freeze(verifiedCitations),
-          snapshotManifestHash: result.snapshotManifestHash,
-          evidence: Object.freeze(verifiedEvidence),
-        });
-      const authorizationEpoch =
-        context.retrievalScope?.authorizationEpoch ?? 1;
-      const citation = citationSchema.parse({
-        citationId: 'source-asana-1:chunk-asana-1:1',
-        sourceId: 'source-asana-1',
-        sourceVersion: '1',
-        chunkId: 'chunk-asana-1',
-        label: 'Launch readiness task SEC-4821',
-        contentHash: sha256(EVALUATOR_RELATED_ASANA_TEXT),
-        hydratedUnderAuthorizationEpoch: authorizationEpoch,
-      });
-      const candidate = retrievalCandidateSchema.parse({
-        chunkId: citation.chunkId,
-        sourceId: citation.sourceId,
-        lexicalScore: 1,
-        vectorScore: 1,
-        fusedScore: 1,
-        authorizationEpoch,
-      });
       return Object.freeze({
-        candidates: Object.freeze([...verifiedCandidates, candidate]),
-        citations: Object.freeze([...verifiedCitations, citation]),
-        snapshotManifestHash: sha256(
-          JSON.stringify({
-            baseSnapshotManifestHash: result.snapshotManifestHash,
-            relationVersion: 'deterministic-evaluator-asana-relation.v2',
-            citation,
-            exactEntityRefs: [relation.exactEntityRef],
-          }),
-        ),
-        evidence: Object.freeze([
-          ...verifiedEvidence,
-          Object.freeze({
-            chunkId: citation.chunkId,
-            citationId: citation.citationId,
-            text: EVALUATOR_RELATED_ASANA_TEXT,
-            exactEntityRefs: Object.freeze([relation.exactEntityRef]),
-            sourceClass: 'asana' as const,
-            relation: Object.freeze({
-              verified: true as const,
-              kind: 'explicit_related_work' as const,
-              topic: 'release_readiness' as const,
-              exactEntityRefs: Object.freeze([relation.exactEntityRef]),
-            }),
-          }),
-        ]),
+        candidates: Object.freeze(verifiedCandidates),
+        citations: Object.freeze(verifiedCitations),
+        snapshotManifestHash: result.snapshotManifestHash,
+        evidence: Object.freeze(verifiedEvidence),
       });
     },
   };
@@ -1017,6 +1045,138 @@ export class DurableProductService implements ProductService {
     };
   }
 
+  async #assertRecommendationLineage(
+    context: ProductRequestContext,
+    artifact: RecommendationArtifact,
+  ): Promise<void> {
+    const source = this.#sourceForRecommendation(artifact);
+    const result = await verifiedEvaluatorRetrieval(this.retrieval, {
+      exactEntityRef: source.exactEntityRef,
+      topic: source.topic,
+    }).search(context, {
+      queryText:
+        `${source.detail.subject ?? ''}\n${source.detail.authoredText}`.trim(),
+      exactEntityRefs: [source.exactEntityRef],
+      limit: 8,
+    });
+    const expectedContextManifestHash = immutableHash(
+      ['communication', 'organization_knowledge', 'asana'].map((kind) => ({
+        kind,
+        snapshotManifestHash: result.snapshotManifestHash,
+      })),
+    );
+    const citationsById = new Map(
+      result.citations.map((citation) => [citation.citationId, citation]),
+    );
+    const evidenceByCitation = new Map(
+      result.evidence.map((evidence) => [evidence.citationId, evidence]),
+    );
+    const contextCitations = artifact.context.facts.map(({ citation }) =>
+      canonicalSha256(citation),
+    );
+    const trusted =
+      artifact.context.snapshotManifestHash === expectedContextManifestHash &&
+      canonicalSha256(artifact.context.citations) ===
+        canonicalSha256(artifact.recommendation.citations) &&
+      canonicalSha256(artifact.recommendation.citations) ===
+        canonicalSha256(
+          artifact.context.facts.map(({ citation }) => citation),
+        ) &&
+      contextCitations.length === new Set(contextCitations).size &&
+      artifact.context.facts.every((fact) => {
+        const citation = citationsById.get(fact.citation.citationId);
+        const evidence = evidenceByCitation.get(fact.citation.citationId);
+        return (
+          citation !== undefined &&
+          evidence !== undefined &&
+          canonicalSha256(citation) === canonicalSha256(fact.citation) &&
+          evidence.text === fact.statement &&
+          evidence.sourceClass === fact.sourceKind
+        );
+      });
+    if (!trusted)
+      throw new ProductServiceError(
+        'STALE_REVISION',
+        'Persisted recommendation citation lineage is no longer trusted.',
+      );
+  }
+
+  #assertDraftLineage(
+    stored: StoredDraft,
+    recommendation: RecommendationArtifact,
+  ): void {
+    if (
+      stored.recommendationId !==
+        recommendation.recommendation.recommendationId ||
+      stored.artifact.recommendationHash !== recommendation.immutableHash ||
+      canonicalSha256(stored.artifact.context) !==
+        canonicalSha256(recommendation.context) ||
+      canonicalSha256(stored.artifact.result.draft.citations) !==
+        canonicalSha256(recommendation.recommendation.citations)
+    )
+      throw new ProductServiceError(
+        'STALE_REVISION',
+        'Persisted draft citation lineage is no longer trusted.',
+      );
+  }
+
+  async #assertProposalLineage(
+    context: ProductRequestContext,
+    proposal: StoredProposal,
+  ): Promise<void> {
+    const storedDraft = await this.repository.getExact<StoredDraft>(
+      TENANT_ID,
+      'draft-revision',
+      proposal.draftRevisionId,
+    );
+    if (storedDraft === undefined)
+      throw new ProductServiceError(
+        'STALE_REVISION',
+        'Persisted proposal draft lineage is no longer available.',
+      );
+    const recommendation =
+      await this.repository.getCurrent<RecommendationArtifact>(
+        TENANT_ID,
+        'recommendation',
+        storedDraft.value.recommendationId,
+      );
+    if (recommendation === undefined)
+      throw new ProductServiceError(
+        'STALE_REVISION',
+        'Persisted proposal recommendation lineage is no longer available.',
+      );
+    await this.#assertRecommendationLineage(context, recommendation.value);
+    this.#assertDraftLineage(storedDraft.value, recommendation.value);
+    const source = this.#sourceForRecommendation(recommendation.value);
+    const expectedActionPlan = createDeterministicDurableAgent({
+      repository: this.repository,
+      retrieval: verifiedEvaluatorRetrieval(this.retrieval, {
+        exactEntityRef: source.exactEntityRef,
+        topic: source.topic,
+      }),
+      context,
+      now: this.now,
+      authorizedTopic: source.topic,
+    }).prepareApprovalActionPlan({
+      artifact: storedDraft.value.artifact,
+      policyVersion: 'effect-disabled-v1',
+      expiresAt: EXPIRES_AT,
+    });
+    if (
+      proposal.proposalId !==
+        id('proposal', {
+          actionPlanId: expectedActionPlan.actionPlanId,
+          revision: 1,
+        }) ||
+      canonicalSha256(proposal.actionPlan) !==
+        canonicalSha256(expectedActionPlan)
+    )
+      throw new ProductServiceError(
+        'STALE_REVISION',
+        'Persisted proposal action-plan lineage is no longer trusted.',
+      );
+  }
+
   public async dashboardMetrics(
     context: ProductRequestContext,
     input: { readonly window: '24h' | '7d' | '30d' },
@@ -1026,7 +1186,7 @@ export class DurableProductService implements ProductService {
     return dashboardMetricsResultSchema.parse({
       snapshot,
       totalCommunications: projection.communications.length,
-      pendingApprovalCount: await this.#pendingApprovalCount(),
+      pendingApprovalCount: await this.#pendingApprovalCount(context),
       channelBreakdown: Object.entries(expectedChannelCounts).map(
         ([channel, count]) => ({ channel, count }),
       ),
@@ -1183,23 +1343,8 @@ export class DurableProductService implements ProductService {
     context: ProductRequestContext,
     input: { readonly messageRevisionId: string; readonly limit: number },
   ) {
-    const communication = (await this.getCommunication(context, input))
-      .communication;
-    const topic = evaluatorTopicForMessage(communication.messageRevisionId);
-    return getRelatedAsanaWorkResultSchema.parse({
-      items:
-        topic === 'release_readiness'
-          ? [
-              workObjectFactSchema.parse({
-                kind: 'task',
-                providerObjectId: 'SEC-4821',
-                providerVersion: '1',
-                providerTimestamp: SEED_AT,
-                payloadFingerprint: sha256('SEC-4821'),
-              }),
-            ].slice(0, input.limit)
-          : [],
-    });
+    await this.getCommunication(context, input);
+    return getRelatedAsanaWorkResultSchema.parse({ items: [] });
   }
 
   public async searchKnowledge(
@@ -1212,9 +1357,37 @@ export class DurableProductService implements ProductService {
   ) {
     this.#assertContext(context);
     const result = await this.retrieval.search(context, input);
+    await assertTrustedManifest(this.retrieval, context, result);
+    const resolved = result.citations
+      .map((item) => {
+        const record = resolveRetrievedCitation(result, item);
+        const topic = record?.evidence.relation?.topic;
+        const exactEntityRef = input.exactEntityRefs.find((reference) =>
+          record?.evidence.relation?.exactEntityRefs.includes(reference),
+        );
+        const sourceOwned =
+          record !== null &&
+          exactEntityRef !== undefined &&
+          (topic === 'release_readiness' || topic === 'board_metrics')
+            ? sourceOwnedMetadata(record.evidence, {
+                exactEntityRef,
+                topic,
+              })
+            : null;
+        return { citation: item, record, sourceOwned };
+      })
+      .filter(
+        (
+          item,
+        ): item is {
+          citation: Citation;
+          record: NonNullable<typeof item.record>;
+          sourceOwned: NonNullable<typeof item.sourceOwned>;
+        } => item.record !== null && item.sourceOwned !== null,
+      );
     return searchKnowledgeResultSchema.parse({
-      candidates: result.candidates,
-      citations: result.citations,
+      candidates: resolved.map(({ record }) => record.candidate),
+      citations: resolved.map(({ citation }) => citation),
     });
   }
 
@@ -1252,7 +1425,6 @@ export class DurableProductService implements ProductService {
       retrieval: verifiedEvaluatorRetrieval(this.retrieval, {
         exactEntityRef: communicationIdentity.retrievalExactEntityRef,
         topic,
-        includeRelatedAsana: topic === 'release_readiness',
       }),
       context,
       now: this.now,
@@ -1289,6 +1461,7 @@ export class DurableProductService implements ProductService {
       recommendation.recommendationId,
     );
     if (existing !== undefined) {
+      await this.#assertRecommendationLineage(context, existing.value);
       if (existing.value.immutableHash !== artifact.immutableHash)
         throw new ProductServiceError(
           'STALE_REVISION',
@@ -1350,6 +1523,7 @@ export class DurableProductService implements ProductService {
         'STALE_REVISION',
         'Recommendation revision is stale.',
       );
+    await this.#assertRecommendationLineage(context, stored.value);
     const source = this.#sourceForRecommendation(stored.value);
     const draftId = deterministicId('draft', {
       recommendationId: input.recommendationId,
@@ -1367,6 +1541,7 @@ export class DurableProductService implements ProductService {
           'The persisted draft binding conflicts with the recommendation.',
         );
       await this.#assertExactDraftLookup(currentDraft.value);
+      this.#assertDraftLineage(currentDraft.value, stored.value);
       return { result: currentDraft.value.artifact.result };
     }
     const outcome = await createDeterministicDurableAgent({
@@ -1374,7 +1549,6 @@ export class DurableProductService implements ProductService {
       retrieval: verifiedEvaluatorRetrieval(this.retrieval, {
         exactEntityRef: source.exactEntityRef,
         topic: source.topic,
-        includeRelatedAsana: source.topic === 'release_readiness',
       }),
       context,
       now: this.now,
@@ -1404,8 +1578,10 @@ export class DurableProductService implements ProductService {
         'draft',
         draftId,
       );
-      if (winner?.value.recommendationId === input.recommendationId)
+      if (winner?.value.recommendationId === input.recommendationId) {
+        this.#assertDraftLineage(winner.value, stored.value);
         return { result: winner.value.artifact.result };
+      }
       throw new ProductServiceError(
         'STALE_REVISION',
         'Draft creation conflicted with a newer durable head.',
@@ -1521,13 +1697,14 @@ export class DurableProductService implements ProductService {
         'NOT_FOUND',
         'Recommendation was not found.',
       );
+    await this.#assertRecommendationLineage(context, recommendation.value);
+    this.#assertDraftLineage(stored.value, recommendation.value);
     const source = this.#sourceForRecommendation(recommendation.value);
     const outcome = await createDeterministicDurableAgent({
       repository: this.repository,
       retrieval: verifiedEvaluatorRetrieval(this.retrieval, {
         exactEntityRef: source.exactEntityRef,
         topic: source.topic,
-        includeRelatedAsana: source.topic === 'release_readiness',
       }),
       context,
       now: this.now,
@@ -1591,6 +1768,7 @@ export class DurableProductService implements ProductService {
         'STALE_REVISION',
         'Recommendation revision is stale.',
       );
+    await this.#assertRecommendationLineage(context, stored.value);
     return {
       request: contextRequestSchema.parse({
         schemaVersion: '1',
@@ -1645,6 +1823,7 @@ export class DurableProductService implements ProductService {
         'STALE_REVISION',
         'Recommendation revision is stale.',
       );
+    await this.#assertRecommendationLineage(context, recommendation.value);
     return proposalHandoffSchema.parse({
       proposalId: id('proposal-asana', input.recommendationId),
       approvalUrl: productUrl(this.baseUrl, '/approvals'),
@@ -1688,13 +1867,14 @@ export class DurableProductService implements ProductService {
         'NOT_FOUND',
         'Recommendation was not found.',
       );
+    await this.#assertRecommendationLineage(context, recommendation.value);
+    this.#assertDraftLineage(stored.value, recommendation.value);
     const source = this.#sourceForRecommendation(recommendation.value);
     const actionPlan = createDeterministicDurableAgent({
       repository: this.repository,
       retrieval: verifiedEvaluatorRetrieval(this.retrieval, {
         exactEntityRef: source.exactEntityRef,
         topic: source.topic,
-        includeRelatedAsana: source.topic === 'release_readiness',
       }),
       context,
       now: this.now,
@@ -1720,6 +1900,7 @@ export class DurableProductService implements ProductService {
           'STALE_REVISION',
           'The proposal binding conflicts with durable state.',
         );
+      await this.#assertProposalLineage(context, existing.value);
       await this.#registerProposal(existing.value.proposalId);
       return this.#prepareApprovalResult(existing.value);
     }
@@ -1801,7 +1982,7 @@ export class DurableProductService implements ProductService {
     );
   }
 
-  async #pendingApprovalCount(): Promise<number> {
+  async #pendingApprovalCount(context: ProductRequestContext): Promise<number> {
     const index = await this.repository.getCurrent<StoredProposalIndex>(
       TENANT_ID,
       'proposal-index',
@@ -1831,6 +2012,14 @@ export class DurableProductService implements ProductService {
         'STALE_REVISION',
         'The durable proposal index does not match proposal state.',
       );
+    for (const proposal of proposals) {
+      if (proposal === undefined)
+        throw new ProductServiceError(
+          'STALE_REVISION',
+          'The durable proposal index does not match proposal state.',
+        );
+      await this.#assertProposalLineage(context, proposal.value);
+    }
     return proposals.filter(
       (proposal) => proposal?.value.status === 'pending_approval',
     ).length;
@@ -1865,6 +2054,7 @@ export class DurableProductService implements ProductService {
     if (current === undefined)
       throw new ProductServiceError('NOT_FOUND', 'Proposal was not found.');
     const proposal = current.value;
+    await this.#assertProposalLineage(context, proposal);
     if (proposal.status === 'approved') {
       if (
         proposal.approvedFromUpdatedAt !== input.expectedProposalUpdatedAt &&
@@ -2044,6 +2234,7 @@ export class DurableProductService implements ProductService {
         'STALE_REVISION',
         'Approval transaction conflicted.',
       );
+    await this.#assertProposalLineage(context, reloaded.value);
     const result = this.#approvalResult(reloaded.value);
     await this.operationQueue?.enqueue(result.operationId);
     return result;
@@ -2084,6 +2275,7 @@ export class DurableProductService implements ProductService {
     );
     if (current === undefined)
       throw new ProductServiceError('NOT_FOUND', 'Proposal was not found.');
+    await this.#assertProposalLineage(context, current.value);
     return getApprovalStatusResultSchema.parse({
       proposalId: current.value.proposalId,
       status: current.value.status,
@@ -2104,6 +2296,7 @@ export class DurableProductService implements ProductService {
     );
     if (current === undefined)
       throw new ProductServiceError('NOT_FOUND', 'Proposal was not found.');
+    await this.#assertProposalLineage(context, current.value);
     return executionStatusResultSchema.parse({
       proposalId: input.proposalId,
       runtimeMode: 'fixture',

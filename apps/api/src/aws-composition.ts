@@ -12,9 +12,7 @@ import {
   type MemoryProbe,
 } from '@chief/rag';
 import {
-  citationSchema,
   deterministicEvaluatorIdentityV2,
-  retrievalCandidateSchema,
   serverRequestContextSchema,
   type RetrievalQuery,
 } from '@chief/contracts';
@@ -27,6 +25,8 @@ import {
 import {
   durableEvaluatorAuthority,
   DurableProductService,
+  type DurableManifestBinding,
+  type DurableRetrievalResult,
   type DurableRetrievalPort,
   type OperationQueue,
 } from './durable-product-service.js';
@@ -90,55 +90,25 @@ export function createDurableRequestContext() {
 }
 
 function createMemoryRetrieval(): DurableRetrievalPort {
+  const manifestHash = sha256Text('chief-empty-memory-retrieval.v1');
   return {
-    search: (context, input) => {
-      const authorizationEpoch =
-        context.retrievalScope?.authorizationEpoch ?? 1;
-      const values = [
-        {
-          chunkId: 'chunk-communication-1',
-          sourceId: 'source-communication-1',
-          label: 'Friday launch decision',
-          text: 'The Friday launch decision is pending confirmation of the QA owner.',
-        },
-        {
-          chunkId: 'chunk-asana-1',
-          sourceId: 'source-asana-1',
-          label: 'Launch readiness task SEC-4821',
-          text: 'Launch readiness task SEC-4821 tracks the QA owner commitment.',
-        },
-      ].slice(0, input.limit);
-      const citations = values.map((value) =>
-        citationSchema.parse({
-          citationId: `${value.sourceId}:${value.chunkId}:1`,
-          sourceId: value.sourceId,
-          sourceVersion: '1',
-          chunkId: value.chunkId,
-          label: value.label,
-          contentHash: sha256Text(value.text),
-          hydratedUnderAuthorizationEpoch: authorizationEpoch,
-        }),
-      );
-      return Promise.resolve({
-        candidates: values.map((value, index) =>
-          retrievalCandidateSchema.parse({
-            chunkId: value.chunkId,
-            sourceId: value.sourceId,
-            lexicalScore: 1 - index * 0.1,
-            vectorScore: 0.9 - index * 0.1,
-            fusedScore: 0.95 - index * 0.1,
-            authorizationEpoch,
-          }),
-        ),
-        citations,
-        snapshotManifestHash: sha256Text(JSON.stringify(values)),
-        evidence: values.map((value, index) => ({
-          chunkId: value.chunkId,
-          citationId: citations[index]?.citationId as string,
-          text: value.text,
-        })),
-      });
-    },
+    search: () =>
+      Promise.resolve({
+        candidates: [],
+        citations: [],
+        snapshotManifestHash: manifestHash,
+        evidence: [],
+      }),
+    verifyManifestBinding: (context, binding, result) =>
+      Promise.resolve(
+        binding.tenantId === context.retrievalScope?.tenantId &&
+          binding.scopeHash === context.retrievalScope.scopeHash &&
+          binding.authorizationEpoch ===
+            context.retrievalScope.authorizationEpoch &&
+          binding.manifestHash === manifestHash &&
+          result.snapshotManifestHash === manifestHash &&
+          binding.records.length === 0,
+      ),
   };
 }
 
@@ -151,12 +121,88 @@ interface ReadOnlyAwsRetrievalRuntime {
       input: RetrievalQuery,
       inProcessQueryVector: InProcessQueryVector,
     ): Promise<AuthorizedRetrievalResult>;
+    inspect(scope: RetrievalQuery['scope']): Promise<{
+      readonly status: 'ready';
+      readonly authorizationEpoch: number;
+      readonly manifestHash: string;
+    }>;
   };
+}
+
+function canonicalResultRecords(
+  result: DurableRetrievalResult,
+): DurableManifestBinding['records'] | null {
+  if (
+    result.candidates.length !== result.citations.length ||
+    result.evidence.length !== result.citations.length
+  )
+    return null;
+  const records = result.citations.map((citation) => {
+    const candidates = result.candidates.filter(
+      (candidate) =>
+        candidate.sourceId === citation.sourceId &&
+        candidate.chunkId === citation.chunkId &&
+        candidate.authorizationEpoch ===
+          citation.hydratedUnderAuthorizationEpoch,
+    );
+    const evidence = result.evidence.filter(
+      (item) =>
+        item.chunkId === citation.chunkId &&
+        item.citationId === citation.citationId,
+    );
+    if (
+      candidates.length !== 1 ||
+      evidence.length !== 1 ||
+      citation.citationId !==
+        `${citation.sourceId}:${citation.chunkId}:${citation.sourceVersion}` ||
+      citation.contentHash !==
+        sha256Text((evidence[0] as { text: string }).text)
+    )
+      return null;
+    return {
+      sourceId: citation.sourceId,
+      chunkId: citation.chunkId,
+      sourceVersion: citation.sourceVersion,
+      authorizationEpoch: citation.hydratedUnderAuthorizationEpoch,
+      evidenceHash: citation.contentHash,
+    };
+  });
+  if (
+    records.some((record) => record === null) ||
+    new Set(records.map((record) => JSON.stringify(record))).size !==
+      records.length
+  )
+    return null;
+  return (records as Exclude<(typeof records)[number], null>[]).sort(
+    (left, right) =>
+      left.sourceId.localeCompare(right.sourceId) ||
+      left.chunkId.localeCompare(right.chunkId) ||
+      left.sourceVersion.localeCompare(right.sourceVersion),
+  );
+}
+
+function retrievalProof(
+  result: DurableRetrievalResult,
+  records: DurableManifestBinding['records'],
+): string {
+  const authorized = result as Partial<AuthorizedRetrievalResult>;
+  return sha256Text(
+    JSON.stringify({
+      manifestHash: result.snapshotManifestHash,
+      authorizationEpoch: authorized.authorizationEpoch,
+      scoringProfileVersion: authorized.scoringProfileVersion,
+      records,
+      candidates: result.candidates,
+      citations: result.citations,
+      evidence: result.evidence,
+    }),
+  );
 }
 
 export function createReadOnlyAwsRetrieval(
   runtime: ReadOnlyAwsRetrievalRuntime,
 ): DurableRetrievalPort {
+  const issuedProofs = new WeakMap<object, string>();
   return {
     search: async (context, input) => {
       const serverScope = context.retrievalScope;
@@ -164,7 +210,7 @@ export function createReadOnlyAwsRetrieval(
         throw new Error('RETRIEVAL_SCOPE_REQUIRED');
       const scope = { ...serverScope, role: 'factual' as const };
       const prepared = runtime.queryVectors.prepareInProcess(input.queryText);
-      return runtime.index.queryWithCitations(
+      const result = await runtime.index.queryWithCitations(
         {
           schemaVersion: '1',
           scope,
@@ -176,6 +222,47 @@ export function createReadOnlyAwsRetrieval(
         },
         prepared,
       );
+      const records = canonicalResultRecords(result);
+      if (records !== null)
+        issuedProofs.set(result, retrievalProof(result, records));
+      return result;
+    },
+    verifyManifestBinding: async (context, binding, result) => {
+      const serverScope = context.retrievalScope;
+      if (serverScope === undefined) return false;
+      const scope = { ...serverScope, role: 'factual' as const };
+      const records = canonicalResultRecords(result);
+      if (records === null) return false;
+      const authorized = result as Partial<AuthorizedRetrievalResult>;
+      const issuedProof = issuedProofs.get(result);
+      if (
+        issuedProof === undefined ||
+        issuedProof !== retrievalProof(result, records) ||
+        binding.contractVersion !== 'chief-validated-manifest-binding.v1' ||
+        binding.tenantId !== scope.tenantId ||
+        binding.scopeHash !== scope.scopeHash ||
+        binding.authorizationEpoch !== scope.authorizationEpoch ||
+        binding.role !== scope.role ||
+        binding.manifestHash !== result.snapshotManifestHash ||
+        binding.scoringProfileVersion !== 'chief-bounded-fusion-v1' ||
+        authorized.authorizationEpoch !== binding.authorizationEpoch ||
+        authorized.scoringProfileVersion !== binding.scoringProfileVersion ||
+        records.some(
+          (record) => record.authorizationEpoch !== binding.authorizationEpoch,
+        ) ||
+        JSON.stringify(binding.records) !== JSON.stringify(records)
+      )
+        return false;
+      try {
+        const active = await runtime.index.inspect(scope);
+        return (
+          active.status === 'ready' &&
+          active.authorizationEpoch === binding.authorizationEpoch &&
+          active.manifestHash === binding.manifestHash
+        );
+      } catch {
+        return false;
+      }
     },
   };
 }

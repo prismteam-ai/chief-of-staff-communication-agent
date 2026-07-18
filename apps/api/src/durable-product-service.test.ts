@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 import {
   citationSchema,
@@ -9,13 +11,13 @@ import {
   tenantIdSchema,
   type CommunicationSummaryView,
 } from '@chief/contracts';
-import type { RecommendationArtifact } from '@chief/agent/application-agent';
-import { deterministicId } from '@chief/agent/canonical';
+import type {
+  DraftArtifact,
+  RecommendationArtifact,
+} from '@chief/agent/application-agent';
+import { deterministicId, immutableHash } from '@chief/agent/canonical';
 
-import {
-  createDurableRequestContext,
-  createMemoryDurableApiDependencies,
-} from './aws-composition.js';
+import { createDurableRequestContext } from './aws-composition.js';
 import type { ApiDependencies } from './context.js';
 import {
   MemoryDurableProductRepository,
@@ -24,8 +26,40 @@ import {
 import {
   durableEvaluatorAuthority,
   DurableProductService,
+  type DurableManifestBinding,
   type DurableRetrievalPort,
+  type OperationQueue,
 } from './durable-product-service.js';
+
+function sha256Text(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function trustedManifestHash(value: unknown): string {
+  return sha256Text(
+    JSON.stringify({
+      contractVersion: 'chief-test-source-owned-manifest.v1',
+      value,
+    }),
+  );
+}
+
+function trustedManifestVerifier(manifestHash: string) {
+  return (
+    context: ReturnType<typeof createDurableRequestContext>,
+    binding: DurableManifestBinding,
+  ): Promise<boolean> =>
+    Promise.resolve(
+      binding.contractVersion === 'chief-validated-manifest-binding.v1' &&
+        binding.manifestHash === manifestHash &&
+        binding.tenantId === context.retrievalScope?.tenantId &&
+        binding.scopeHash === context.retrievalScope?.scopeHash &&
+        binding.authorizationEpoch ===
+          context.retrievalScope?.authorizationEpoch &&
+        binding.role === 'factual' &&
+        binding.scoringProfileVersion === 'chief-bounded-fusion-v1',
+    );
+}
 
 class FailFirstAtomicDraftCommitRepository extends MemoryDurableProductRepository {
   #fail = true;
@@ -70,16 +104,20 @@ function topicalBoundaryRetrieval(
     readonly key: string;
     readonly text: string;
     readonly exactEntityRef: string;
-    readonly sourceKind?: 'communication' | 'asana' | 'organization';
+    readonly sourceKind?: 'communication' | 'asana';
     readonly topic: 'release_readiness' | 'board_metrics' | 'event_logistics';
     readonly sourceId?: string;
   }[],
 ): DurableRetrievalPort {
+  const manifestHash = trustedManifestHash(records);
   return {
-    search: (_context, input) => {
+    verifyManifestBinding: trustedManifestVerifier(manifestHash),
+    search: (context, input) => {
       const selected = records.slice(0, input.limit);
+      const authorizationEpoch =
+        context.retrievalScope?.authorizationEpoch ?? 1;
       const citations = selected.map(
-        ({ key, sourceKind, sourceId: suppliedSourceId }, index) => {
+        ({ key, text, sourceKind, sourceId: suppliedSourceId }) => {
           const sourceId =
             suppliedSourceId ??
             `source-${sourceKind ?? 'communication'}-${key}`;
@@ -89,8 +127,8 @@ function topicalBoundaryRetrieval(
             sourceVersion: '1',
             chunkId: `chunk-${key}`,
             label: `${key} communication evidence`,
-            contentHash: String(index + 1).repeat(64),
-            hydratedUnderAuthorizationEpoch: 1,
+            contentHash: sha256Text(text),
+            hydratedUnderAuthorizationEpoch: authorizationEpoch,
           });
         },
       );
@@ -106,28 +144,35 @@ function topicalBoundaryRetrieval(
               lexicalScore: 1 - index * 0.1,
               vectorScore: 0.9 - index * 0.1,
               fusedScore: 0.95 - index * 0.1,
-              authorizationEpoch: 1,
+              authorizationEpoch,
             });
           },
         ),
         citations,
-        snapshotManifestHash: 'e'.repeat(64),
+        snapshotManifestHash: manifestHash,
         evidence: selected.map(
           ({ key, text, exactEntityRef, sourceKind, topic }, index) => ({
             chunkId: `chunk-${key}`,
             citationId: citations[index]?.citationId as string,
             text,
             exactEntityRefs: [exactEntityRef],
-            sourceClass:
-              sourceKind === 'organization'
-                ? ('organization_knowledge' as const)
-                : (sourceKind ?? 'communication'),
+            sourceClass: sourceKind ?? 'communication',
+            sourceAuthority: {
+              contractVersion: 'chief-source-authority.v1' as const,
+              verifiedBy: 'canonical_ingestion' as const,
+              sourceClass: sourceKind ?? ('communication' as const),
+              relationKind:
+                sourceKind === 'asana'
+                  ? ('explicit_related_work' as const)
+                  : ('canonical_thread' as const),
+              relationTopic: topic,
+            },
             relation: {
               verified: true as const,
               kind:
                 sourceKind === 'asana'
                   ? ('explicit_related_work' as const)
-                  : ('canonical_message' as const),
+                  : ('canonical_thread' as const),
               topic,
               exactEntityRefs: [exactEntityRef],
             },
@@ -135,6 +180,41 @@ function topicalBoundaryRetrieval(
         ),
       });
     },
+  };
+}
+
+function createMemoryDurableApiDependencies(input?: {
+  readonly repository?: MemoryDurableProductRepository;
+  readonly now?: () => string;
+  readonly baseUrl?: string;
+  readonly operationQueue?: OperationQueue;
+}): ApiDependencies {
+  const repository = input?.repository ?? new MemoryDurableProductRepository();
+  const launchRef =
+    deterministicEvaluatorIdentityV1.communications[0].retrievalExactEntityRef;
+  return {
+    productService: new DurableProductService(
+      repository,
+      topicalBoundaryRetrieval([
+        {
+          key: 'launch-communication',
+          text: 'The Friday launch decision awaits confirmation of the QA owner.',
+          exactEntityRef: launchRef,
+          topic: 'release_readiness',
+        },
+        {
+          key: 'launch-work',
+          text: 'Test fixture SEC-4821 records the QA owner commitment.',
+          exactEntityRef: launchRef,
+          sourceKind: 'asana',
+          topic: 'release_readiness',
+        },
+      ]),
+      input?.baseUrl ?? 'https://chief.example.test',
+      input?.now,
+      input?.operationQueue,
+    ),
+    requestContext: createDurableRequestContext(),
   };
 }
 
@@ -354,11 +434,17 @@ describe('durable hosted product vertical', () => {
         sourceVersion: 'v1',
         chunkId,
         label: 'gmail communication evidence',
-        contentHash: String(index + 1).repeat(64),
+        contentHash: sha256Text(
+          index === 0
+            ? 'The Friday launch is ready once the QA owner confirms.'
+            : 'The QA owner commitment is due before the Friday launch.',
+        ),
         hydratedUnderAuthorizationEpoch: 1,
       }),
     );
+    const manifestHash = trustedManifestHash({ chunkIds, citations });
     const retrieval: DurableRetrievalPort = {
+      verifyManifestBinding: trustedManifestVerifier(manifestHash),
       search: (_context, input) =>
         Promise.resolve({
           candidates: chunkIds.slice(0, input.limit).map((chunkId, index) =>
@@ -372,7 +458,7 @@ describe('durable hosted product vertical', () => {
             }),
           ),
           citations: citations.slice(0, input.limit),
-          snapshotManifestHash: 'f'.repeat(64),
+          snapshotManifestHash: manifestHash,
           evidence: chunkIds.slice(0, input.limit).map((chunkId, index) => ({
             chunkId,
             citationId: citations[index]?.citationId as string,
@@ -385,6 +471,13 @@ describe('durable hosted product vertical', () => {
                 .retrievalExactEntityRef,
             ],
             sourceClass: 'communication' as const,
+            sourceAuthority: {
+              contractVersion: 'chief-source-authority.v1' as const,
+              verifiedBy: 'canonical_ingestion' as const,
+              sourceClass: 'communication' as const,
+              relationKind: 'canonical_thread' as const,
+              relationTopic: 'release_readiness' as const,
+            },
             relation: {
               verified: true as const,
               kind: 'canonical_thread' as const,
@@ -441,6 +534,13 @@ describe('durable hosted product vertical', () => {
         sourceId: 'source-asana-word-but-typed-communication',
       },
       {
+        key: 'launch-work',
+        text: 'Launch readiness task SEC-4821 tracks the QA owner commitment.',
+        exactEntityRef: launchRef,
+        sourceKind: 'asana',
+        topic: 'release_readiness',
+      },
+      {
         key: 'launch-party',
         text: 'The launch party catering owner has confirmed.',
         exactEntityRef: launchRef,
@@ -489,7 +589,7 @@ describe('durable hosted product vertical', () => {
         confidence: 0.72,
         citationSources: [
           'source-asana-word-but-typed-communication',
-          'source-asana-1',
+          'source-asana-launch-work',
         ],
       },
       {
@@ -556,11 +656,7 @@ describe('durable hosted product vertical', () => {
       });
       expect(
         related.items.map(({ providerObjectId }) => providerObjectId),
-      ).toEqual(
-        scenario.messageRevisionId === 'message-revision-1-1'
-          ? ['SEC-4821']
-          : [],
-      );
+      ).toEqual([]);
     }
   });
 
@@ -714,7 +810,84 @@ describe('durable hosted product vertical', () => {
       ).rejects.toMatchObject({ code: 'FORBIDDEN_AUTHORITY' });
   });
 
-  it('does not let a fixed citation ID with mismatched source content suppress canonical related work', async () => {
+  it('never exposes a citation whose source and chunk are absent from the retrieval result', async () => {
+    const launchRef =
+      deterministicEvaluatorIdentityV1.communications[0]
+        .retrievalExactEntityRef;
+    const orphan = citationSchema.parse({
+      citationId: 'source-asana-orphan:chunk-asana-orphan:1',
+      sourceId: 'source-asana-orphan',
+      sourceVersion: '1',
+      chunkId: 'chunk-asana-orphan',
+      label: 'Orphaned Asana citation',
+      contentHash: sha256Text('This record is absent.'),
+      hydratedUnderAuthorizationEpoch: 1,
+    });
+    const emptyManifestHash = trustedManifestHash([]);
+    const service = new DurableProductService(
+      new MemoryDurableProductRepository(),
+      {
+        verifyManifestBinding: trustedManifestVerifier(emptyManifestHash),
+        search: () =>
+          Promise.resolve({
+            candidates: [],
+            citations: [orphan],
+            snapshotManifestHash: emptyManifestHash,
+            evidence: [],
+          }),
+      },
+      'https://chief.example.test',
+    );
+    const context = createDurableRequestContext();
+
+    await expect(
+      service.searchKnowledge(context, {
+        queryText: 'launch readiness',
+        exactEntityRefs: [launchRef],
+        limit: 8,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      service.recommendAction(context, {
+        messageRevisionId: messageRevisionIdSchema.parse(
+          'message-revision-1-1',
+        ),
+        expectedMessageRevision: 1,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+  });
+
+  it('rejects a well-shaped manifest hash without source-owned binding verification', async () => {
+    const launchRef =
+      deterministicEvaluatorIdentityV1.communications[0]
+        .retrievalExactEntityRef;
+    const sourceOwned = topicalBoundaryRetrieval([
+      {
+        key: 'untrusted-without-proof',
+        text: 'A structurally valid row is not sufficient proof.',
+        exactEntityRef: launchRef,
+        topic: 'release_readiness',
+      },
+    ]);
+    const retrievalWithoutProof: DurableRetrievalPort = {
+      search: (context, input) => sourceOwned.search(context, input),
+    };
+    const service = new DurableProductService(
+      new MemoryDurableProductRepository(),
+      retrievalWithoutProof,
+      'https://chief.example.test',
+    );
+
+    await expect(
+      service.searchKnowledge(createDurableRequestContext(), {
+        queryText: 'launch readiness',
+        exactEntityRefs: [launchRef],
+        limit: 8,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+  });
+
+  it('rejects a result containing an Asana citation absent from trusted evidence', async () => {
     const launchRef =
       deterministicEvaluatorIdentityV1.communications[0]
         .retrievalExactEntityRef;
@@ -727,6 +900,9 @@ describe('durable hosted product vertical', () => {
       },
     ]);
     const spoofed: DurableRetrievalPort = {
+      verifyManifestBinding: (context, binding, result) =>
+        legitimate.verifyManifestBinding?.(context, binding, result) ??
+        Promise.resolve(false),
       search: async (context, input) => {
         const result = await legitimate.search(context, input);
         const spoofCitation = citationSchema.parse({
@@ -776,70 +952,40 @@ describe('durable hosted product vertical', () => {
       spoofed,
       'https://chief.example.test',
     );
-    const result = await service.recommendAction(
-      createDurableRequestContext(),
-      {
+    await expect(
+      service.recommendAction(createDurableRequestContext(), {
         messageRevisionId: messageRevisionIdSchema.parse(
           'message-revision-1-1',
         ),
         expectedMessageRevision: 1,
-      },
-    );
-    expect(result.recommendation.citations).toHaveLength(2);
-    expect(result.recommendation.citations.at(-1)).toMatchObject({
-      citationId: 'source-asana-1:chunk-asana-1:1',
-      contentHash:
-        'a1c0ea6ff7436f8a17de74e2803aa8f318b5d42b3b6594dfcaeac4489ca08f81',
-    });
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
   });
 
-  it('does not treat an ingestion-proven Asana object using the launch thread ref as communication evidence', async () => {
+  it('emits Asana evidence only with a retrieved source, chunk, hash, and manifest lineage', async () => {
     const launchRef =
       deterministicEvaluatorIdentityV1.communications[0]
         .retrievalExactEntityRef;
-    const asanaCitation = citationSchema.parse({
-      citationId: 'canonical-asana-spoof:chunk-asana-spoof:1',
-      sourceId: 'canonical-asana-spoof',
-      sourceVersion: '1',
-      chunkId: 'chunk-asana-spoof',
-      label: 'Canonical Asana evidence',
-      contentHash: '8'.repeat(64),
-      hydratedUnderAuthorizationEpoch: 1,
-    });
-    const retrieval: DurableRetrievalPort = {
-      search: () =>
-        Promise.resolve({
-          candidates: [
-            retrievalCandidateSchema.parse({
-              chunkId: asanaCitation.chunkId,
-              sourceId: asanaCitation.sourceId,
-              lexicalScore: 1,
-              vectorScore: 1,
-              fusedScore: 1,
-              authorizationEpoch: 1,
-            }),
-          ],
-          citations: [asanaCitation],
-          snapshotManifestHash: '7'.repeat(64),
-          evidence: [
-            {
-              chunkId: asanaCitation.chunkId,
-              citationId: asanaCitation.citationId,
-              text: 'Operational sign-off before exposing the new version.',
-              exactEntityRefs: [launchRef],
-              sourceClass: 'asana' as const,
-              relation: {
-                verified: true as const,
-                kind: 'explicit_related_work' as const,
-                exactEntityRefs: [launchRef],
-              },
-            },
-          ],
-        }),
-    };
+    const asanaText = 'Durably indexed Asana task SEC-4821 names the QA owner.';
+    const repository = new MemoryDurableProductRepository();
+    const records = [
+      {
+        key: 'launch-message',
+        text: 'The launch decision awaits QA ownership confirmation.',
+        exactEntityRef: launchRef,
+        topic: 'release_readiness' as const,
+      },
+      {
+        key: 'launch-work',
+        text: asanaText,
+        exactEntityRef: launchRef,
+        sourceKind: 'asana' as const,
+        topic: 'release_readiness' as const,
+      },
+    ] as const;
     const service = new DurableProductService(
-      new MemoryDurableProductRepository(),
-      retrieval,
+      repository,
+      topicalBoundaryRetrieval(records),
       'https://chief.example.test',
     );
     const result = await service.recommendAction(
@@ -852,13 +998,247 @@ describe('durable hosted product vertical', () => {
       },
     );
     expect(result.recommendation).toMatchObject({
-      actionType: 'request_context',
-      status: 'needs_context',
+      actionType: 'reply',
+      status: 'current',
     });
-    expect(result.recommendation.citations).toHaveLength(1);
-    expect(result.recommendation.citations[0]?.citationId).toBe(
-      'source-asana-1:chunk-asana-1:1',
+    expect(result.recommendation.citations).toContainEqual(
+      expect.objectContaining({
+        citationId: 'source-asana-launch-work:chunk-launch-work:1',
+        sourceId: 'source-asana-launch-work',
+        sourceVersion: '1',
+        chunkId: 'chunk-launch-work',
+        contentHash: sha256Text(asanaText),
+      }),
     );
+    const persisted = await repository.getCurrent<RecommendationArtifact>(
+      result.recommendation.tenantId,
+      'recommendation',
+      result.recommendation.recommendationId,
+    );
+    expect(
+      persisted?.value.context.facts.find(
+        ({ sourceKind }) => sourceKind === 'asana',
+      ),
+    ).toMatchObject({
+      statement: asanaText,
+      citation: {
+        sourceId: 'source-asana-launch-work',
+        chunkId: 'chunk-launch-work',
+        contentHash: sha256Text(asanaText),
+      },
+    });
+    expect(persisted?.value.context.snapshotManifestHash).toBe(
+      immutableHash(
+        ['communication', 'organization_knowledge', 'asana'].map((kind) => ({
+          kind,
+          snapshotManifestHash: trustedManifestHash(records),
+        })),
+      ),
+    );
+  });
+
+  it('quarantines persisted recommendation, draft, and proposal artifacts with a legacy fabricated citation', async () => {
+    const sourceRepository = new MemoryDurableProductRepository();
+    const source = createMemoryDurableApiDependencies({
+      repository: sourceRepository,
+    });
+    const context = createDurableRequestContext();
+    const recommendation = await source.productService.recommendAction(
+      context,
+      {
+        messageRevisionId: messageRevisionIdSchema.parse(
+          'message-revision-1-1',
+        ),
+        expectedMessageRevision: 1,
+      },
+    );
+    const draft = await source.productService.createDraft(context, {
+      recommendationId: recommendation.recommendation.recommendationId,
+      expectedRecommendationRevision: 1,
+    });
+    const proposal = await source.productService.prepareDraftApproval(context, {
+      draftRevisionId: draft.result.draft.draftRevisionId,
+      expectedDraftRevision: draft.result.draft.revision,
+    });
+    const validRecommendation =
+      await sourceRepository.getCurrent<RecommendationArtifact>(
+        recommendation.recommendation.tenantId,
+        'recommendation',
+        recommendation.recommendation.recommendationId,
+      );
+    const validDraft = await sourceRepository.getCurrent<{
+      readonly artifact: DraftArtifact;
+      readonly recommendationId: string;
+    }>(
+      recommendation.recommendation.tenantId,
+      'draft',
+      draft.result.draft.draftId,
+    );
+    const validProposal = await sourceRepository.getCurrent<{
+      readonly proposalId: string;
+      readonly draftRevisionId: string;
+      readonly actionPlan: {
+        readonly operations: readonly { readonly operationId: string }[];
+      };
+      readonly status: 'pending_approval' | 'approved';
+      readonly approvalUrl: string;
+      readonly updatedAt: string;
+    }>(recommendation.recommendation.tenantId, 'proposal', proposal.proposalId);
+    expect(validRecommendation).toBeDefined();
+    expect(validDraft).toBeDefined();
+    expect(validProposal).toBeDefined();
+    const fabricatedText =
+      'Legacy app-tier Asana evidence that is absent from the trusted manifest.';
+    const fabricatedCitation = citationSchema.parse({
+      citationId: 'source-asana-legacy:chunk-asana-legacy:1',
+      sourceId: 'source-asana-legacy',
+      sourceVersion: '1',
+      chunkId: 'chunk-asana-legacy',
+      label: 'Legacy fabricated Asana citation',
+      contentHash: sha256Text(fabricatedText),
+      hydratedUnderAuthorizationEpoch: 1,
+    });
+    const validRecommendationArtifact =
+      validRecommendation?.value as RecommendationArtifact;
+    const legacyFacts = [
+      ...validRecommendationArtifact.context.facts,
+      {
+        factId: 'fact-chunk-asana-legacy',
+        tenantId: recommendation.recommendation.tenantId,
+        sourceKind: 'asana' as const,
+        statement: fabricatedText,
+        citation: fabricatedCitation,
+        sourceTimestamp: '2026-07-17T12:00:00.000Z',
+      },
+    ];
+    const legacyRecommendationArtifact: RecommendationArtifact = {
+      ...validRecommendationArtifact,
+      recommendation: {
+        ...validRecommendationArtifact.recommendation,
+        citations: [
+          ...validRecommendationArtifact.recommendation.citations,
+          fabricatedCitation,
+        ],
+      },
+      context: {
+        ...validRecommendationArtifact.context,
+        facts: legacyFacts,
+        citations: legacyFacts.map(({ citation }) => citation),
+        snapshotManifestHash: trustedManifestHash('legacy-synthetic-relation'),
+      },
+    };
+    const validDraftValue = validDraft?.value as {
+      readonly artifact: DraftArtifact;
+      readonly recommendationId: string;
+    };
+    const legacyDraftValue = {
+      ...validDraftValue,
+      artifact: {
+        ...validDraftValue.artifact,
+        context: legacyRecommendationArtifact.context,
+        result: {
+          ...validDraftValue.artifact.result,
+          factualCitationCount:
+            validDraftValue.artifact.result.factualCitationCount + 1,
+          draft: {
+            ...validDraftValue.artifact.result.draft,
+            citations: [
+              ...validDraftValue.artifact.result.draft.citations,
+              fabricatedCitation,
+            ],
+          },
+        },
+      },
+    };
+    const quarantineRepository = new MemoryDurableProductRepository();
+    await quarantineRepository.putRevision(
+      recommendation.recommendation.tenantId,
+      {
+        entityType: 'recommendation',
+        entityId: recommendation.recommendation.recommendationId,
+        revisionId: `${recommendation.recommendation.recommendationId}:1`,
+        version: 1,
+        committedAt: recommendation.recommendation.createdAt,
+        value: legacyRecommendationArtifact,
+      },
+    );
+    await quarantineRepository.putRevisionWithExactLookup(
+      recommendation.recommendation.tenantId,
+      {
+        revision: {
+          entityType: 'draft',
+          entityId: draft.result.draft.draftId,
+          revisionId: draft.result.draft.draftRevisionId,
+          version: draft.result.draft.revision,
+          committedAt: draft.result.draft.createdAt,
+          value: legacyDraftValue,
+        },
+        exactLookup: {
+          entityType: 'draft-revision',
+          entityId: draft.result.draft.draftRevisionId,
+          revisionId: draft.result.draft.draftRevisionId,
+          version: draft.result.draft.revision,
+          committedAt: draft.result.draft.createdAt,
+          value: legacyDraftValue,
+        },
+      },
+    );
+    await quarantineRepository.putRevision(
+      recommendation.recommendation.tenantId,
+      {
+        entityType: 'proposal',
+        entityId: proposal.proposalId,
+        revisionId: `${proposal.proposalId}:pending`,
+        version: 1,
+        committedAt: proposal.updatedAt,
+        value: validProposal?.value,
+      },
+    );
+    const quarantined = createMemoryDurableApiDependencies({
+      repository: quarantineRepository,
+    });
+
+    await expect(
+      quarantined.productService.createDraft(context, {
+        recommendationId: recommendation.recommendation.recommendationId,
+        expectedRecommendationRevision: 1,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      quarantined.productService.reviseDraft(context, {
+        draftRevisionId: draft.result.draft.draftRevisionId,
+        expectedDraftRevision: 1,
+        revisionInstruction:
+          'Make this draft concise while retaining all cited facts.',
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      quarantined.productService.prepareDraftApproval(context, {
+        draftRevisionId: draft.result.draft.draftRevisionId,
+        expectedDraftRevision: 1,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      quarantined.productService.getApprovalStatus(context, {
+        proposalId: proposal.proposalId,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      quarantined.productService.getExecutionStatus(context, {
+        proposalId: proposal.proposalId,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      quarantined.productService.approveProposal(context, {
+        proposalId: proposal.proposalId,
+        expectedProposalUpdatedAt: proposal.updatedAt,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    expect(
+      quarantineRepository.executionRecord(
+        validProposal?.value.actionPlan.operations[0]?.operationId ?? '',
+      ),
+    ).toBeUndefined();
   });
 
   it('persists cited draft, exact approval, outbox receipt, and reload state', async () => {
@@ -901,8 +1281,8 @@ describe('durable hosted product vertical', () => {
         ({ statement }) => statement,
       ),
     ).toEqual([
-      'The Friday launch decision is pending confirmation of the QA owner.',
-      'Launch readiness task SEC-4821 tracks the QA owner commitment.',
+      'The Friday launch decision awaits confirmation of the QA owner.',
+      'Test fixture SEC-4821 records the QA owner commitment.',
     ]);
     const recommendationReplay = createMemoryDurableApiDependencies({
       repository,

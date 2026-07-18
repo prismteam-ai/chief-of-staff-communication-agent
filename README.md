@@ -76,10 +76,26 @@ consistently reading and rechecking the independent authorization epoch before
 and after snapshot/query work. Once the epoch advances, old-epoch reads fail;
 only a freshly promoted snapshot for the new epoch becomes readable. Durable
 communication evidence retains that promoted manifest hash. For the fixed
-launch evaluator only, the product combines it with the explicitly related
-deterministic SEC-4821 Asana fixture citation under a versioned relation hash;
-it does not represent that combined hash as a raw retrieval manifest or a live
-Asana read.
+launch evaluator, every emitted citation must resolve to one unique candidate
+and evidence row from that returned snapshot with matching source, chunk,
+version, authorization epoch, and evidence-text hash. The product never appends
+app-tier evidence or rewrites the retrieval manifest to manufacture another
+fact. A syntactically valid hash is not proof: the retrieval adapter must also
+verify the exact tenant/scope/epoch/role/scoring/manifest binding, and each fact
+must carry matching canonical-ingestion source authority and relation metadata.
+Persisted recommendations and drafts are revalidated against current retrieval
+before replay, revision, handoff, or approval preparation; stale fabricated or
+now-absent citations are quarantined with `STALE_REVISION`.
+
+The V2 hosted retrieval corpus contains communication records, not Asana
+records. The product therefore returns no related Asana work object and emits no
+Asana citation unless a source-owned durable record and relation are retrieved.
+The AWS retrieval adapter now verifies each result against the bounded index's
+active, stable-epoch manifest inspection and an exact digest of the issued
+source/chunk/version/epoch/evidence rows. A copied hash, altered row, altered
+result object, or head change fails closed with `STALE_REVISION`; there is no
+fixture-identity or app-tier-classification fallback. This wiring is a local
+worktree change and is not represented by the deployed release listed below.
 
 The focused compatibility suite runs the actual production staging writer into
 compaction, CAS promotion, persisted query-vector production, bounded
@@ -111,12 +127,25 @@ After approval, replaying `approvals.prepareDraft` returns that same persisted
 proposal as `approved`, including its exact action-plan binding and approved
 timestamp.
 
+Every proposal replay, approval, approval-status, execution-status, and
+dashboard read revalidates its exact draft, current recommendation, fresh
+retrieval lineage, and deterministic action plan. A legacy proposal derived
+from absent or untrusted evidence returns `STALE_REVISION` before it can be
+approved, queued, executed, or reported as valid.
+
 The public execution policy is permanently `effect_disabled`. Approval settles
 a durable receipt containing the operation ID, artifact hash, stable
 idempotency key, and observation time. Reload uses `approvals.status` and
 `execution.status` to return the same approval and receipt. No provider request,
 Asana mutation, model call, or credential access is represented as successful
 execution.
+
+Controlled provider effects, reconciliation, and feedback closure exist as
+library contracts with automated test coverage. No durable reconciliation or
+feedback-closure adapter is wired into the deployed Lambda composition, which
+hardwires the effect-disabled sink. The public runtime therefore proves only
+approval, outbox handoff, durable status, and the terminal `effect_disabled`
+receipt—not a real provider effect or deployed reconciliation loop.
 
 SQS delivery occurs after the approval transaction. If enqueueing fails, the
 approved receipt remains readable; retrying approval re-enqueues the same stable
@@ -144,9 +173,12 @@ it cannot approve, send, create a task, or update a task.
    archive is honestly manual/recorded evidence. Blocked shows zero evidence,
    so no unavailable card is expected. This evaluator does not offer OAuth or
    account setup.
-3. Open `/inbox/thread-q3-launch`; inspect the thread, related Asana reference,
-   cited recommendation, style-grounded draft, and focused-context action.
-4. Confirm the persisted draft body is read-only, then choose **Create concise
+3. Open `/inbox/thread-q3-launch`; inspect the thread and confirm that no Asana
+   work object or citation appears without durable indexed evidence. Confirm an
+   unavailable or invalid active manifest fails closed rather than presenting
+   an untrusted recommendation.
+4. For a thread with enough genuinely retrieved evidence to produce a draft,
+   confirm its persisted body is read-only, then choose **Create concise
    revision**. Verify revision 2 has a different, shorter body while retaining
    the same citations, factual-citation count, and passed validation.
 5. Approve the prepared exact revision. Confirm the durable
@@ -208,7 +240,10 @@ Expected parent deployment outputs:
 - MCP endpoint: `<ChiefFoundationStack.McpUrl>`
 - MCP health: `<ChiefFoundationStack.McpHealthUrl>`
 
-The assessed `fbfc0babb6c8c358ff6c4c8cc81b3e66865aad42` runtime release is live at:
+The assessed `fbfc0babb6c8c358ff6c4c8cc81b3e66865aad42` runtime release is live at
+the URLs below. Changes newer than that hash, including the citation-lineage fix
+described above, are local until the parent workflow redeploys and reruns hosted
+acceptance:
 
 - UI: `https://d3hgq3e86d3knk.cloudfront.net`
 - API base: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com`

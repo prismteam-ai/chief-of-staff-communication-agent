@@ -1,16 +1,22 @@
 # Approval-gated effect execution
 
-Status: Wave 2B implementation.
+Status: library and automated-test implementation; the deployed evaluator
+composition is effect-disabled.
 
 ## Outcome
 
-The execution worker consumes an immutable approved operation, conditionally
+The execution-worker library consumes an immutable approved operation, conditionally
 claims its outbox record, revalidates current authority and recipient policy,
 persists the pre-dispatch attempt and client correlation, and then either:
 
 - writes a truthful, networkless `effect_disabled` receipt; or
 - invokes one exact injected communication/Asana adapter under a matching
   server-owned runtime policy.
+
+Only the first branch is wired in the deployed AWS composition. Controlled
+provider effects, reconciliation persistence, and feedback closure are
+constructor-injected library boundaries exercised by automated tests; there is
+no deployed durable adapter for those paths.
 
 No request or SQS body can select a tenant, account, connector, endpoint, or
 credential. Queue messages contain only an internal operation ID; server
@@ -160,6 +166,10 @@ uses `EffectDisabledSink`, produces no provider correlation, and cannot enter
 `provider_accepted` or `delivered`.
 
 ## Correlation, ambiguity, and reconciliation
+
+This section specifies the library contract and its test-proven behavior. It is
+not a claim that a reconciliation resolver or its durable persistence adapter is
+deployed in the evaluator runtime.
 
 The immutable artifact already contains the stable operation/idempotency key,
 attempt ID, account and approval bindings, rendered-payload hash, typed client

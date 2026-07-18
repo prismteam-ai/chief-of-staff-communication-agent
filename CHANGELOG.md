@@ -71,6 +71,30 @@ while retaining all cited facts.` before approve/receipt/reload; also added
 
 ### Changed
 
+- Removed app-tier synthesis of the SEC-4821 Asana citation and synthetic
+  retrieval-manifest hash. Public knowledge and agent citations now fail closed
+  unless one unique retrieved candidate/evidence tuple matches the citation's
+  source, chunk, version, authorization epoch, and evidence-text hash; genuine
+  indexed Asana evidence remains eligible.
+- Removed evaluator-only Asana identity/text and legacy communication/Asana
+  source-class upgrades from the durable product service and its memory
+  retrieval composition. Related Asana work there remains empty until
+  source-owned durable evidence exists; the separate legacy fixture service is
+  unchanged by this patch.
+- Added a fail-closed manifest-proof capability to the retrieval port. A source
+  adapter must verify the exact tenant/scope/epoch/role/scoring/manifest binding
+  and issued source/chunk/version/epoch/evidence rows; a 64-hex string alone is
+  rejected. The AWS composition now rechecks the bounded index's active stable-
+  epoch manifest and rejects altered or non-issued results. This worktree change
+  is not present in the deployed release until a parent redeploy.
+- Added read-time citation-lineage revalidation for persisted recommendations
+  and drafts before replay, revision, context/Asana handoff, or approval
+  preparation. Legacy artifacts containing absent or untrusted citations are
+  quarantined with `STALE_REVISION` instead of being returned by ID.
+- Extended that quarantine to proposal replay, approval, approval status,
+  execution status, and dashboard reads. A persisted proposal must still resolve
+  through its exact draft and current trusted recommendation to the same
+  deterministic action plan before it can be returned, approved, or queued.
 - Replaced fixture-only hosted API and MCP defaults with the durable product
   composition while retaining the deterministic fixed-scope evaluator data.
 - Replaced the incompatible arbitrary-sequence retrieval delta with immutable
@@ -80,8 +104,9 @@ while retaining all cited facts.` before approve/receipt/reload; also added
   durable approval and status operations.
 - Updated evaluator copy to define deterministic, recorded, blocked, and live
   capability modes without claiming public OAuth or account setup. The hosted
-  deterministic seed exposes one fixture connector card; recorded and blocked
-  remain definitions with zero hosted evidence, not additional cards.
+  deterministic seed exposes seven source-owned connector cards: six fixture
+  cards and one manual/recorded LinkedIn archive card. Blocked remains a mode
+  definition with zero hosted evidence and does not create an additional card.
 
 ### Safety boundaries
 
@@ -90,7 +115,12 @@ while retaining all cited facts.` before approve/receipt/reload; also added
 - Public external effects, provider effects, work-management effects, and model
   effects remain disabled. A successful public approval records only an
   `effect_disabled` receipt.
+- Controlled real-effect, reconciliation, and feedback-closure paths are
+  library contracts with automated tests only. No durable reconciliation or
+  feedback-closure adapter is wired into the deployed Lambda composition; the
+  public worker uses the effect-disabled sink.
 - MCP has no approval or direct-effect tool. The browser local fallback cannot
   approve and is forbidden in strict hosted acceptance.
-- This implementation lane did not deploy, seed AWS, call a provider, or run
-  hosted acceptance. The parent workflow owns deployment and hosted proof.
+- The parent workflow deployed and verified assessed release
+  `fbfc0babb6c8c358ff6c4c8cc81b3e66865aad42`. Newer worktree changes are not
+  represented by that public runtime until a parent redeploy and hosted rerun.
