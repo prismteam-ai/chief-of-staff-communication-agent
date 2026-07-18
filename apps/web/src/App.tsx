@@ -54,7 +54,12 @@ import {
   type BrowserApi,
   type BrowserDashboardMetrics,
 } from '@chief/browser-api';
-import { proposalIdSchema } from '@chief/contracts';
+import {
+  attachmentIdSchema,
+  messageRevisionIdSchema,
+  proposalIdSchema,
+  threadIdSchema,
+} from '@chief/contracts';
 import type {
   CommunicationDetailView,
   CommunicationSummaryView,
@@ -1023,18 +1028,95 @@ interface HostedThreadState {
   readonly reason?: string;
 }
 
+type ThreadRouteKind = 'communication' | 'inbox' | 'thread';
+
 function RoutedThreadPage({
   api,
   apiClient,
   projection,
+  routeKind = 'inbox',
 }: {
   readonly api: BrowserApi;
   readonly apiClient: ApiClient;
   readonly projection: ProductProjection;
+  readonly routeKind?: ThreadRouteKind;
 }) {
-  const { threadId = '' } = useParams();
+  const { messageRevisionId = '', threadId = '' } = useParams<{
+    readonly messageRevisionId?: string;
+    readonly threadId?: string;
+  }>();
   const location = useLocation();
-  if (projection.source === 'checking') {
+  const routeId = routeKind === 'communication' ? messageRevisionId : threadId;
+  const parsedRouteId =
+    routeKind === 'communication'
+      ? messageRevisionIdSchema.safeParse(routeId)
+      : threadIdSchema.safeParse(routeId);
+  const safeRouteId =
+    parsedRouteId.success && parsedRouteId.data === routeId
+      ? parsedRouteId.data
+      : undefined;
+  const projectedCommunication =
+    safeRouteId === undefined
+      ? undefined
+      : projection.communications.find((communication) => {
+          if (routeKind === 'communication')
+            return communication.messageRevisionId === safeRouteId;
+          if (routeKind === 'thread')
+            return communication.threadId === safeRouteId;
+          return communication.id === safeRouteId;
+        });
+  const [resolvedCommunication, setResolvedCommunication] =
+    useState<CommunicationFixture>();
+  const [resolvingRoute, setResolvingRoute] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setResolvedCommunication(undefined);
+    if (
+      routeKind === 'inbox' ||
+      projection.source !== 'hosted_durable' ||
+      projectedCommunication !== undefined ||
+      safeRouteId === undefined
+    ) {
+      setResolvingRoute(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setResolvingRoute(true);
+    const resolveCommunication =
+      routeKind === 'communication'
+        ? api
+            .getCommunication(safeRouteId)
+            .then((detail) => hostedCommunicationToView(detail))
+        : api.getThread({ threadId: safeRouteId, limit: 20 }).then((thread) => {
+            const latest =
+              thread.communications.find(
+                ({ messageRevisionId: revisionId }) =>
+                  revisionId === thread.latestMessageRevisionId,
+              ) ?? thread.communications.at(-1);
+            return latest === undefined
+              ? undefined
+              : hostedCommunicationToView(latest);
+          });
+    void resolveCommunication.then(
+      (communication) => {
+        if (!active) return;
+        setResolvedCommunication(communication);
+        setResolvingRoute(false);
+      },
+      () => {
+        if (!active) return;
+        setResolvingRoute(false);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [api, projectedCommunication, projection.source, routeKind, safeRouteId]);
+
+  if (projection.source === 'checking' || resolvingRoute) {
     return (
       <div className="page not-found" role="status">
         <RefreshCcw aria-hidden="true" size={34} />
@@ -1048,12 +1130,15 @@ function RoutedThreadPage({
     location.state as { readonly communication?: CommunicationFixture } | null
   )?.communication;
   const communication =
-    projection.communications.find(({ id }) => id === threadId) ??
-    (routedCommunication?.id === threadId ? routedCommunication : undefined);
+    projectedCommunication ??
+    resolvedCommunication ??
+    (routeKind === 'inbox' && routedCommunication?.id === safeRouteId
+      ? routedCommunication
+      : undefined);
 
   if (
     projection.source === 'local_fallback' &&
-    threadId === 'thread-q3-launch'
+    safeRouteId === 'thread-q3-launch'
   ) {
     return <ThreadPage />;
   }
@@ -1066,6 +1151,22 @@ function RoutedThreadPage({
       source={projection.source}
     />
   );
+}
+
+function AttachmentInboxAlias({
+  api,
+  projection,
+}: {
+  readonly api: BrowserApi;
+  readonly projection: ProductProjection;
+}) {
+  const { attachmentId = '' } = useParams<{
+    readonly attachmentId?: string;
+  }>();
+  const parsedAttachmentId = attachmentIdSchema.safeParse(attachmentId);
+  if (!parsedAttachmentId.success || parsedAttachmentId.data !== attachmentId)
+    return <NotFoundPage />;
+  return <InboxPage api={api} projection={projection} />;
 }
 
 function ProjectionThreadPage({
@@ -3126,6 +3227,32 @@ export function App() {
           }
         />
         <Route
+          path="/communications/:messageRevisionId"
+          element={
+            <RoutedThreadPage
+              api={api}
+              apiClient={apiClient}
+              projection={projection}
+              routeKind="communication"
+            />
+          }
+        />
+        <Route
+          path="/threads/:threadId"
+          element={
+            <RoutedThreadPage
+              api={api}
+              apiClient={apiClient}
+              projection={projection}
+              routeKind="thread"
+            />
+          }
+        />
+        <Route
+          path="/attachments/:attachmentId"
+          element={<AttachmentInboxAlias api={api} projection={projection} />}
+        />
+        <Route
           path="/approvals"
           element={<ApprovalsPage projection={projection} />}
         />
@@ -3135,6 +3262,12 @@ export function App() {
         />
         <Route
           path="/connections"
+          element={
+            <ConnectionsPage apiState={apiState} projection={projection} />
+          }
+        />
+        <Route
+          path="/settings/connectors/:connectorId"
           element={
             <ConnectionsPage apiState={apiState} projection={projection} />
           }

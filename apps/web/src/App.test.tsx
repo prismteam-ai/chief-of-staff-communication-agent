@@ -763,6 +763,53 @@ describe('executive evaluator application', () => {
     expect(screen.queryByText('Taylor Reed')).toBeNull();
   });
 
+  it('resolves API communication deep links into the exact existing thread UI', async () => {
+    arrangeHostedThread();
+    renderRoute('/communications/message-revision-1-1');
+
+    expect(
+      await screen.findByRole('heading', { name: 'Friday launch decision' }),
+    ).toBeTruthy();
+    expect(screen.getByTestId('thread-detail')).toBeTruthy();
+    expect(
+      screen.queryByRole('heading', {
+        name: 'This communication view does not exist.',
+      }),
+    ).toBeNull();
+  });
+
+  it('resolves API thread deep links into the existing thread UI', async () => {
+    arrangeHostedThread();
+    renderRoute('/threads/thread-1');
+
+    expect(
+      await screen.findByRole('heading', { name: 'Friday launch decision' }),
+    ).toBeTruthy();
+    expect(screen.getByTestId('thread-detail')).toBeTruthy();
+  });
+
+  it('routes attachment deep links to the bounded existing inbox UI', async () => {
+    arrangeHostedProjection();
+    renderRoute('/attachments/attachment-launch-readiness');
+
+    expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeTruthy();
+    expect(
+      screen.queryByRole('heading', {
+        name: 'This communication view does not exist.',
+      }),
+    ).toBeNull();
+  });
+
+  it('routes connector settings deep links to the existing connections UI', async () => {
+    arrangeHostedProjection();
+    renderRoute('/settings/connectors/gmail');
+
+    expect(
+      await screen.findByRole('heading', { name: 'Connections' }),
+    ).toBeTruthy();
+    expect(await screen.findAllByTestId('connector-card')).toHaveLength(7);
+  });
+
   it('never grants approval authority to the local fallback', async () => {
     const user = userEvent.setup();
     renderRoute('/inbox/thread-q3-launch');

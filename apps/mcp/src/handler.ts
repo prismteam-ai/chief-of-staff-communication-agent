@@ -9,7 +9,11 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { createDefaultMcpProductAdapter } from './product-service-adapter.js';
 import { createMcpServer } from './server.js';
 import type { McpRequestScope, McpToolService } from './service.js';
-import { MCP_DEFAULT_TOOL_TIMEOUT_MS, MCP_MAX_BODY_BYTES } from './service.js';
+import {
+  MCP_DEFAULT_TOOL_TIMEOUT_MS,
+  MCP_MAX_BODY_BYTES,
+  McpToolRuntime,
+} from './service.js';
 
 const observability = createObservability('chief-mcp');
 const defaultAdapter = createDefaultMcpProductAdapter(process.env);
@@ -88,6 +92,32 @@ export function createHandler(options?: {
       event.rawPath.endsWith('/health')
     ) {
       observability.logger.info('MCP health requested');
+      const readiness = new McpToolRuntime(service, scope, timeoutMs);
+      try {
+        await Promise.all([
+          readiness.execute('get_connector_status', {}),
+          readiness.execute('search_knowledge', {
+            queryText: 'bounded readiness probe',
+            exactEntityRefs: [],
+            limit: 1,
+          }),
+        ]);
+      } catch {
+        observability.logger.error('MCP readiness failed', {
+          errorCode: 'MCP_READINESS_FAILED',
+        });
+        return {
+          statusCode: 503,
+          headers,
+          body: JSON.stringify({
+            service: 'chief-mcp',
+            status: 'unavailable',
+            protocol: 'mcp-streamable-http',
+            externalEffects: 'disabled',
+            tenantSelection: 'server',
+          }),
+        };
+      }
       return {
         statusCode: 200,
         headers,

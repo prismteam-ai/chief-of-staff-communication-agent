@@ -411,6 +411,61 @@ interface StoredProposal {
   readonly approvedFromUpdatedAt?: string;
 }
 
+interface StoredProposalIndex {
+  readonly schemaVersion: '1';
+  readonly proposalIds: readonly string[];
+}
+
+const PROPOSAL_INDEX_ID = 'public-evaluator';
+const PROPOSAL_INDEX_WRITE_ATTEMPTS = 8;
+
+function compareCommunicationChronology(
+  left: CommunicationSummaryView,
+  right: CommunicationSummaryView,
+): number {
+  return (
+    left.sourceTimestamp.localeCompare(right.sourceTimestamp) ||
+    left.revision - right.revision ||
+    left.messageRevisionId.localeCompare(right.messageRevisionId)
+  );
+}
+
+function readProposalIndex(value: unknown): readonly string[] {
+  if (value === null || typeof value !== 'object')
+    throw new ProductServiceError(
+      'STALE_REVISION',
+      'The durable proposal index is malformed.',
+    );
+  const candidate = value as Record<string, unknown>;
+  const rawProposalIds = candidate.proposalIds;
+  if (candidate.schemaVersion !== '1' || !Array.isArray(rawProposalIds))
+    throw new ProductServiceError(
+      'STALE_REVISION',
+      'The durable proposal index is malformed.',
+    );
+  const proposalIds: string[] = [];
+  for (const proposalId of rawProposalIds as unknown[]) {
+    if (typeof proposalId !== 'string' || proposalId.length === 0)
+      throw new ProductServiceError(
+        'STALE_REVISION',
+        'The durable proposal index is malformed.',
+      );
+    proposalIds.push(proposalId);
+  }
+  const normalized = [...proposalIds].sort((left, right) =>
+    left.localeCompare(right),
+  );
+  if (
+    new Set(normalized).size !== normalized.length ||
+    canonicalSha256(normalized) !== canonicalSha256(proposalIds)
+  )
+    throw new ProductServiceError(
+      'STALE_REVISION',
+      'The durable proposal index is not canonical.',
+    );
+  return normalized;
+}
+
 function citation(sourceId: string, chunkId: string, label: string): Citation {
   return citationSchema.parse({
     citationId: `${sourceId}:${chunkId}:1`,
@@ -971,7 +1026,7 @@ export class DurableProductService implements ProductService {
     return dashboardMetricsResultSchema.parse({
       snapshot,
       totalCommunications: projection.communications.length,
-      pendingApprovalCount: 0,
+      pendingApprovalCount: await this.#pendingApprovalCount(),
       channelBreakdown: Object.entries(expectedChannelCounts).map(
         ([channel, count]) => ({ channel, count }),
       ),
@@ -1087,9 +1142,9 @@ export class DurableProductService implements ProductService {
     },
   ) {
     const projection = await this.#projection(context);
-    const all = projection.communications.filter(
-      ({ threadId }) => threadId === input.threadId,
-    );
+    const all = projection.communications
+      .filter(({ threadId }) => threadId === input.threadId)
+      .sort(compareCommunicationChronology);
     if (all.length === 0)
       throw new ProductServiceError('NOT_FOUND', 'Thread was not found.');
     const offset = decodeCursor(input.cursor, `thread:${input.threadId}`);
@@ -1528,6 +1583,14 @@ export class DurableProductService implements ProductService {
         'NOT_FOUND',
         'Recommendation was not found.',
       );
+    if (
+      stored.value.recommendation.revision !==
+      input.expectedRecommendationRevision
+    )
+      throw new ProductServiceError(
+        'STALE_REVISION',
+        'Recommendation revision is stale.',
+      );
     return {
       request: contextRequestSchema.parse({
         schemaVersion: '1',
@@ -1573,6 +1636,14 @@ export class DurableProductService implements ProductService {
       throw new ProductServiceError(
         'NOT_FOUND',
         'Recommendation was not found.',
+      );
+    if (
+      recommendation.value.recommendation.revision !==
+      input.expectedRecommendationRevision
+    )
+      throw new ProductServiceError(
+        'STALE_REVISION',
+        'Recommendation revision is stale.',
       );
     return proposalHandoffSchema.parse({
       proposalId: id('proposal-asana', input.recommendationId),
@@ -1649,6 +1720,7 @@ export class DurableProductService implements ProductService {
           'STALE_REVISION',
           'The proposal binding conflicts with durable state.',
         );
+      await this.#registerProposal(existing.value.proposalId);
       return this.#prepareApprovalResult(existing.value);
     }
     const updatedAt = this.now();
@@ -1678,7 +1750,90 @@ export class DurableProductService implements ProductService {
       proposalId,
     );
     if (persisted === undefined) throw new Error('PROPOSAL_HEAD_NOT_PERSISTED');
+    await this.#registerProposal(persisted.value.proposalId);
     return this.#prepareApprovalResult(persisted.value);
+  }
+
+  async #registerProposal(proposalId: string): Promise<void> {
+    for (
+      let attempt = 0;
+      attempt < PROPOSAL_INDEX_WRITE_ATTEMPTS;
+      attempt += 1
+    ) {
+      const current = await this.repository.getCurrent<StoredProposalIndex>(
+        TENANT_ID,
+        'proposal-index',
+        PROPOSAL_INDEX_ID,
+      );
+      const currentProposalIds =
+        current === undefined ? [] : readProposalIndex(current.value);
+      if (currentProposalIds.includes(proposalId)) return;
+      const proposalIds = [...currentProposalIds, proposalId].sort(
+        (left, right) => left.localeCompare(right),
+      );
+      const version = (current?.version ?? 0) + 1;
+      try {
+        await this.repository.putRevision(TENANT_ID, {
+          entityType: 'proposal-index',
+          entityId: PROPOSAL_INDEX_ID,
+          revisionId: id('proposal-index-revision', { version, proposalIds }),
+          version,
+          ...(current === undefined
+            ? {}
+            : {
+                expectedVersion: current.version,
+                expectedRevisionId: current.revisionId,
+              }),
+          committedAt: this.now(),
+          value: {
+            schemaVersion: '1',
+            proposalIds,
+          } satisfies StoredProposalIndex,
+        });
+        return;
+      } catch (error) {
+        if (!(error instanceof PersistenceConflictError)) throw error;
+      }
+    }
+    throw new ProductServiceError(
+      'STALE_REVISION',
+      'The durable proposal index remained contended.',
+    );
+  }
+
+  async #pendingApprovalCount(): Promise<number> {
+    const index = await this.repository.getCurrent<StoredProposalIndex>(
+      TENANT_ID,
+      'proposal-index',
+      PROPOSAL_INDEX_ID,
+    );
+    if (index === undefined) return 0;
+    const proposalIds = readProposalIndex(index.value);
+    const proposals = await Promise.all(
+      proposalIds.map((proposalId) =>
+        this.repository.getCurrent<StoredProposal>(
+          TENANT_ID,
+          'proposal',
+          proposalId,
+        ),
+      ),
+    );
+    if (
+      proposals.some(
+        (proposal, index) =>
+          proposal === undefined ||
+          proposal.value.proposalId !== proposalIds[index] ||
+          (proposal.value.status !== 'pending_approval' &&
+            proposal.value.status !== 'approved'),
+      )
+    )
+      throw new ProductServiceError(
+        'STALE_REVISION',
+        'The durable proposal index does not match proposal state.',
+      );
+    return proposals.filter(
+      (proposal) => proposal?.value.status === 'pending_approval',
+    ).length;
   }
 
   #prepareApprovalResult(proposal: StoredProposal): PrepareDraftApprovalResult {

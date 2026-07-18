@@ -70,11 +70,23 @@ async function productCall<T>(operation: () => ProductResult<T>): Promise<T> {
 export const systemRouter = router({
   health: publicProcedure
     .output(productHealthResponseSchema)
-    .query(({ ctx }) => {
+    .query(async ({ ctx }) => {
       ctx.observability.logger.info('Product API health requested', {
         surface: 'typed-product-api',
         externalEffects: 'disabled',
       });
+      await Promise.all([
+        productCall(() =>
+          ctx.productService.getConnectorStatus(ctx.requestContext, {}),
+        ),
+        productCall(() =>
+          ctx.productService.searchKnowledge(ctx.requestContext, {
+            queryText: 'bounded readiness probe',
+            exactEntityRefs: [],
+            limit: 1,
+          }),
+        ),
+      ]);
       return createProductHealthResponse('chief-api');
     }),
 });

@@ -29,22 +29,45 @@ import {
   dashboardMetricsResultSchema,
   executionStatusResultSchema,
   type ProductRequestContext,
+  type ProductService,
 } from './product-service.js';
 import { appRouter } from './router.js';
 
 function createCaller(
   requestContext: ProductRequestContext = createFixtureRequestContext(),
+  productService: ProductService = createFixtureProductService(),
 ) {
   return appRouter.createCaller({
     event: {} as never,
     lambdaContext: {} as never,
     observability: createObservability('chief-api-test'),
-    productService: createFixtureProductService(),
+    productService,
     requestContext,
   });
 }
 
 describe('typed product router', () => {
+  it('fails health closed when durable product or retrieval readiness is unavailable', async () => {
+    const fixture = createFixtureProductService();
+    const unavailable = new Proxy(fixture, {
+      get(target, property, receiver): unknown {
+        if (property === 'searchKnowledge') {
+          return () => {
+            throw new Error('injected retrieval-head failure');
+          };
+        }
+        const value: unknown = Reflect.get(target, property, receiver);
+        return typeof value === 'function'
+          ? (value.bind(target) as unknown)
+          : value;
+      },
+    });
+
+    await expect(
+      createCaller(createFixtureRequestContext(), unavailable).system.health(),
+    ).rejects.toThrow('injected retrieval-head failure');
+  });
+
   it('serves the complete fixture-backed product surface with schema parity', async () => {
     const caller = createCaller();
 

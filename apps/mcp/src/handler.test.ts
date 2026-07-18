@@ -145,8 +145,8 @@ describe('Chief remote MCP Lambda', () => {
     ).toThrow('credential-free HTTPS origin');
   });
 
-  it('reports a truthful cheap health response without retrieval or effects', async () => {
-    const response = (await handler(
+  it('reports dependency-aware health without external effects', async () => {
+    const response = (await frozenFixtureHandler(
       event({ method: 'GET', rawPath: '/mcp/health' }),
     )) as APIGatewayProxyStructuredResultV2;
     const body = JSON.parse(response.body ?? '{}') as Record<string, unknown>;
@@ -160,6 +160,31 @@ describe('Chief remote MCP Lambda', () => {
       service: 'chief-mcp',
       status: 'ok',
       protocol: 'mcp-streamable-http',
+      externalEffects: 'disabled',
+      tenantSelection: 'server',
+    });
+  });
+
+  it('fails health closed when the promoted retrieval projection is unavailable', async () => {
+    const fixture = new FixtureMcpToolService();
+    const unavailableHandler = createHandler({
+      service: {
+        call: (toolName, input, scope) => {
+          if (toolName === 'search_knowledge') {
+            throw new Error('injected retrieval-head failure');
+          }
+          return fixture.call(toolName, input, scope);
+        },
+      },
+    });
+    const response = (await unavailableHandler(
+      event({ method: 'GET', rawPath: '/mcp/health' }),
+    )) as APIGatewayProxyStructuredResultV2;
+
+    expect(response.statusCode).toBe(503);
+    expect(JSON.parse(response.body ?? '{}')).toMatchObject({
+      service: 'chief-mcp',
+      status: 'unavailable',
       externalEffects: 'disabled',
       tenantSelection: 'server',
     });

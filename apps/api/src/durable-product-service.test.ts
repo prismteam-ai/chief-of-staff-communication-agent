@@ -269,6 +269,24 @@ describe('durable hosted product vertical', () => {
       service.getThreadContext(context, { threadId: 'thread-1', limit: 100 }),
     ).resolves.toMatchObject({ thread: { channel: 'gmail' } });
 
+    const mixedDateThread = await service.getThreadContext(context, {
+      threadId: 'thread-1',
+      limit: 100,
+    });
+    const chronologicalKeys = mixedDateThread.thread.communications.map(
+      ({ sourceTimestamp, revision, messageRevisionId }) =>
+        `${sourceTimestamp}:${revision.toString().padStart(12, '0')}:${messageRevisionId}`,
+    );
+    expect(chronologicalKeys).toEqual([...chronologicalKeys].sort());
+    expect(mixedDateThread.thread.communications.at(-1)).toMatchObject({
+      messageRevisionId: 'message-revision-1-1',
+      sourceTimestamp: '2026-07-17T10:52:00.000Z',
+    });
+    expect(mixedDateThread.thread).toMatchObject({
+      latestMessageRevisionId: 'message-revision-1-1',
+      sourceUpdatedAt: '2026-07-17T10:52:00.000Z',
+    });
+
     const marker = await repository.getCurrent(
       deterministicEvaluatorIdentityV2.tenantId,
       'hosted-projection-marker',
@@ -1027,6 +1045,89 @@ describe('durable hosted product vertical', () => {
       status: 'effect_disabled',
       receipt: approved.receipt,
     });
+  });
+
+  it('derives pending approval metrics from durable proposal state across restarts', async () => {
+    const repository = new MemoryDurableProductRepository();
+    const dependencies = createMemoryDurableApiDependencies({ repository });
+    const { context, proposal } = await preparePendingApproval(dependencies);
+
+    const restarted = createMemoryDurableApiDependencies({ repository });
+    await expect(
+      restarted.productService.dashboardMetrics(context, { window: '7d' }),
+    ).resolves.toMatchObject({ pendingApprovalCount: 1 });
+
+    await dependencies.productService.approveProposal(context, {
+      proposalId: proposal.proposalId,
+      expectedProposalUpdatedAt: proposal.updatedAt,
+    });
+    const restartedAfterApproval = createMemoryDurableApiDependencies({
+      repository,
+    });
+    await expect(
+      restartedAfterApproval.productService.dashboardMetrics(context, {
+        window: '7d',
+      }),
+    ).resolves.toMatchObject({ pendingApprovalCount: 0 });
+  });
+
+  it('rejects stale recommendation revisions for context and Asana preparation', async () => {
+    const repository = new MemoryDurableProductRepository();
+    const dependencies = createMemoryDurableApiDependencies({ repository });
+    const context = createDurableRequestContext();
+    const result = await dependencies.productService.recommendAction(context, {
+      messageRevisionId: messageRevisionIdSchema.parse('message-revision-1-1'),
+      expectedMessageRevision: 1,
+    });
+    const recommendationId = result.recommendation.recommendationId;
+    const current = await repository.getCurrent<RecommendationArtifact>(
+      durableEvaluatorAuthority.tenantId,
+      'recommendation',
+      recommendationId,
+    );
+    expect(current).toBeDefined();
+    if (current === undefined) throw new Error('RECOMMENDATION_NOT_PERSISTED');
+    await repository.putRevision(durableEvaluatorAuthority.tenantId, {
+      entityType: 'recommendation',
+      entityId: recommendationId,
+      revisionId: `${recommendationId}:2`,
+      version: 2,
+      expectedVersion: current.version,
+      expectedRevisionId: current.revisionId,
+      committedAt: '2026-07-18T08:00:00.000Z',
+      value: {
+        ...current.value,
+        recommendation: {
+          ...current.value.recommendation,
+          revision: 2,
+        },
+      },
+    });
+
+    await expect(
+      dependencies.productService.requestContext(context, {
+        recommendationId,
+        expectedRecommendationRevision: 1,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      dependencies.productService.prepareAsanaAction(context, {
+        recommendationId,
+        expectedRecommendationRevision: 1,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      dependencies.productService.requestContext(context, {
+        recommendationId,
+        expectedRecommendationRevision: 2,
+      }),
+    ).resolves.toMatchObject({ request: { recommendationId } });
+    await expect(
+      dependencies.productService.prepareAsanaAction(context, {
+        recommendationId,
+        expectedRecommendationRevision: 2,
+      }),
+    ).resolves.toMatchObject({ status: 'prepared' });
   });
 
   it('keeps committed approval readable and retries stable queue delivery', async () => {
