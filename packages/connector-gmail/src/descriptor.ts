@@ -4,8 +4,11 @@ import type { ConnectorDescriptor } from '@chief/contracts/connectors';
 export const GMAIL_CONNECTOR_ID = 'gmail';
 export const GMAIL_DESCRIPTOR_VERSION = '1.0.0';
 export const GMAIL_AUTHORIZATION_AUDIENCE = 'https://gmail.googleapis.com/';
-export const GMAIL_OAUTH_SCOPES = Object.freeze([
+export const GMAIL_READ_ONLY_OAUTH_SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/gmail.readonly',
+] as const);
+export const GMAIL_OAUTH_SCOPES = Object.freeze([
+  ...GMAIL_READ_ONLY_OAUTH_SCOPES,
   'https://www.googleapis.com/auth/gmail.send',
 ] as const);
 

@@ -24,6 +24,7 @@ import {
   GMAIL_CONNECTOR_ID,
   GMAIL_DESCRIPTOR_VERSION,
   GMAIL_OAUTH_SCOPES,
+  GMAIL_READ_ONLY_OAUTH_SCOPES,
 } from './descriptor.js';
 import type {
   GmailApiEvidenceBoundary,
@@ -943,7 +944,14 @@ async function runGmailReadOnlyAcceptanceWithinDeadline(
         'GMAIL_ACCEPTANCE_OAUTH_AUDIENCE_MISMATCH',
       );
     }
-    if (!sameExactSet(descriptor.authorizationScopes, GMAIL_OAUTH_SCOPES)) {
+    if (
+      !sameExactSet(descriptor.authorizationScopes, GMAIL_OAUTH_SCOPES) ||
+      !descriptor.capabilities.read ||
+      !descriptor.capabilities.send ||
+      !descriptor.capabilities.poll ||
+      !descriptor.capabilities.historicalBackfill ||
+      !descriptor.capabilities.externalEffect
+    ) {
       throw new GmailAcceptanceError('GMAIL_ACCEPTANCE_OAUTH_SCOPE_DRIFT');
     }
     const accountIdentityHash = stableHash(expectedAccount);
@@ -988,7 +996,7 @@ async function runGmailReadOnlyAcceptanceWithinDeadline(
         'GMAIL_ACCEPTANCE_OAUTH_AUDIENCE_MISMATCH',
       );
     }
-    if (!sameExactSet(tokenInfo.scopes, GMAIL_OAUTH_SCOPES)) {
+    if (!sameExactSet(tokenInfo.scopes, GMAIL_READ_ONLY_OAUTH_SCOPES)) {
       throw new GmailAcceptanceError('GMAIL_ACCEPTANCE_OAUTH_SCOPE_DRIFT');
     }
     if (
@@ -1063,7 +1071,7 @@ async function runGmailReadOnlyAcceptanceWithinDeadline(
     const scopeHash = stableHash({
       mode: 'read_only_acceptance',
       accountIdentityHash,
-      scopes: [...GMAIL_OAUTH_SCOPES].sort(),
+      scopes: [...GMAIL_READ_ONLY_OAUTH_SCOPES].sort(),
     });
     const historyCursor =
       input.checkpoint?.historyCursor ??
@@ -1156,7 +1164,7 @@ async function runGmailReadOnlyAcceptanceWithinDeadline(
       observedAt,
       capability: {
         audience: GMAIL_AUTHORIZATION_AUDIENCE,
-        scopes: [...GMAIL_OAUTH_SCOPES],
+        scopes: [...GMAIL_READ_ONLY_OAUTH_SCOPES],
         read: true,
         poll: true,
         historicalBackfill: true,

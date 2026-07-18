@@ -7,9 +7,9 @@ completion, protected cursor storage, captured-message persistence, and
 prepared MIME loading remain explicit injected boundaries. Provider-shaped
 fixtures stay test-local and are not exported as production authority.
 The package manifest has no wildcard subpath export: only the production root,
-`@chief/connector-gmail/acceptance`, and
-`@chief/connector-gmail/acceptance-cli` are resolvable. In particular,
-`provider-fixtures` and test modules cannot be imported through the package.
+the two acceptance subpaths, and the two bounded `oauth-bootstrap` subpaths are
+resolvable. In particular, `provider-fixtures` and test modules cannot be
+imported through the package.
 
 The package-local live command is deliberately narrower than the connector.
 Its only mode is `read_only_acceptance`; it cannot send, watch, modify, trash,
@@ -38,32 +38,26 @@ trails into the checkpoint identity. Twelve unique pending tokens is the total
 continuation bound per stream; a thirteenth fails closed instead of evicting an
 old hash or weakening cycle detection.
 
-## Prepare consent without putting secrets in logs
+## Bootstrap read-only consent once
 
 1. In the operator-owned Google Cloud project, configure an OAuth installed or
    web application and add the controlled Gmail account as a test user when
    the consent screen is in Testing. Download the client JSON. Do not paste or
    print its client secret in a terminal, recording, ticket, or chat.
-2. Request exactly these scopes in the separate authorization-code consent
-   flow, with offline access and explicit consent:
-
-   - `https://www.googleapis.com/auth/gmail.readonly`
-   - `https://www.googleapis.com/auth/gmail.send`
-
-   Do not request `gmail.modify`, `mail.google.com`, `openid`, or another
-   additional scope. The live command performs no consent flow and no send; it
-   only verifies that the token grant exactly matches the connector contract.
-
-3. Complete consent outside logs and screen recordings. Write the returned
-   refresh token directly from the protected consent tool/editor to a separate
-   file. Never pass a token or authorization code on this command's argv.
-4. Under the repository's already-ignored `.config` directory, keep four
+2. Register exactly
+   `http://localhost:3000/api/oauth/google/callback`. The one-time command binds
+   only `127.0.0.1:3000`, validates the callback Host/path/state, and requests
+   only `https://www.googleapis.com/auth/gmail.readonly` with offline access,
+   explicit consent, and PKCE. It has fixed Google authorization/token hosts
+   and cannot request send, modify, watch, delete, profile, email, or OpenID
+   authority.
+3. Under the repository's already-ignored `.config` directory, keep four
    operator-only files:
 
    - `<gmail-oauth-client-file>.json`: the downloaded Google JSON containing
      exactly one top-level `installed` or `web` client;
-   - `<gmail-refresh-token-file>`: the refresh token as raw text, or JSON with
-     one `refresh_token` field;
+   - `<gmail-refresh-token-file>`: created by the bootstrap as a raw refresh
+     token with owner-restricted permissions;
    - `<gmail-expected-account-file>`: the exact controlled Gmail account
      identity;
    - `<gmail-acceptance-checkpoint-file>.json`: created and replaced by the
@@ -75,11 +69,16 @@ old hash or weakening cycle detection.
    git check-ignore .config/<gmail-oauth-client-file>.json
    ```
 
-The client JSON and refresh token are separate by design. The parser accepts
-Google's installed-application and web-application client formats. The command
-refreshes an access token in memory, validates its exact OAuth client audience,
-exact scope set, and expiry, then compares `users.getProfile` to the expected
-account. None of those raw values are emitted.
+The client JSON and refresh token are separate by design. The bootstrap accepts
+Google's installed-application and web-application client formats only when
+the single redirect exactly matches the registered callback above. It prints a
+consent URL; it opens a browser only when `--open-browser` is explicitly
+present. The optional expected-account file is used as a browser-only login
+hint and is omitted from terminal evidence. The existing acceptance command
+then refreshes an access token in memory, validates the exact OAuth client
+audience, exact read-only scope set, and expiry, and compares
+`users.getProfile` to the expected account. That tokeninfo/profile validation
+remains authoritative; the bootstrap does not duplicate or weaken it.
 
 Before reading any of these files, the command resolves/canonicalizes every
 file source, the checkpoint, and its stable `.tmp`/`.bak` sidecars. It rejects
@@ -88,7 +87,7 @@ This prevents checkpoint recovery or replacement from reading, unlinking, or
 overwriting a credential source. Keep all four files at distinct paths; never
 use a credential path ending in the checkpoint's `.tmp` or `.bak` name.
 
-## Exact Node 22 command
+## Exact Node 22 bootstrap-once and acceptance-twice commands
 
 Run from the repository root. The variables below contain paths only, not
 credential values:
@@ -102,6 +101,13 @@ $GMAIL_CHECKPOINT_FILE_PATH = '.config/<gmail-acceptance-checkpoint-file>.json'
 & 'E:\nvm\v22.18.0\pnpm.CMD' --filter @chief/connector-gmail build
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+& 'E:\nvm\v22.18.0\node.exe' packages/connector-gmail/dist/oauth-bootstrap-cli.js `
+  --oauth-client-file $GMAIL_OAUTH_CLIENT_FILE_PATH `
+  --output-file $GMAIL_REFRESH_TOKEN_FILE_PATH `
+  --expected-account-file $GMAIL_EXPECTED_ACCOUNT_FILE_PATH `
+  --open-browser
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 & 'E:\nvm\v22.18.0\node.exe' packages/connector-gmail/dist/acceptance-cli.js `
   --oauth-client-file $GMAIL_OAUTH_CLIENT_FILE_PATH `
   --refresh-token-file $GMAIL_REFRESH_TOKEN_FILE_PATH `
@@ -109,7 +115,23 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   --checkpoint-file $GMAIL_CHECKPOINT_FILE_PATH `
   --max-items 5 `
   --max-pages 2
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+& 'E:\nvm\v22.18.0\node.exe' packages/connector-gmail/dist/acceptance-cli.js `
+  --oauth-client-file $GMAIL_OAUTH_CLIENT_FILE_PATH `
+  --refresh-token-file $GMAIL_REFRESH_TOKEN_FILE_PATH `
+  --expected-account-file $GMAIL_EXPECTED_ACCOUNT_FILE_PATH `
+  --checkpoint-file $GMAIL_CHECKPOINT_FILE_PATH `
+  --max-items 5 `
+  --max-pages 2
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 ```
+
+The first acceptance invocation establishes the bounded checkpoint. The second
+identical invocation proves restart/resume. Do not run the bootstrap a second
+time against the same output path. For an intentional rotation, repeat only
+the bootstrap command with `--rotate`; the old token remains in place unless a
+new token has passed all response checks and the atomic replacement succeeds.
 
 An operator-managed secret injector may provide credential contents through
 environment variables instead. Pass only their names using

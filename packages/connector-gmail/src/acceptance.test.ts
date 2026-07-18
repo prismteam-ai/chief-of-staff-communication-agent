@@ -16,7 +16,12 @@ import {
   type GmailAcceptanceOAuthClient,
   type GmailAcceptanceRunInput,
 } from './acceptance.js';
-import { GMAIL_OAUTH_SCOPES } from './descriptor.js';
+import {
+  gmailConnectorDescriptor,
+  GMAIL_OAUTH_SCOPES,
+  GMAIL_READ_ONLY_OAUTH_SCOPES,
+} from './descriptor.js';
+import * as descriptorModule from './descriptor.js';
 
 const NOW = '2026-07-17T12:00:00.000Z';
 const ACCOUNT = 'acceptance.person@example.invalid';
@@ -125,7 +130,7 @@ function fakeSurface(options: FakeOptions = {}): {
     getTokenInfo: () =>
       Promise.resolve({
         aud: options.tokenAudience ?? CLIENT_ID,
-        scopes: options.scopes ?? [...GMAIL_OAUTH_SCOPES],
+        scopes: options.scopes ?? [...GMAIL_READ_ONLY_OAUTH_SCOPES],
         expiry_date:
           options.expiryDate ?? Date.parse('2026-07-17T13:00:00.000Z'),
       }),
@@ -356,6 +361,19 @@ describe('Gmail read-only live acceptance', () => {
     const result = await runGmailReadOnlyAcceptance(input(fake.surface));
     const serialized = JSON.stringify(result.report);
 
+    expect(gmailConnectorDescriptor().authorizationScopes).toEqual([
+      ...GMAIL_OAUTH_SCOPES,
+    ]);
+    expect(result.report.capability.scopes).toEqual([
+      ...GMAIL_READ_ONLY_OAUTH_SCOPES,
+    ]);
+    expect(gmailConnectorDescriptor().capabilities).toMatchObject({
+      read: true,
+      send: true,
+      externalEffect: true,
+    });
+    expect(result.report.capability.externalMutations).toBe(false);
+
     expect(result.report).toMatchObject({
       mode: 'read_only_acceptance',
       status: 'pass',
@@ -532,6 +550,56 @@ describe('Gmail read-only live acceptance', () => {
   );
 
   it.each([
+    [
+      'constraint',
+      (descriptor: ReturnType<typeof gmailConnectorDescriptor>) => ({
+        ...descriptor,
+        constraints: [
+          ...descriptor.constraints,
+          'material checkpoint-binding drift',
+        ],
+      }),
+    ],
+    [
+      'supported runtime mode',
+      (descriptor: ReturnType<typeof gmailConnectorDescriptor>) => ({
+        ...descriptor,
+        supportedRuntimeModes: descriptor.supportedRuntimeModes.filter(
+          (mode) => mode !== 'disabled',
+        ),
+      }),
+    ],
+  ] as const)(
+    'invalidates a checkpoint when a material descriptor %s drifts before OAuth',
+    async (_name, drift) => {
+      const initial = fakeSurface();
+      const initialResult = await runGmailReadOnlyAcceptance(
+        input(initial.surface),
+      );
+      const currentDescriptor = gmailConnectorDescriptor();
+      const descriptorSpy = vi
+        .spyOn(descriptorModule, 'gmailConnectorDescriptor')
+        .mockReturnValue(drift(currentDescriptor));
+      const resumed = fakeSurface();
+      try {
+        await expect(
+          runGmailReadOnlyAcceptance(
+            input(resumed.surface, { checkpoint: initialResult.checkpoint }),
+          ),
+        ).rejects.toMatchObject({
+          code: 'GMAIL_ACCEPTANCE_CHECKPOINT_INVALID',
+        });
+        expect(resumed.calls.oauthClientCreate).toBe(0);
+        expect(resumed.calls.gmailClientCreate).toBe(0);
+        expect(resumed.calls.profile).toHaveLength(0);
+        expect(resumed.calls.history).toHaveLength(0);
+      } finally {
+        descriptorSpy.mockRestore();
+      }
+    },
+  );
+
+  it.each([
     ['history', { historyPagination: 'stall' }],
     ['backfill', { emptyHistory: true, backfillPagination: 'stall' }],
   ] as const)(
@@ -558,7 +626,7 @@ describe('Gmail read-only live acceptance', () => {
   it.each([
     [
       'scope drift',
-      { scopes: [...GMAIL_OAUTH_SCOPES, 'openid'] },
+      { scopes: [...GMAIL_READ_ONLY_OAUTH_SCOPES, 'openid'] },
       {},
       'GMAIL_ACCEPTANCE_OAUTH_SCOPE_DRIFT',
     ],

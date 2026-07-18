@@ -11,11 +11,19 @@ describe('@chief/connector-gmail package exports', () => {
       '.',
       './acceptance',
       './acceptance-cli',
+      './oauth-bootstrap',
+      './oauth-bootstrap-cli',
     ]);
     expect(packageJson.exports).not.toHaveProperty('./*');
     expect(JSON.stringify(packageJson.exports)).not.toContain(
       'provider-fixtures',
     );
     expect(JSON.stringify(packageJson.exports)).not.toContain('.test');
+    expect(() =>
+      import.meta.resolve('@chief/connector-gmail/provider-fixtures'),
+    ).toThrow();
+    expect(() =>
+      import.meta.resolve('@chief/connector-gmail/oauth-bootstrap.test'),
+    ).toThrow();
   });
 });

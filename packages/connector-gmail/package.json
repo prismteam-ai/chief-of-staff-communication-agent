@@ -15,10 +15,19 @@
     "./acceptance-cli": {
       "types": "./src/acceptance-cli.ts",
       "default": "./dist/acceptance-cli.js"
+    },
+    "./oauth-bootstrap": {
+      "types": "./src/oauth-bootstrap.ts",
+      "default": "./dist/oauth-bootstrap.js"
+    },
+    "./oauth-bootstrap-cli": {
+      "types": "./src/oauth-bootstrap-cli.ts",
+      "default": "./dist/oauth-bootstrap-cli.js"
     }
   },
   "scripts": {
     "accept:read-only": "node dist/acceptance-cli.js",
+    "oauth:bootstrap:read-only": "node dist/oauth-bootstrap-cli.js",
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint src",
     "typecheck": "tsc -p tsconfig.json --noEmit",

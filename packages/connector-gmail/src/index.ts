@@ -11,6 +11,7 @@ export {
   GMAIL_CONNECTOR_ID,
   GMAIL_DESCRIPTOR_VERSION,
   GMAIL_OAUTH_SCOPES,
+  GMAIL_READ_ONLY_OAUTH_SCOPES,
 } from './descriptor.js';
 export {
   GoogleApisGmailClient,
