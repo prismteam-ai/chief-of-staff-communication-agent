@@ -158,7 +158,7 @@ function createSeed(baseUrl: string): SeedProjection {
       recipientDisplayNames: ['Public evaluator'],
       subject: 'Friday launch decision',
       excerpt: 'Can we confirm the Friday launch and the owner for QA?',
-      attachmentCount: 0,
+      attachmentCount: 1,
       sourceTimestamp: '2026-07-17T10:52:00.000Z',
       productUrl: productUrl(baseUrl, '/communications/message-revision-1-1'),
     }),
@@ -183,7 +183,22 @@ function createSeed(baseUrl: string): SeedProjection {
       ...summary,
       authoredText: summary.excerpt,
       normalizedText: summary.excerpt,
-      attachments: [],
+      attachments:
+        index === 0
+          ? [
+              {
+                attachmentId: 'attachment-launch-readiness',
+                fileName: 'launch-readiness.pdf',
+                mediaType: 'application/pdf',
+                byteLength: 24_576,
+                malwareState: 'clean',
+                productUrl: productUrl(
+                  baseUrl,
+                  '/attachments/attachment-launch-readiness',
+                ),
+              },
+            ]
+          : [],
       citations: [
         citation(
           `source-communication-${index + 1}`,

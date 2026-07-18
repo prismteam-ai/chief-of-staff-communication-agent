@@ -17,10 +17,56 @@ import type { DurableProductRepository } from './durable-product-repository.js';
 import type { DurableRetrievalPort } from './durable-product-service.js';
 import type { ProductRequestContext } from './product-service.js';
 
-function factIds(prompt: unknown): readonly string[] {
-  return [
-    ...new Set(JSON.stringify(prompt).match(/fact-[A-Za-z0-9_-]+/gu) ?? []),
-  ];
+function promptFactIds(value: string): readonly string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return [];
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+    return [];
+  const prompt = parsed as {
+    readonly authorizedFacts?: readonly {
+      readonly factId?: unknown;
+    }[];
+    readonly recommendation?: {
+      readonly citedFactIds?: readonly unknown[];
+    };
+  };
+  const authorized =
+    prompt.authorizedFacts
+      ?.map(({ factId }) => factId)
+      .filter((factId): factId is string => typeof factId === 'string') ?? [];
+  const cited =
+    prompt.recommendation?.citedFactIds?.filter(
+      (factId): factId is string => typeof factId === 'string',
+    ) ?? [];
+  return [...authorized, ...cited].filter(
+    (factId) =>
+      factId.startsWith('fact-') &&
+      factId.length <= 165 &&
+      factId.trim() === factId,
+  );
+}
+
+export function deterministicPromptFactIds(input: unknown): readonly string[] {
+  const factIds = new Set<string>();
+  const visit = (value: unknown): void => {
+    if (typeof value === 'string') {
+      for (const factId of promptFactIds(value)) factIds.add(factId);
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (typeof value === 'object' && value !== null) {
+      for (const item of Object.values(value)) visit(item);
+    }
+  };
+  visit(input);
+  return [...factIds];
 }
 
 function createGateway(): ModelGateway {
@@ -31,7 +77,7 @@ function createGateway(): ModelGateway {
     supportedUrls: {},
     doGenerate: (options: unknown) => {
       const serialized = JSON.stringify(options);
-      const selectedFactIds = factIds(options);
+      const selectedFactIds = deterministicPromptFactIds(options);
       const output = serialized.includes('select_next_action')
         ? {
             actionType:
