@@ -35,6 +35,7 @@ const HARD_DELTA_BYTES = 4 * 1024 * 1024;
 const HARD_DELTA_AGE_MS = 120_000;
 const HARD_DELTA_PAGES = 4;
 const RSS_FRACTION_LIMIT = 0.6;
+const HARD_QUERY_VECTOR_BYTES = 256 * 1024;
 
 export type BoundedRetrievalErrorCode =
   | 'ACCESS_DENIED'
@@ -141,13 +142,17 @@ export const frozenScoringProfile: ScoringProfile = Object.freeze({
   abstentionThreshold: 0.25,
 });
 
-interface ProjectionRecord {
+export interface ProjectionRecord {
   readonly chunkId: string;
   readonly sourceId: string;
   readonly sourceVersion: string;
   readonly text: string;
   readonly tokenCount: number;
   readonly exactEntityRefs: readonly string[];
+  readonly citationLabel: string;
+  readonly contentHash: string;
+  readonly state: 'active' | 'tombstoned';
+  readonly mutationOrdinal: string;
 }
 
 interface IndexedRecord extends ProjectionRecord {
@@ -177,6 +182,19 @@ export interface AuthorizedRetrievalResult {
   readonly authorizationEpoch: number;
   readonly snapshotManifestHash: string;
   readonly scoringProfileVersion: ScoringProfile['version'];
+  readonly evidence: readonly RetrievedEvidence[];
+}
+
+export interface RetrievedEvidence {
+  readonly chunkId: string;
+  readonly citationId: string;
+  readonly text: string;
+}
+
+export interface InProcessQueryVector {
+  readonly queryHash: string;
+  readonly embeddingProfileManifestHash: string;
+  readonly vector: Float32Array;
 }
 
 export interface ReadOnlyInspection {
@@ -198,34 +216,6 @@ function fail(code: BoundedRetrievalErrorCode): never {
 
 function sha256(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
-}
-
-function validateAuthorizationHydration(
-  value: unknown,
-): AuthorizationHydration {
-  if (value === null || typeof value !== 'object' || Array.isArray(value))
-    fail('ACCESS_DENIED');
-  const item = value as Record<string, unknown>;
-  if (
-    !chunkIdSchema.safeParse(item.chunkId).success ||
-    !['active', 'denied', 'tombstoned'].includes(item.state as string)
-  )
-    fail('ACCESS_DENIED');
-  return item as unknown as AuthorizationHydration;
-}
-
-function isCurrentlyBoundActive(
-  item: AuthorizationHydration,
-  record: ProjectionRecord,
-): boolean {
-  return (
-    item.state === 'active' &&
-    item.sourceVersion === record.sourceVersion &&
-    typeof item.citationLabel === 'string' &&
-    item.citationLabel.length > 0 &&
-    sha256Schema.safeParse(item.contentHash).success &&
-    item.contentHash === sha256(encoder.encode(record.text))
-  );
 }
 
 function canonicalize(value: unknown): string {
@@ -312,6 +302,10 @@ function parseProjectionLine(line: string): ProjectionRecord {
     'sourceVersion',
     'text',
     'tokenCount',
+    'citationLabel',
+    'contentHash',
+    'state',
+    'mutationOrdinal',
   ].sort();
   if (
     keys.join('\u0000') !== expected.join('\u0000') ||
@@ -326,7 +320,14 @@ function parseProjectionLine(line: string): ProjectionRecord {
     !Array.isArray(value.exactEntityRefs) ||
     value.exactEntityRefs.some(
       (entry) => typeof entry !== 'string' || entry.length === 0,
-    )
+    ) ||
+    typeof value.citationLabel !== 'string' ||
+    value.citationLabel.length === 0 ||
+    !sha256Schema.safeParse(value.contentHash).success ||
+    value.contentHash !== sha256(encoder.encode(value.text)) ||
+    !['active', 'tombstoned'].includes(value.state as string) ||
+    typeof value.mutationOrdinal !== 'string' ||
+    value.mutationOrdinal.length === 0
   )
     fail('CORRUPT_SNAPSHOT');
   return Object.freeze({
@@ -336,10 +337,16 @@ function parseProjectionLine(line: string): ProjectionRecord {
     text: value.text,
     tokenCount: value.tokenCount as number,
     exactEntityRefs: Object.freeze([...(value.exactEntityRefs as string[])]),
+    citationLabel: value.citationLabel,
+    contentHash: value.contentHash,
+    state: value.state as 'active' | 'tombstoned',
+    mutationOrdinal: value.mutationOrdinal,
   });
 }
 
-function parseProjection(bytes: Uint8Array): readonly ProjectionRecord[] {
+export function readProjectionRecords(
+  bytes: Uint8Array,
+): readonly ProjectionRecord[] {
   let text: string;
   try {
     text = decoder.decode(bytes);
@@ -468,6 +475,10 @@ function parseDelta(bytes: Uint8Array): readonly DeltaDocument[] {
         text: '',
         tokenCount: 0,
         exactEntityRefs: Object.freeze([]),
+        citationLabel: 'Deleted evidence',
+        contentHash: sha256(encoder.encode('')),
+        state: 'tombstoned',
+        mutationOrdinal: `delta:${String(value.sequence)}`,
       }),
     });
   });
@@ -690,6 +701,7 @@ export class BoundedDynamoS3RetrievalIndex implements RetrievalIndex {
 
   public async queryWithCitations(
     input: RetrievalQuery,
+    inProcessQueryVector?: InProcessQueryVector,
   ): Promise<AuthorizedRetrievalResult> {
     const parsed = retrievalQuerySchema.safeParse(input);
     if (!parsed.success) fail('INVALID_QUERY_PROFILE');
@@ -697,7 +709,10 @@ export class BoundedDynamoS3RetrievalIndex implements RetrievalIndex {
     let currentInput = safeInput;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        return await this.#queryAtStableEpoch(currentInput);
+        return await this.#queryAtStableEpoch(
+          currentInput,
+          inProcessQueryVector,
+        );
       } catch (error) {
         if (
           error instanceof BoundedRetrievalError &&
@@ -783,6 +798,7 @@ export class BoundedDynamoS3RetrievalIndex implements RetrievalIndex {
 
   async #queryAtStableEpoch(
     input: RetrievalQuery,
+    inProcessQueryVector?: InProcessQueryVector,
   ): Promise<AuthorizedRetrievalResult> {
     const projection = await this.#loadAtStableEpoch(input.scope);
     const { manifest, loaded } = projection;
@@ -793,23 +809,13 @@ export class BoundedDynamoS3RetrievalIndex implements RetrievalIndex {
       fail('INVALID_QUERY_PROFILE');
 
     const ids = [...loaded.records.keys()].sort(compareUtf8);
-    const hydrated = await this.#authority.hydrateAuthorization({
-      scope: input.scope,
-      expectedAuthorizationEpoch: manifest.authorizationEpoch,
-      chunkIds: ids,
-    });
-    await this.#assertEpoch(input.scope, manifest.authorizationEpoch);
     const requested = new Set(ids);
-    const seen = new Set<string>();
-    const active = new Map<string, AuthorizationHydration>();
-    for (const rawItem of hydrated) {
-      const item = validateAuthorizationHydration(rawItem);
-      if (!requested.has(item.chunkId) || seen.has(item.chunkId))
-        fail('ACCESS_DENIED');
-      seen.add(item.chunkId);
-      const record = loaded.records.get(item.chunkId) as IndexedRecord;
-      if (isCurrentlyBoundActive(item, record)) active.set(item.chunkId, item);
-    }
+    const active = new Map(
+      ids.flatMap((id) => {
+        const record = loaded.records.get(id) as IndexedRecord;
+        return record.state === 'active' ? [[id, record] as const] : [];
+      }),
+    );
     const records = ids
       .filter((id) => active.has(id))
       .map((id) => loaded.records.get(id) as IndexedRecord);
@@ -819,13 +825,28 @@ export class BoundedDynamoS3RetrievalIndex implements RetrievalIndex {
         manifest.manifestHash,
       );
 
-    const queryVector = await this.#authority.getQueryVector({
-      scope: input.scope,
-      queryHash: input.queryHash,
-      embeddingProfileManifestHash: input.embeddingProfileManifestHash,
-      dimension: manifest.vectorDimension,
-    });
-    if (queryVector.length !== manifest.vectorDimension)
+    if (
+      inProcessQueryVector !== undefined &&
+      (inProcessQueryVector.queryHash !== input.queryHash ||
+        inProcessQueryVector.embeddingProfileManifestHash !==
+          input.embeddingProfileManifestHash ||
+        !(inProcessQueryVector.vector instanceof Float32Array) ||
+        inProcessQueryVector.vector.byteLength > HARD_QUERY_VECTOR_BYTES ||
+        inProcessQueryVector.vector.some((value) => !Number.isFinite(value)))
+    )
+      fail('INVALID_QUERY_PROFILE');
+    const queryVector =
+      inProcessQueryVector?.vector ??
+      (await this.#authority.getQueryVector({
+        scope: input.scope,
+        queryHash: input.queryHash,
+        embeddingProfileManifestHash: input.embeddingProfileManifestHash,
+        dimension: manifest.vectorDimension,
+      }));
+    if (
+      queryVector.length !== manifest.vectorDimension ||
+      queryVector.byteLength > HARD_QUERY_VECTOR_BYTES
+    )
       fail('INVALID_QUERY_PROFILE');
     assertMemory(this.#memory);
 
@@ -840,12 +861,13 @@ export class BoundedDynamoS3RetrievalIndex implements RetrievalIndex {
       records.map((record) => record.vector),
     );
     const maxLexical = Math.max(0, ...lexical);
+    const exactRefs = new Set(input.exactEntityRefs);
     const exactChunkIds = new Set(
-      await this.#authority.getExactChunkIds({
-        scope: input.scope,
-        expectedAuthorizationEpoch: manifest.authorizationEpoch,
-        exactEntityRefs: input.exactEntityRefs,
-      }),
+      records
+        .filter((record) =>
+          record.exactEntityRefs.some((reference) => exactRefs.has(reference)),
+        )
+        .map((record) => record.chunkId),
     );
     if ([...exactChunkIds].some((chunkId) => !requested.has(chunkId)))
       fail('ACCESS_DENIED');
@@ -893,17 +915,24 @@ export class BoundedDynamoS3RetrievalIndex implements RetrievalIndex {
       }),
     );
     const citations = selected.map(({ record }) => {
-      const grant = active.get(record.chunkId) as AuthorizationHydration;
+      const grant = active.get(record.chunkId) as IndexedRecord;
       return Object.freeze({
         citationId: `${record.sourceId}:${record.chunkId}:${grant.sourceVersion}`,
         sourceId: sourceIdSchema.parse(record.sourceId),
-        sourceVersion: grant.sourceVersion as string,
+        sourceVersion: grant.sourceVersion,
         chunkId: chunkIdSchema.parse(record.chunkId),
-        label: grant.citationLabel as string,
+        label: grant.citationLabel,
         contentHash: sha256Schema.parse(grant.contentHash),
         hydratedUnderAuthorizationEpoch: manifest.authorizationEpoch,
       });
     });
+    const evidence = selected.map(({ record }, index) =>
+      Object.freeze({
+        chunkId: record.chunkId,
+        citationId: (citations[index] as Citation).citationId,
+        text: record.text,
+      }),
+    );
     await this.#assertEpoch(input.scope, manifest.authorizationEpoch);
     return Object.freeze({
       candidates: Object.freeze(candidates),
@@ -912,6 +941,7 @@ export class BoundedDynamoS3RetrievalIndex implements RetrievalIndex {
       authorizationEpoch: manifest.authorizationEpoch,
       snapshotManifestHash: manifest.manifestHash,
       scoringProfileVersion: this.#scoring.version,
+      evidence: Object.freeze(evidence),
     });
   }
 
@@ -923,6 +953,7 @@ export class BoundedDynamoS3RetrievalIndex implements RetrievalIndex {
       authorizationEpoch: epoch,
       snapshotManifestHash: manifestHash,
       scoringProfileVersion: this.#scoring.version,
+      evidence: Object.freeze([]),
     });
   }
 
@@ -931,23 +962,9 @@ export class BoundedDynamoS3RetrievalIndex implements RetrievalIndex {
     expectedAuthorizationEpoch: number,
     records: ReadonlyMap<string, IndexedRecord>,
   ): Promise<number> {
-    const chunkIds = [...records.keys()].sort(compareUtf8);
-    const requested = new Set(chunkIds);
-    const hydrated = await this.#authority.hydrateAuthorization({
-      scope,
-      expectedAuthorizationEpoch,
-      chunkIds,
-    });
-    const seen = new Set<string>();
-    let active = 0;
-    for (const rawItem of hydrated) {
-      const item = validateAuthorizationHydration(rawItem);
-      if (!requested.has(item.chunkId) || seen.has(item.chunkId))
-        fail('ACCESS_DENIED');
-      seen.add(item.chunkId);
-      const record = records.get(item.chunkId) as IndexedRecord;
-      if (isCurrentlyBoundActive(item, record)) active += 1;
-    }
+    const active = [...records.values()].filter(
+      (record) => record.state === 'active',
+    ).length;
     await this.#assertEpoch(scope, expectedAuthorizationEpoch);
     return active;
   }
@@ -1000,7 +1017,7 @@ export class BoundedDynamoS3RetrievalIndex implements RetrievalIndex {
         manifest.tenantId,
         manifest.scopeHash,
       );
-      const projection = parseProjection(projectionBytes);
+      const projection = readProjectionRecords(projectionBytes);
       const vectors = decodeBinary32Vectors(
         vectorBytes,
         shard.chunkCount,

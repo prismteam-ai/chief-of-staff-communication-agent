@@ -29,7 +29,7 @@ const descriptions: Readonly<Record<McpToolName, string>> = Object.freeze({
   prepare_asana_action:
     'Prepare an immutable Asana proposal and HTTPS approval handoff.',
   submit_for_approval:
-    'Prepare an immutable proposal for explicit product approval.',
+    'Legacy compatibility tool; unavailable in the durable fixed-scope MCP runtime. Use the HTTPS product draft-approval flow. No effect is executed.',
   get_approval_status: 'Read the status of an immutable proposal.',
   get_connector_status:
     'Read truthful connector modes, health, and capabilities.',
@@ -56,7 +56,7 @@ function toolAnnotations(toolName: McpToolName) {
 }
 
 function safeToolError(error: unknown): string {
-  return error instanceof McpToolError ? error.code : 'TOOL_FAILED';
+  return error instanceof McpToolError ? error.safeMessage : 'TOOL_FAILED';
 }
 
 export function createMcpServer(options: {

@@ -468,11 +468,13 @@ main {
   background: transparent;
 }
 
-.button:disabled {
+.button:disabled,
+.button[aria-disabled='true'] {
   border-color: var(--border);
   color: #6f7781;
   background: #171b20;
   box-shadow: none;
+  cursor: not-allowed;
   opacity: 0.7;
 }
 
@@ -2058,6 +2060,57 @@ code {
   gap: 8px;
 }
 
+.connection-seed-summary {
+  padding: 18px 20px;
+  margin-bottom: 12px;
+}
+
+.connection-seed-summary > strong,
+.connection-seed-summary > p,
+.connection-seed-summary > small {
+  display: block;
+}
+
+.connection-seed-summary > p,
+.connection-seed-summary > small {
+  color: var(--text-muted);
+}
+
+.connection-seed-summary > p {
+  max-width: 740px;
+  margin: 6px 0 14px;
+  font-size: 10px;
+}
+
+.connection-seed-summary > dl {
+  display: grid;
+  margin: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.connection-seed-summary > dl > div {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.connection-seed-summary dt {
+  color: var(--text-muted);
+  font-size: 8px;
+}
+
+.connection-seed-summary dd {
+  margin: 3px 0 0;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.connection-seed-summary > small {
+  margin-top: 10px;
+  font-size: 8px;
+}
+
 .mode-legend article {
   display: flex;
   min-height: 112px;
@@ -2922,6 +2975,7 @@ code {
   }
 
   .receipt-card > dl,
+  .connection-seed-summary > dl,
   .connector-grid,
   .mode-legend,
   .mcp-steps,

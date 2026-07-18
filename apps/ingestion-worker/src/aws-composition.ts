@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
+  GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -13,25 +14,26 @@ import {
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import {
   immutableBlobRefSchema,
-  retrievalDeltaManifestSchema,
-  retrievalSnapshotManifestSchema,
   type ImmutableBlobRef,
-  type RetrievalCandidate,
-  type RetrievalDeltaManifest,
-  type RetrievalQuery,
-  type RetrievalScope,
-  type RetrievalSnapshotManifest,
 } from '@chief/contracts';
+import { DynamoPersistence, KeyCodec } from '@chief/persistence-dynamodb';
 import {
-  DynamoPersistence,
-  KeyCodec,
-  PersistenceConflictError,
-} from '@chief/persistence-dynamodb';
-import type { RetrievalIndex } from '@chief/rag';
-import {
+  DeterministicEffectDisabledEmbedding,
+  DurableRetrievalCompactor,
+  DynamoS3RetrievalAuthority,
   BoundedRetrievalError,
-  hashManifest,
-} from '@chief/rag/bounded-retrieval';
+  canonicalJson,
+  listBoundedStagedRetrieval,
+  serializeBinary32Le,
+  sha256Bytes,
+  validateStagedRetrievalMutation,
+  type EffectDisabledEmbeddingProducer,
+  type ImmutableRetrievalArtifactStore,
+  type DurableRetrievalHeadStore,
+  type RetrievalStagingCatalog,
+  type StagedRetrievalMutationV1,
+  type RetrievalStagingRegistrar,
+} from '@chief/rag';
 
 import {
   DynamoRepositoryIngestionStore,
@@ -74,7 +76,9 @@ function isPreconditionFailure(error: unknown): boolean {
   );
 }
 
-export class S3ImmutableObjectWriter implements ImmutableBodyWriter {
+export class S3ImmutableObjectWriter
+  implements ImmutableBodyWriter, ImmutableRetrievalArtifactStore
+{
   public constructor(
     private readonly options: {
       readonly client: S3Client;
@@ -101,14 +105,16 @@ export class S3ImmutableObjectWriter implements ImmutableBodyWriter {
 
   public async putBytes(input: {
     readonly tenantId: string;
-    readonly namespace: 'normalized-bodies' | 'retrieval-deltas';
+    readonly namespace:
+      'normalized-bodies' | 'retrieval-staged' | 'retrieval-snapshots';
+    readonly scopeHash?: string;
     readonly bytes: Uint8Array;
     readonly contentHash: string;
     readonly mediaType: string;
   }): Promise<ImmutableBlobRef> {
     if (sha256(input.bytes) !== input.contentHash)
       throw new Error('IMMUTABLE_OBJECT_HASH_MISMATCH');
-    const objectKey = `${input.namespace}/${tenantPath(input.tenantId)}/${input.contentHash}`;
+    const objectKey = `${input.namespace}/${tenantPath(input.tenantId)}/${input.scopeHash === undefined ? '' : `${input.scopeHash}/`}${input.contentHash}`;
     let objectVersion: string | undefined;
     try {
       const output = await this.options.client.send(
@@ -159,187 +165,160 @@ export class S3ImmutableObjectWriter implements ImmutableBodyWriter {
       retentionPolicyVersion: '1',
     });
   }
+
+  public putImmutableObject(input: {
+    readonly tenantId: string;
+    readonly scopeHash: string;
+    readonly namespace: 'retrieval-staged' | 'retrieval-snapshots';
+    readonly bytes: Uint8Array;
+    readonly mediaType: string;
+  }): Promise<ImmutableBlobRef> {
+    return this.putBytes({
+      ...input,
+      contentHash: sha256(input.bytes),
+    });
+  }
+
+  public async getImmutableObject(ref: ImmutableBlobRef): Promise<Uint8Array> {
+    if (ref.bucketRef !== this.options.bucketName)
+      throw new Error('IMMUTABLE_OBJECT_SCOPE_MISMATCH');
+    const output = await this.options.client.send(
+      new GetObjectCommand({
+        Bucket: this.options.bucketName,
+        Key: ref.objectKey,
+        VersionId: ref.objectVersion,
+        ChecksumMode: 'ENABLED',
+      }),
+    );
+    if (output.Body === undefined) throw new Error('IMMUTABLE_OBJECT_MISSING');
+    const bytes = new Uint8Array(await output.Body.transformToByteArray());
+    if (
+      bytes.byteLength !== ref.byteLength ||
+      sha256(bytes) !== ref.contentHash
+    )
+      throw new Error('IMMUTABLE_OBJECT_HASH_MISMATCH');
+    return bytes;
+  }
 }
 
 export class S3RetrievalMutationSink implements RetrievalMutationSink {
-  public constructor(private readonly objects: S3ImmutableObjectWriter) {}
+  public constructor(
+    private readonly objects: ImmutableRetrievalArtifactStore,
+    private readonly embeddings: EffectDisabledEmbeddingProducer = new DeterministicEffectDisabledEmbedding(),
+  ) {}
 
   public async stage(input: {
     readonly workItem: IngestionWorkItem;
     readonly canonical: CanonicalWrite;
-  }): Promise<RetrievalDeltaManifest> {
+  }): Promise<StagedRetrievalMutationV1> {
     const operation = input.canonical.deleted ? 'delete' : 'upsert';
     const text =
       input.canonical.source === 'asana'
         ? `${input.canonical.title}\n${input.canonical.notes ?? ''}`.trim()
         : input.canonical.retrievalText;
-    const payload = `${JSON.stringify({
-      schemaVersion: '1',
-      operation,
-      dedupeKey: input.canonical.dedupeKey,
-      text,
-    })}\n`;
-    const bytes = new TextEncoder().encode(payload);
-    const contentHash = sha256(bytes);
-    const object = await this.objects.putBytes({
-      tenantId: input.workItem.tenantId,
-      namespace: 'retrieval-deltas',
-      bytes,
-      contentHash,
-      mediaType: 'application/x-ndjson',
-    });
     const createdAt =
       input.canonical.source === 'asana'
         ? input.canonical.providerTimestamp
         : input.canonical.revision.ingestedAt;
-    const sequence = Number.parseInt(
-      sha256(input.canonical.dedupeKey).slice(0, 8),
-      16,
-    );
-    const candidate = retrievalDeltaManifestSchema.parse({
-      schemaVersion: '1',
+    const stagingOrdinal = `${createdAt}#${sha256(input.canonical.dedupeKey)}`;
+    const record = {
+      schemaVersion: '1' as const,
+      chunkId: input.canonical.dedupeKey,
+      sourceId: input.canonical.dedupeKey,
+      sourceVersion: input.canonical.contentHash,
+      text,
+      tokenCount:
+        text.length === 0
+          ? 0
+          : (text
+              .normalize('NFKC')
+              .toLocaleLowerCase('en-US')
+              .match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu)?.length ?? 0),
+      exactEntityRefs:
+        input.canonical.source === 'asana'
+          ? [input.canonical.providerObjectId, ...input.canonical.projectIds]
+          : [input.canonical.thread.threadId],
+      citationLabel:
+        input.canonical.source === 'asana'
+          ? 'Asana work evidence'
+          : `${input.canonical.source} communication evidence`,
+      contentHash: sha256Bytes(text),
+      state:
+        operation === 'upsert' ? ('active' as const) : ('tombstoned' as const),
+      mutationOrdinal: stagingOrdinal,
+    };
+    const document = {
+      schemaVersion: '1' as const,
+      stagingOrdinal,
+      operation,
+      record,
+      vectorBinary32LeBase64: Buffer.from(
+        serializeBinary32Le(this.embeddings.embed(text)),
+      ).toString('base64'),
+    };
+    const bytes = new TextEncoder().encode(canonicalJson([document]));
+    const object = await this.objects.putImmutableObject({
       tenantId: input.workItem.tenantId,
-      role: 'factual',
       scopeHash: input.workItem.scopeHash,
-      baseGeneration: 1,
-      authorizationEpoch: input.workItem.authorizationEpoch,
-      sequenceStart: sequence,
-      sequenceEnd: sequence,
+      namespace: 'retrieval-staged',
+      bytes,
+      mediaType: 'application/vnd.chief.retrieval-staged+json;version=1',
+    });
+    return validateStagedRetrievalMutation({
+      contractVersion: 'chief-retrieval.v1',
+      kind: 'staged-mutation',
+      scope: {
+        derivation: 'server_grants',
+        tenantId: input.workItem.tenantId,
+        accountIds: [input.workItem.accountId],
+        brandIds: [...(input.workItem.brandIds ?? [])],
+        authorizationEpoch: input.workItem.authorizationEpoch,
+        scopeHash: input.workItem.scopeHash,
+        role: 'factual',
+      },
+      mutationId: sha256Bytes(bytes),
+      stagingOrdinal,
       changeCount: 1,
       byteLength: bytes.byteLength,
       object,
-      manifestHash: sha256('pending-manifest-hash'),
       createdAt,
-    });
-    return retrievalDeltaManifestSchema.parse({
-      ...candidate,
-      manifestHash: hashManifest(candidate),
     });
   }
 }
 
-/**
- * Durable ingestion-side registration of immutable retrieval manifests. Query
- * hydration remains owned by the bounded RetrievalIndex runtime.
- */
-export class DurableRetrievalRegistrationIndex implements RetrievalIndex {
+export class CompactingRetrievalRegistrar implements RetrievalStagingRegistrar {
   public constructor(
-    private readonly persistence: DynamoPersistence,
-    private readonly retrievalTableName: string,
+    private readonly authority: RetrievalStagingRegistrar &
+      RetrievalStagingCatalog &
+      DurableRetrievalHeadStore,
+    private readonly compactor: DurableRetrievalCompactor,
   ) {}
 
-  public async applySnapshot(manifest: RetrievalSnapshotManifest): Promise<{
-    readonly kind: 'snapshot';
-    readonly tenantId: string;
-    readonly scopeHash: string;
-    readonly role: RetrievalScope['role'];
-    readonly generation: number;
-    readonly authorizationEpoch: number;
-    readonly manifestHash: string;
-    readonly appliedAt: string;
-  }> {
-    const safe = retrievalSnapshotManifestSchema.parse(manifest);
-    await this.register(
-      safe.tenantId,
-      safe.scopeHash,
-      `snapshot:${safe.manifestHash}`,
-      safe,
-    );
-    return {
-      kind: 'snapshot',
-      tenantId: safe.tenantId,
-      scopeHash: safe.scopeHash,
-      role: safe.role,
-      generation: safe.generation,
-      authorizationEpoch: safe.authorizationEpoch,
-      manifestHash: safe.manifestHash,
-      appliedAt: safe.createdAt,
-    };
-  }
-
-  public async applyDelta(manifest: RetrievalDeltaManifest): Promise<{
-    readonly kind: 'delta';
-    readonly tenantId: string;
-    readonly scopeHash: string;
-    readonly role: RetrievalScope['role'];
-    readonly baseGeneration: number;
-    readonly authorizationEpoch: number;
-    readonly sequenceEnd: number;
-    readonly manifestHash: string;
-    readonly appliedAt: string;
-  }> {
-    const safe = retrievalDeltaManifestSchema.parse(manifest);
-    if (hashManifest(safe) !== safe.manifestHash)
-      throw new BoundedRetrievalError('INDEX_REFRESH_REQUIRED');
-    await this.register(
-      safe.tenantId,
-      safe.scopeHash,
-      `delta:${safe.manifestHash}`,
-      safe,
-    );
-    return {
-      kind: 'delta',
-      tenantId: safe.tenantId,
-      scopeHash: safe.scopeHash,
-      role: safe.role,
-      baseGeneration: safe.baseGeneration,
-      authorizationEpoch: safe.authorizationEpoch,
-      sequenceEnd: safe.sequenceEnd,
-      manifestHash: safe.manifestHash,
-      appliedAt: safe.createdAt,
-    };
-  }
-
-  public query(_input: RetrievalQuery): Promise<readonly RetrievalCandidate[]> {
-    return Promise.reject(new BoundedRetrievalError('INDEX_REFRESH_REQUIRED'));
-  }
-
-  public health(scope: RetrievalScope): Promise<{
-    readonly status: 'unavailable';
-    readonly scope: RetrievalScope;
-    readonly indexedChunkCount: 0;
-    readonly pendingDeltaCount: 0;
-    readonly observedAt: string;
-    readonly reasonCode: 'INDEX_REFRESH_REQUIRED';
-  }> {
-    return Promise.resolve({
-      status: 'unavailable',
-      scope,
-      indexedChunkCount: 0,
-      pendingDeltaCount: 0,
-      observedAt: new Date(0).toISOString(),
-      reasonCode: 'INDEX_REFRESH_REQUIRED',
-    });
-  }
-
-  private async register(
-    tenantId: string,
-    scopeHash: string,
-    factId: string,
-    manifest: Readonly<Record<string, unknown>>,
-  ): Promise<void> {
-    try {
-      await this.persistence.putImmutableFactWithEvent({
-        tableName: this.retrievalTableName,
-        tenantId,
-        accountId: `retrieval-${scopeHash.slice(0, 32)}`,
-        fact: {
-          factType: 'retrieval-manifest-registration',
-          factId,
-          attributes: { manifest },
-        },
-        eventOutbox: {
-          outboxId: `retrieval:${factId}`,
-          attributes: {
-            eventType: 'retrieval.manifest.registered',
-            aggregateId: factId,
-            payloadHash: manifest.manifestHash,
-            status: 'pending',
-          },
-        },
+  public async register(manifest: StagedRetrievalMutationV1): Promise<void> {
+    await this.authority.register(manifest);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const head = await this.authority.getHead(manifest.scope);
+      const staged = await listBoundedStagedRetrieval({
+        catalog: this.authority,
+        scope: manifest.scope,
       });
-    } catch (error) {
-      if (!(error instanceof PersistenceConflictError)) throw error;
+      try {
+        await this.compactor.compactAndPromote({
+          scope: manifest.scope,
+          staged,
+          ...(head === undefined
+            ? {}
+            : { expectedHeadManifestHash: head.manifest.manifestHash }),
+        });
+        return;
+      } catch (error) {
+        if (
+          !(error instanceof BoundedRetrievalError) ||
+          error.code !== 'INDEX_REFRESH_REQUIRED' ||
+          attempt === 2
+        )
+          throw error;
+      }
     }
   }
 }
@@ -395,16 +374,35 @@ export async function createAwsProductionIngestionHandler(
     new SecretsManagerClient({}),
     config.digestKeySecretArn,
   );
-  const persistence = new DynamoPersistence(
-    DynamoDBDocumentClient.from(new DynamoDBClient({}), {
-      marshallOptions: { removeUndefinedValues: true },
-    }),
-    keyCodec,
-  );
+  const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+    marshallOptions: { removeUndefinedValues: true },
+  });
+  const persistence = new DynamoPersistence(documentClient, keyCodec);
   const objects = new S3ImmutableObjectWriter({
     client: new S3Client({}),
     bucketName: config.snapshotBucketName,
     encryptionKeyArn: config.productDataKeyArn,
+  });
+  const retrievalAuthority = new DynamoS3RetrievalAuthority({
+    client: documentClient,
+    tableName: config.retrievalTableName,
+  });
+  const retrievalProducer = new DeterministicEffectDisabledEmbedding();
+  const retrievalCompactor = new DurableRetrievalCompactor({
+    artifacts: objects,
+    heads: retrievalAuthority,
+    memory: {
+      sample: () => ({
+        rssBytes: process.memoryUsage().rss,
+        limitBytes:
+          Number(environment.AWS_LAMBDA_FUNCTION_MEMORY_SIZE ?? '1024') *
+          1024 *
+          1024,
+      }),
+    },
+    embeddingProfileManifestHash: retrievalProducer.profileManifestHash,
+    embeddingProfileId: retrievalProducer.profileId,
+    vectorDimension: retrievalProducer.dimension,
   });
   const pipeline = new CanonicalIngestionPipeline({
     store: new DynamoRepositoryIngestionStore({
@@ -417,10 +415,10 @@ export async function createAwsProductionIngestionHandler(
       asanaTopicLookupIndexName: config.asanaTopicLookupIndexName,
     }),
     keyCodec,
-    retrievalSink: new S3RetrievalMutationSink(objects),
-    retrievalIndex: new DurableRetrievalRegistrationIndex(
-      persistence,
-      config.retrievalTableName,
+    retrievalSink: new S3RetrievalMutationSink(objects, retrievalProducer),
+    retrievalRegistrar: new CompactingRetrievalRegistrar(
+      retrievalAuthority,
+      retrievalCompactor,
     ),
   });
   return createProductionSqsHandler(

@@ -10,6 +10,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@chief/api-client": "workspace:*",
     "@chief/browser-api": "workspace:*",
     "@chief/contracts": "workspace:*",
     "@tanstack/react-query": "5.101.2",

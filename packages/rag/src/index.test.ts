@@ -56,7 +56,7 @@ describe('retrieval boundary', () => {
       maximumSnapshotChunks: 10_000,
       warmStateRequired: false,
       tableScanAllowed: false,
-      automaticPromotionTarget: 'opensearch',
+      automaticPromotionTarget: 'dynamodb-s3-cas-head',
     });
     expect(Object.isFrozen(retrievalArchitecture)).toBe(true);
   });

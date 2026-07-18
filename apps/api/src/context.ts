@@ -4,10 +4,7 @@ import { TRPCError } from '@trpc/server';
 
 import { createObservability } from '@chief/observability';
 
-import {
-  createFixtureProductService,
-  createFixtureRequestContext,
-} from './fixture-product-service.js';
+import { createDefaultDurableApiDependencies } from './aws-composition.js';
 import type {
   ProductRequestContext,
   ProductService,
@@ -32,10 +29,9 @@ export interface ApiDependencies {
   readonly requestContext: ProductRequestContext;
 }
 
-export const defaultApiDependencies: ApiDependencies = Object.freeze({
-  productService: createFixtureProductService(process.env.PRODUCT_BASE_URL),
-  requestContext: createFixtureRequestContext(),
-});
+export const defaultApiDependencies: ApiDependencies = Object.freeze(
+  createDefaultDurableApiDependencies(),
+);
 
 function assertNoCallerAuthority(
   headers: Readonly<Record<string, string | undefined>>,

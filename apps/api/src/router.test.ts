@@ -362,7 +362,7 @@ describe('typed product router', () => {
     }
   });
 
-  it('has no direct approval, provider-send, or Asana-mutation procedure', () => {
+  it('exposes only server-authorized approval and no provider-send or Asana mutation', () => {
     const definition = appRouter as unknown as {
       _def: {
         record: Record<string, unknown>;
@@ -372,7 +372,8 @@ describe('typed product router', () => {
     const procedures = Object.keys(definition._def.procedures);
     const serialized = JSON.stringify(procedures);
 
-    expect(serialized).not.toMatch(/send|approve|createTask|updateTask/iu);
+    expect(serialized).not.toMatch(/send|createTask|updateTask/iu);
+    expect(procedures).toContain('approvals.approve');
     expect(procedures).toEqual(
       expect.arrayContaining([
         'agent.createDraft',

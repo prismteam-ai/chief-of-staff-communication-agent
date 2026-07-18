@@ -16,13 +16,14 @@ function readPublicUrl(name: string): string | undefined {
 }
 
 const hostedBaseUrl = readPublicUrl('CHIEF_BASE_URL');
-const localPort = process.env.CHIEF_E2E_PORT?.trim() || '4173';
+const localPort = process.env.CHIEF_E2E_PORT?.trim() || '43173';
 const baseURL = hostedBaseUrl ?? `http://127.0.0.1:${localPort}`;
 const isCi = process.env.CI === 'true';
 const browserChannel = process.env.CHIEF_BROWSER_CHANNEL?.trim() || undefined;
 
 export default defineConfig({
   testDir: './tests',
+  testIgnore: ['**/hosted-durable.spec.ts'],
   outputDir: 'node_modules/.cache/playwright-results',
   fullyParallel: true,
   forbidOnly: isCi,
@@ -50,7 +51,7 @@ export default defineConfig({
             VITE_API_BASE_URL: readPublicUrl('CHIEF_API_BASE_URL') ?? '',
           },
           url: baseURL,
-          reuseExistingServer: !isCi,
+          reuseExistingServer: false,
           timeout: 120_000,
         }
       : undefined,

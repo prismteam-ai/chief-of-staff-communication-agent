@@ -54,6 +54,10 @@ interface FixtureRecord {
   readonly text: string;
   readonly tokenCount: number;
   readonly exactEntityRefs: readonly string[];
+  readonly citationLabel: string;
+  readonly contentHash: string;
+  readonly state: 'active' | 'tombstoned';
+  readonly mutationOrdinal: string;
 }
 
 const records: readonly FixtureRecord[] = [
@@ -65,6 +69,12 @@ const records: readonly FixtureRecord[] = [
     text: 'Apollo launch budget approval and active Asana milestone',
     tokenCount: 8,
     exactEntityRefs: ['asana-task-12001', 'thread-apollo'],
+    citationLabel: 'Apollo evidence',
+    contentHash: sha(
+      'Apollo launch budget approval and active Asana milestone',
+    ),
+    state: 'active' as const,
+    mutationOrdinal: '2026-07-17T10:00:00.000Z#apollo',
   },
   {
     schemaVersion: '1' as const,
@@ -74,6 +84,10 @@ const records: readonly FixtureRecord[] = [
     text: 'Quarterly hiring plan and recruiting update',
     tokenCount: 6,
     exactEntityRefs: ['asana-task-12002'],
+    citationLabel: 'Hiring evidence',
+    contentHash: sha('Quarterly hiring plan and recruiting update'),
+    state: 'active' as const,
+    mutationOrdinal: '2026-07-17T10:00:00.000Z#hiring',
   },
   {
     schemaVersion: '1' as const,
@@ -83,6 +97,10 @@ const records: readonly FixtureRecord[] = [
     text: 'Apollo confidential acquisition budget',
     tokenCount: 4,
     exactEntityRefs: ['asana-task-secret'],
+    citationLabel: 'Revoked evidence',
+    contentHash: sha('Apollo confidential acquisition budget'),
+    state: 'tombstoned' as const,
+    mutationOrdinal: '2026-07-17T10:00:00.000Z#revoked',
   },
 ].sort((left, right) =>
   Buffer.compare(Buffer.from(left.chunkId), Buffer.from(right.chunkId)),
@@ -193,17 +211,19 @@ class FixtureAuthority implements RetrievalAuthorityReader {
   }
 }
 
-function buildFixture(): {
+function buildFixture(selectedRecords: readonly FixtureRecord[] = records): {
   readonly index: BoundedDynamoS3RetrievalIndex;
   readonly authority: FixtureAuthority;
   readonly objects: FixtureObjects;
   readonly manifest: RetrievalSnapshotManifest;
 } {
   const projectionBytes = new TextEncoder().encode(
-    `${records.map((record) => JSON.stringify(record)).join('\n')}\n`,
+    `${selectedRecords.map((record) => JSON.stringify(record)).join('\n')}\n`,
   );
   const vectors = vectorBytes(
-    records.map((record) => vectorById[record.chunkId] as readonly number[]),
+    selectedRecords.map(
+      (record) => vectorById[record.chunkId] as readonly number[],
+    ),
   );
   const projectionRef = blob(
     'chunk-projection.jsonl',
@@ -234,12 +254,12 @@ function buildFixture(): {
       {
         chunkIdObject: projectionRef,
         vectorObject: vectorRef,
-        chunkCount: records.length,
+        chunkCount: selectedRecords.length,
         decodedBytes: projectionBytes.byteLength + vectors.byteLength,
       },
     ],
-    sourceCount: records.length,
-    chunkCount: records.length,
+    sourceCount: selectedRecords.length,
+    chunkCount: selectedRecords.length,
     serializedBytes: projectionBytes.byteLength + vectors.byteLength,
     decodedBytes: projectionBytes.byteLength + vectors.byteLength,
     manifestHash: '0'.repeat(64),
@@ -251,7 +271,7 @@ function buildFixture(): {
   });
   const authority = new FixtureAuthority();
   authority.head = manifest;
-  for (const record of records) {
+  for (const record of selectedRecords) {
     authority.hydration.set(record.chunkId, {
       chunkId: record.chunkId,
       state: record.chunkId === 'chunk-revoked' ? 'tombstoned' : 'active',
@@ -361,6 +381,34 @@ describe('bounded DynamoDB/S3 retrieval', () => {
     ]);
   });
 
+  it('accepts only a hash/profile/dimension-bound in-process query vector', async () => {
+    const fixture = buildFixture();
+    fixture.authority.getQueryVector = () =>
+      Promise.reject(new Error('persisted vector read must not run'));
+    const input = query();
+    await expect(
+      fixture.index.queryWithCitations(input, {
+        queryHash: input.queryHash,
+        embeddingProfileManifestHash: input.embeddingProfileManifestHash,
+        vector: new Float32Array([1, 0]),
+      }),
+    ).resolves.toMatchObject({ abstained: false });
+    await expect(
+      fixture.index.queryWithCitations(input, {
+        queryHash: sha('wrong-query'),
+        embeddingProfileManifestHash: input.embeddingProfileManifestHash,
+        vector: new Float32Array([1, 0]),
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_QUERY_PROFILE' });
+    await expect(
+      fixture.index.queryWithCitations(input, {
+        queryHash: input.queryHash,
+        embeddingProfileManifestHash: input.embeddingProfileManifestHash,
+        vector: new Float32Array([1]),
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_QUERY_PROFILE' });
+  });
+
   it('fuses exact, lexical, and vector evidence and emits only currently authorized citations', async () => {
     const fixture = buildFixture();
     const result = await fixture.index.queryWithCitations(
@@ -378,7 +426,13 @@ describe('bounded DynamoDB/S3 retrieval', () => {
     expect(result.citations.map((citation) => citation.chunkId)).toEqual([
       'chunk-apollo',
     ]);
-    expect(fixture.authority.exactLookups).toBe(1);
+    expect(fixture.authority.exactLookups).toBe(0);
+    expect(result.evidence).toEqual([
+      expect.objectContaining({
+        chunkId: 'chunk-apollo',
+        text: 'Apollo launch budget approval and active Asana milestone',
+      }),
+    ]);
     expect(JSON.stringify(result)).not.toContain('revoked');
   });
 
@@ -425,6 +479,10 @@ describe('bounded DynamoDB/S3 retrieval', () => {
       text: 'Apollo budget follow-up decision',
       tokenCount: 5,
       exactEntityRefs: ['thread-apollo'],
+      citationLabel: 'Apollo follow-up',
+      contentHash: sha('Apollo budget follow-up decision'),
+      state: 'active',
+      mutationOrdinal: 'delta:1',
     };
     addDelta(fixture, {
       schemaVersion: '1',
@@ -434,13 +492,6 @@ describe('bounded DynamoDB/S3 retrieval', () => {
       vectorBinary32LeBase64: Buffer.from(vectorBytes([[0.8, 0.2]])).toString(
         'base64',
       ),
-    });
-    fixture.authority.hydration.set(deltaRecord.chunkId, {
-      chunkId: deltaRecord.chunkId,
-      state: 'active',
-      sourceVersion: '1',
-      citationLabel: 'Apollo follow-up',
-      contentHash: sha(deltaRecord.text),
     });
     const inspection = await fixture.index.inspect(scope);
     expect(inspection).toMatchObject({
@@ -455,12 +506,9 @@ describe('bounded DynamoDB/S3 retrieval', () => {
   });
 
   it('abstains without exposing a denied candidate count or ordering', async () => {
-    const fixture = buildFixture();
-    for (const record of records)
-      fixture.authority.hydration.set(record.chunkId, {
-        chunkId: record.chunkId,
-        state: 'denied',
-      });
+    const fixture = buildFixture(
+      records.map((record) => ({ ...record, state: 'tombstoned' as const })),
+    );
     await expect(
       fixture.index.queryWithCitations(query()),
     ).resolves.toMatchObject({
@@ -485,13 +533,12 @@ describe('bounded DynamoDB/S3 retrieval', () => {
       ),
     ).rejects.toMatchObject({ code: 'INVALID_QUERY_PROFILE' });
 
-    fixture.authority.getExactChunkIds = () =>
-      Promise.resolve(['chunk-from-another-scope']);
-    await expect(
-      fixture.index.query(
-        query({ exactEntityRefs: ['asana-task-from-another-scope'] }),
-      ),
-    ).rejects.toMatchObject({ code: 'ACCESS_DENIED' });
+    const result = await fixture.index.query(
+      query({ exactEntityRefs: ['asana-task-from-another-scope'] }),
+    );
+    expect(result.map(({ chunkId }) => chunkId)).not.toContain(
+      'chunk-from-another-scope',
+    );
   });
 
   it('fails closed at shard, serialized-size, and delta hard limits', async () => {
@@ -607,36 +654,17 @@ describe('bounded DynamoDB/S3 retrieval', () => {
     ).toThrowError(expect.objectContaining({ code: 'INDEX_REFRESH_REQUIRED' }));
   });
 
-  it('denies stale projected text when authoritative version or content hash differs', async () => {
-    const staleVersion = buildFixture();
-    const current = staleVersion.authority.hydration.get('chunk-apollo');
-    if (!current) throw new Error('fixture hydration missing');
-    staleVersion.authority.hydration.set('chunk-apollo', {
-      ...current,
-      sourceVersion: '4',
-    });
+  it('rejects snapshot-contained authorization when canonical text is corrupted', async () => {
+    const corrupt = buildFixture(
+      records.map((record, index) =>
+        index === 0
+          ? { ...record, contentHash: sha('different text') }
+          : record,
+      ),
+    );
     await expect(
-      staleVersion.index.queryWithCitations(query()),
-    ).resolves.toMatchObject({
-      abstained: true,
-      candidates: [],
-      citations: [],
-    });
-
-    const staleContent = buildFixture();
-    const content = staleContent.authority.hydration.get('chunk-apollo');
-    if (!content) throw new Error('fixture hydration missing');
-    staleContent.authority.hydration.set('chunk-apollo', {
-      ...content,
-      contentHash: sha('new authoritative text'),
-    });
-    await expect(
-      staleContent.index.queryWithCitations(query()),
-    ).resolves.toMatchObject({
-      abstained: true,
-      candidates: [],
-      citations: [],
-    });
+      corrupt.index.queryWithCitations(query()),
+    ).rejects.toMatchObject({ code: 'CORRUPT_SNAPSHOT' });
   });
 
   it('normalizes snapshot and delta object-reader failures without leaking details', async () => {

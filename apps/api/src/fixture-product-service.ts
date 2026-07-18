@@ -1042,6 +1042,20 @@ export class FixtureProductService implements ProductService {
     return handoff;
   }
 
+  public prepareDraftApproval(): never {
+    throw new ProductServiceError(
+      'NOT_FOUND',
+      'Draft approval preparation is available only through durable composition.',
+    );
+  }
+
+  public approveProposal(): never {
+    throw new ProductServiceError(
+      'FORBIDDEN_AUTHORITY',
+      'Approval is available only through durable server-authorized composition.',
+    );
+  }
+
   public getApprovalStatus(
     context: ProductRequestContext,
     input: { readonly proposalId: string },
@@ -1071,6 +1085,7 @@ export class FixtureProductService implements ProductService {
       return executionStatusResultSchema.parse({
         proposalId: input.proposalId,
         runtimeMode: 'fixture',
+        storageMode: 'durable',
         effectPolicy: 'effect_disabled',
         externalEffect: false,
         status: 'effect_disabled',
@@ -1086,6 +1101,7 @@ export class FixtureProductService implements ProductService {
     return executionStatusResultSchema.parse({
       proposalId: input.proposalId,
       runtimeMode: 'fixture',
+      storageMode: 'durable',
       effectPolicy: 'effect_disabled',
       externalEffect: false,
       status: 'pending_approval',

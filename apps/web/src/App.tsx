@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   ArrowRight,
@@ -48,11 +48,13 @@ import {
   useParams,
 } from 'react-router-dom';
 
+import { createApiClient, type ApiClient } from '@chief/api-client';
 import {
   createBrowserApi,
   type BrowserApi,
   type BrowserDashboardMetrics,
 } from '@chief/browser-api';
+import { proposalIdSchema } from '@chief/contracts';
 import type {
   CommunicationDetailView,
   CommunicationSummaryView,
@@ -91,9 +93,64 @@ type ApiState =
   | { readonly kind: 'ready'; readonly health: ProductHealthResponse }
   | { readonly kind: 'unavailable' };
 
-type WorkflowState = 'draft' | 'revised' | 'approved';
 type InboxFilter = 'all' | CommunicationStatus;
-type ProjectionSource = 'checking' | 'hosted_fixture' | 'local_fallback';
+type ProjectionSource = 'checking' | 'hosted_durable' | 'local_fallback';
+
+interface DurableApprovalReceipt {
+  readonly kind: 'effect_disabled';
+  readonly operationId: string;
+  readonly artifactHash: string;
+  readonly stableIdempotencyKey: string;
+  readonly observedAt: string;
+}
+
+type DurableApprovalState =
+  | { readonly kind: 'not_prepared' }
+  | { readonly kind: 'preparing' }
+  | {
+      readonly kind: 'pending';
+      readonly proposalId: string;
+      readonly updatedAt: string;
+      readonly notice?: string;
+    }
+  | {
+      readonly kind: 'approving';
+      readonly proposalId: string;
+      readonly updatedAt: string;
+    }
+  | {
+      readonly kind: 'approved';
+      readonly proposalId: string;
+      readonly updatedAt: string;
+      readonly receipt: DurableApprovalReceipt;
+      readonly recoveredAfterAcknowledgementFailure?: boolean;
+    }
+  | { readonly kind: 'error'; readonly message: string }
+  | {
+      readonly kind: 'uncertain';
+      readonly proposalId: string;
+      readonly message: string;
+    };
+
+type ApprovalRouteState =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'not_found' }
+  | { readonly kind: 'error'; readonly message: string }
+  | {
+      readonly kind: 'ready';
+      readonly proposalId: string;
+      readonly approvalStatus:
+        | 'prepared'
+        | 'pending_approval'
+        | 'approved'
+        | 'rejected'
+        | 'expired'
+        | 'cancelled';
+      readonly executionStatus:
+        'not_requested' | 'pending_approval' | 'effect_disabled';
+      readonly updatedAt: string;
+      readonly receipt?: DurableApprovalReceipt;
+    };
 
 const hostedEvaluatorRoutes: Readonly<Record<string, string>> = Object.freeze({
   'message-revision-1-1': 'thread-q3-launch',
@@ -115,6 +172,9 @@ const navItems = [
   { to: '/connections', label: 'Connections', Icon: Waypoints },
   { to: '/evidence', label: 'Evidence & help', Icon: BookOpenCheck },
 ] as const;
+
+const conciseRevisionInstruction =
+  'Make this draft concise while retaining all cited facts.';
 
 function hostedCommunicationToView(
   communication: CommunicationSummaryView,
@@ -208,10 +268,12 @@ function hostedConnectorToView(
 function AppShell({
   apiState,
   source,
+  pendingApprovalCount,
   children,
 }: {
   readonly apiState: ApiState;
   readonly source: ProjectionSource;
+  readonly pendingApprovalCount: number;
   readonly children: React.ReactNode;
 }) {
   const location = useLocation();
@@ -221,13 +283,13 @@ function AppShell({
 
   const apiLabel =
     apiState.kind === 'ready'
-      ? 'Hosted fixture API healthy'
+      ? 'Hosted durable API healthy'
       : apiState.kind === 'checking'
         ? 'Checking hosted API'
         : 'Hosted API unavailable · local fallback';
   const sourceLabel =
-    source === 'hosted_fixture'
-      ? 'Hosted assessment fixture.'
+    source === 'hosted_durable'
+      ? 'Durable hosted evaluator data.'
       : source === 'local_fallback'
         ? 'Local fallback fixture.'
         : 'Checking hosted assessment fixture.';
@@ -254,7 +316,13 @@ function AppShell({
               <Icon aria-hidden="true" size={19} />
               <span>{label}</span>
               {label === 'Approvals' ? (
-                <span className="nav-count">6</span>
+                <span
+                  className="nav-count"
+                  data-testid="nav-pending-approval-count"
+                  aria-label={`${pendingApprovalCount} pending approvals`}
+                >
+                  {pendingApprovalCount}
+                </span>
               ) : null}
             </NavLink>
           ))}
@@ -265,7 +333,10 @@ function AppShell({
             <ShieldCheck aria-hidden="true" size={17} />
             <strong>Safe evaluator</strong>
           </div>
-          <p>Signed out · deterministic fixture · external effects disabled.</p>
+          <p>
+            Signed out · deterministic non-PII seed · durable records · external
+            effects disabled.
+          </p>
           <ModeChip mode="fixture" testId="capability-mode-session" />
         </section>
 
@@ -286,9 +357,9 @@ function AppShell({
           <Info aria-hidden="true" size={16} />
           <span>
             <strong>{sourceLabel}</strong> Workflow records are deterministic
-            and non-live. The public API supports bounded reads and proposal
-            preparation, but no approval or external mutation; the local
-            ceremony produces an effect-disabled receipt only.
+            and non-live. The public API persists bounded retrieval, draft,
+            approval, outbox, and receipt state; external provider dispatch is
+            disabled.
           </span>
           <Link to="/evidence#capabilities">Inspect evidence</Link>
         </div>
@@ -323,11 +394,17 @@ function OverviewPage({
   readonly projection: ProductProjection;
 }) {
   const snapshot = projection.metrics?.snapshot;
-  const isHosted = projection.source === 'hosted_fixture';
+  const isHosted = projection.source === 'hosted_durable';
   const totalCommunications =
     projection.metrics?.totalCommunications ?? communications.length;
-  const answeredCount = snapshot?.answeredCount ?? 1_219;
-  const resolvedCount = snapshot?.resolvedCount ?? 0;
+  const countStatus = (status: CommunicationStatus) =>
+    projection.communications.filter((item) => item.status === status).length;
+  const pendingCount = snapshot?.pendingCount ?? countStatus('pending');
+  const overdueCount = snapshot?.overdueCount ?? countStatus('overdue');
+  const answeredCount = snapshot?.answeredCount ?? countStatus('answered');
+  const resolvedCount = snapshot?.resolvedCount ?? countStatus('resolved');
+  const attentionCount = pendingCount + overdueCount;
+  const pendingApprovalCount = projection.metrics?.pendingApprovalCount ?? 0;
   const actionablePercent =
     totalCommunications === 0
       ? 0
@@ -362,8 +439,8 @@ function OverviewPage({
     {
       id: 'pending',
       label: 'Pending',
-      value: (snapshot?.pendingCount ?? 47).toLocaleString('en-US'),
-      note: `${projection.metrics?.pendingApprovalCount ?? 6} awaiting approval`,
+      value: pendingCount.toLocaleString('en-US'),
+      note: `${pendingApprovalCount} awaiting approval`,
       Icon: Clock3,
     },
     {
@@ -376,8 +453,8 @@ function OverviewPage({
     {
       id: 'overdue',
       label: 'Overdue',
-      value: (snapshot?.overdueCount ?? 18).toLocaleString('en-US'),
-      note: isHosted ? 'Hosted fixture projection' : '4 critical priority',
+      value: overdueCount.toLocaleString('en-US'),
+      note: isHosted ? 'Durable hosted seed projection' : '4 critical priority',
       Icon: BellRing,
     },
   ] as const;
@@ -387,7 +464,7 @@ function OverviewPage({
       <PageHeader
         eyebrow="Executive briefing · Friday, 17 July 2026"
         title="Good morning, Alex."
-        description={`${(snapshot?.pendingCount ?? 47).toLocaleString('en-US')} communications need attention. The overdue queue is separated from answered and resolved work.`}
+        description={`${attentionCount.toLocaleString('en-US')} communications need attention. The pending and overdue queue is separated from answered and resolved work.`}
         action={
           urgentCommunication === undefined ? null : (
             <Link
@@ -431,7 +508,7 @@ function OverviewPage({
               <h2 id="priority-heading">Needs your attention</h2>
             </div>
             <Link className="text-link" to="/inbox">
-              View all 47
+              View all {attentionCount.toLocaleString('en-US')}
             </Link>
           </div>
           <div className="queue-list">
@@ -544,11 +621,18 @@ function OverviewPage({
         <section className="surface" aria-labelledby="actions-heading">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Recent activity</p>
-              <h2 id="actions-heading">Execution & audit</h2>
+              <p className="eyebrow">Local static examples</p>
+              <h2 id="actions-heading">Demonstration activity</h2>
             </div>
             <Activity aria-hidden="true" size={20} />
           </div>
+          <p className="projection-notice" data-testid="activity-source-label">
+            Demonstration only · these static activity examples are not part of
+            the{' '}
+            {isHosted
+              ? 'hosted fixed-scope email projection.'
+              : 'local fallback communication records.'}
+          </p>
           <ol className="activity-list" data-testid="audit-timeline">
             <li>
               <span className="activity-mark activity-mark--safe">
@@ -557,8 +641,8 @@ function OverviewPage({
               <div>
                 <strong>Pricing exception acknowledged</strong>
                 <p>
-                  Effect-disabled receipt · synthetic provider-shaped SMS
-                  fixture
+                  Demonstration-only effect-disabled receipt · synthetic
+                  provider-shaped SMS fixture
                 </p>
                 <small>09:26 UTC · operation fx-op-3908</small>
               </div>
@@ -608,15 +692,23 @@ function InboxPage({ projection }: { readonly projection: ProductProjection }) {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Unified communications"
+        eyebrow={
+          projection.source === 'hosted_durable'
+            ? 'Fixed-scope email communications'
+            : 'Local multi-channel demonstration'
+        }
         title="Inbox"
-        description="One queue across channel-shaped assessment records. Every row retains its source mode and answered state."
+        description={
+          projection.source === 'hosted_durable'
+            ? 'A durable queue containing the two fixed-scope email seed communications. It does not demonstrate additional channels.'
+            : 'A local fallback demonstration queue with channel-shaped examples. These records are not hosted evidence.'
+        }
         action={
           <span className="fixture-summary">
             <ModeChip mode="fixture" />
             {projection.communications.length.toLocaleString('en-US')}{' '}
-            {projection.source === 'hosted_fixture'
-              ? 'hosted fixture records'
+            {projection.source === 'hosted_durable'
+              ? 'durable hosted seed records'
               : 'local fallback records'}
           </span>
         }
@@ -728,14 +820,12 @@ interface HostedThreadState {
 
 function RoutedThreadPage({
   api,
+  apiClient,
   projection,
-  workflow,
-  setWorkflow,
 }: {
   readonly api: BrowserApi;
+  readonly apiClient: ApiClient;
   readonly projection: ProductProjection;
-  readonly workflow: WorkflowState;
-  readonly setWorkflow: (state: WorkflowState) => void;
 }) {
   const { threadId = '' } = useParams();
   if (projection.source === 'checking') {
@@ -756,39 +846,43 @@ function RoutedThreadPage({
     projection.source === 'local_fallback' &&
     threadId === 'thread-q3-launch'
   ) {
-    return <ThreadPage workflow={workflow} setWorkflow={setWorkflow} />;
+    return <ThreadPage />;
   }
 
   return (
     <ProjectionThreadPage
       api={api}
+      apiClient={apiClient}
       communication={communication}
       source={projection.source}
-      workflow={workflow}
-      setWorkflow={setWorkflow}
     />
   );
 }
 
 function ProjectionThreadPage({
   api,
+  apiClient,
   communication,
   source,
-  workflow,
-  setWorkflow,
 }: {
   readonly api: BrowserApi;
+  readonly apiClient: ApiClient;
   readonly communication?: CommunicationFixture;
   readonly source: ProjectionSource;
-  readonly workflow: WorkflowState;
-  readonly setWorkflow: (state: WorkflowState) => void;
 }) {
   const navigate = useNavigate();
   const [state, setState] = useState<HostedThreadState>({ kind: 'loading' });
   const [contextOutcome, setContextOutcome] = useState<string>();
   const [proposalOutcome, setProposalOutcome] = useState<string>();
-  const [draftInput, setDraftInput] = useState('');
-  const [submittedDraft, setSubmittedDraft] = useState<string>();
+  const [revisionComparison, setRevisionComparison] = useState<{
+    readonly previous: string;
+    readonly current: string;
+  }>();
+  const [approval, setApproval] = useState<DurableApprovalState>({
+    kind: 'not_prepared',
+  });
+  const [draftSaving, setDraftSaving] = useState(false);
+  const preparedDraftRevisionId = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (communication === undefined) {
@@ -800,7 +894,7 @@ function ProjectionThreadPage({
       return;
     }
     if (
-      source !== 'hosted_fixture' ||
+      source !== 'hosted_durable' ||
       communication.threadId === undefined ||
       communication.messageRevisionId === undefined
     ) {
@@ -841,7 +935,6 @@ function ProjectionThreadPage({
           // have no current recommendation or draft projection.
         }
         if (active) {
-          if (draft !== undefined) setDraftInput(draft.draft.body);
           setState({
             kind: 'ready',
             detail,
@@ -867,6 +960,68 @@ function ProjectionThreadPage({
     };
   }, [api, communication, source]);
 
+  useEffect(() => {
+    const draft = state.draft?.draft;
+    if (
+      draft === undefined ||
+      draft.revision <= 1 ||
+      preparedDraftRevisionId.current === draft.draftRevisionId
+    ) {
+      return;
+    }
+
+    let active = true;
+    preparedDraftRevisionId.current = draft.draftRevisionId;
+    setApproval({ kind: 'preparing' });
+    void apiClient.approvals.prepareDraft
+      .mutate({
+        draftRevisionId: draft.draftRevisionId,
+        expectedDraftRevision: draft.revision,
+      })
+      .then(async (prepared) => {
+        const [status, execution] = await Promise.all([
+          apiClient.approvals.status.query({
+            proposalId: prepared.proposalId,
+          }),
+          apiClient.execution.status.query({
+            proposalId: prepared.proposalId,
+          }),
+        ]);
+        if (!active) return;
+        if (
+          status.status === 'approved' &&
+          execution.status === 'effect_disabled' &&
+          execution.receipt !== undefined
+        ) {
+          setApproval({
+            kind: 'approved',
+            proposalId: prepared.proposalId,
+            updatedAt: status.updatedAt,
+            receipt: execution.receipt,
+          });
+          return;
+        }
+        setApproval({
+          kind: 'pending',
+          proposalId: prepared.proposalId,
+          updatedAt: status.updatedAt,
+        });
+      })
+      .catch(() => {
+        if (active) {
+          setApproval({
+            kind: 'error',
+            message:
+              'The durable approval handoff could not be loaded. Retry the revision when the hosted API is available.',
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [apiClient, state.draft]);
+
   const requestContext = () => {
     if (state.recommendation === undefined) return;
     void api
@@ -889,24 +1044,111 @@ function ProjectionThreadPage({
 
   const reviseDraft = () => {
     if (state.draft === undefined) return;
-    setSubmittedDraft(draftInput);
+    const previous = state.draft.draft.body;
+    setDraftSaving(true);
     void api
       .reviseDraft({
         draftRevisionId: state.draft.draft.draftRevisionId,
         expectedDraftRevision: state.draft.draft.revision,
-        revisionInstruction:
-          'Make the response shorter and retain cited facts.',
+        revisionInstruction: conciseRevisionInstruction,
       })
       .then(
         (draft) => {
           setState((current) => ({ ...current, draft }));
-          setDraftInput(draft.draft.body);
-          setWorkflow('revised');
+          setRevisionComparison({ previous, current: draft.draft.body });
+          setApproval({ kind: 'not_prepared' });
+          setDraftSaving(false);
         },
         () => {
           setProposalOutcome('Hosted draft revision could not be prepared.');
+          setDraftSaving(false);
         },
       );
+  };
+
+  const approveDraft = () => {
+    if (approval.kind !== 'pending') return;
+    const pending = approval;
+    setApproval({ ...pending, kind: 'approving' });
+    void apiClient.approvals.approve
+      .mutate({
+        proposalId: pending.proposalId,
+        expectedProposalUpdatedAt: pending.updatedAt,
+      })
+      .then((result) => {
+        setApproval({
+          kind: 'approved',
+          proposalId: result.proposalId,
+          updatedAt: result.updatedAt,
+          receipt: result.receipt,
+        });
+      })
+      .catch(async () => {
+        try {
+          const [status, execution] = await Promise.all([
+            apiClient.approvals.status.query({
+              proposalId: pending.proposalId,
+            }),
+            apiClient.execution.status.query({
+              proposalId: pending.proposalId,
+            }),
+          ]);
+          if (
+            status.proposalId !== pending.proposalId ||
+            execution.proposalId !== pending.proposalId
+          ) {
+            setApproval({
+              kind: 'uncertain',
+              proposalId: pending.proposalId,
+              message:
+                'The approval acknowledgement failed and the durable API returned a different proposal. Reload this exact thread before any retry. External effects remain disabled.',
+            });
+            return;
+          }
+          if (
+            status.status === 'approved' &&
+            execution.status === 'effect_disabled' &&
+            execution.receipt !== undefined
+          ) {
+            setApproval({
+              kind: 'approved',
+              proposalId: pending.proposalId,
+              updatedAt: status.updatedAt,
+              receipt: execution.receipt,
+              recoveredAfterAcknowledgementFailure: true,
+            });
+            return;
+          }
+          if (
+            (status.status === 'prepared' ||
+              status.status === 'pending_approval') &&
+            execution.status !== 'effect_disabled' &&
+            execution.receipt === undefined
+          ) {
+            setApproval({
+              kind: 'pending',
+              proposalId: pending.proposalId,
+              updatedAt: status.updatedAt,
+              notice:
+                'The dispatch acknowledgement failed while durable status remains pending. No external effect or provider dispatch occurred.',
+            });
+            return;
+          }
+          setApproval({
+            kind: 'uncertain',
+            proposalId: pending.proposalId,
+            message:
+              'The approval acknowledgement failed and durable records are inconsistent. Reload this exact thread before any retry. External effects remain disabled.',
+          });
+        } catch {
+          setApproval({
+            kind: 'uncertain',
+            proposalId: pending.proposalId,
+            message:
+              'The approval acknowledgement failed and durable status could not be reconciled. Reload this exact thread before any retry. External effects remain disabled.',
+          });
+        }
+      });
   };
 
   const prepareAsana = () => {
@@ -962,7 +1204,7 @@ function ProjectionThreadPage({
         <span>{communication.sender}</span>
       </div>
       <PageHeader
-        eyebrow={`${source === 'hosted_fixture' ? 'Hosted fixture' : 'Local fallback'} · ${communication.received} UTC`}
+        eyebrow={`${source === 'hosted_durable' ? 'Durable hosted seed' : 'Local fallback'} · ${communication.received} UTC`}
         title={communication.subject}
         description={`${communication.channel} · ${communication.account} · ${communication.sender}`}
         action={<StatusChip status={communication.status} />}
@@ -1156,42 +1398,58 @@ function ProjectionThreadPage({
           {state.draft === undefined ? null : (
             <div className="hosted-draft">
               <label htmlFor="hosted-draft-editor">
-                Hosted fixture draft revision {state.draft.draft.revision}
+                Durable hosted draft revision {state.draft.draft.revision}
               </label>
               <textarea
                 id="hosted-draft-editor"
                 data-testid="draft-editor"
                 rows={7}
-                value={draftInput}
-                onChange={(event) => {
-                  setDraftInput(event.target.value);
-                  setWorkflow('draft');
-                }}
+                value={state.draft.draft.body}
+                readOnly
+                aria-describedby="bounded-revision-note"
               />
+              <p className="approval-help" id="bounded-revision-note">
+                This persisted body is read-only. Create a successor with the
+                bounded concise instruction; free-form body edits are not
+                accepted by this evaluator control.
+              </p>
               <div className="draft-meta">
                 <span>Style profile · concise · direct</span>
                 <span>
                   {state.draft.factualCitationCount} factual citations
                 </span>
-                <span>Hosted fixture proposal</span>
+                <span>Durable effect-disabled proposal</span>
               </div>
               <button
                 className="button button--secondary button--full"
                 type="button"
+                disabled={draftSaving || state.draft.draft.revision >= 2}
                 onClick={reviseDraft}
               >
-                <PencilLine aria-hidden="true" size={16} /> Revise for brevity
+                <PencilLine aria-hidden="true" size={16} />{' '}
+                {draftSaving
+                  ? 'Creating concise revision…'
+                  : state.draft.draft.revision >= 2
+                    ? 'Concise revision created'
+                    : 'Create concise revision'}
               </button>
             </div>
           )}
 
-          {workflow === 'draft' || submittedDraft === undefined ? null : (
+          {revisionComparison === undefined ? null : (
             <div className="diff-card" data-testid="revision-diff">
-              <strong>Local immutable ceremony revision</strong>
-              <p>{submittedDraft}</p>
+              <strong>Durable immutable revision</strong>
+              <p>
+                <del>{revisionComparison.previous}</del>
+              </p>
+              <p>
+                <ins>{revisionComparison.current}</ins>
+              </p>
               <span>
-                The hosted API prepared the cited revision; no provider effect
-                is authorized.
+                The hosted API applied “{conciseRevisionInstruction}” and
+                persisted a successor body of{' '}
+                {revisionComparison.current.length} characters, down from{' '}
+                {revisionComparison.previous.length}.
               </span>
             </div>
           )}
@@ -1219,25 +1477,69 @@ function ProjectionThreadPage({
           <div className="public-approval-boundary">
             <LockKeyhole aria-hidden="true" size={17} />
             <div>
-              <strong>Public API cannot approve or execute.</strong>
+              <strong>Server-authorized durable approval.</strong>
               <p>
-                The button below demonstrates the deterministic local ceremony;
-                it can produce only an effect-disabled receipt.
+                Approval is bound to the server-selected evaluator actor and
+                exact persisted revision. Provider dispatch remains disabled.
               </p>
             </div>
           </div>
-          {workflow === 'approved' ? (
-            <ExecutionReceipt />
+          {approval.kind === 'pending' && approval.notice !== undefined ? (
+            <p
+              className="projection-notice projection-notice--warning"
+              data-testid="approval-reconciliation-pending"
+              role="status"
+            >
+              {approval.notice}
+            </p>
+          ) : null}
+          {approval.kind === 'approved' ? (
+            <>
+              {approval.recoveredAfterAcknowledgementFailure === true ? (
+                <p
+                  className="projection-notice"
+                  data-testid="approval-recovered"
+                  role="status"
+                >
+                  The approval acknowledgement failed, but a durable approved
+                  status and effect-disabled receipt were recovered. No external
+                  effect occurred.
+                </p>
+              ) : null}
+              <ExecutionReceipt
+                proposalId={approval.proposalId}
+                receipt={approval.receipt}
+              />
+            </>
+          ) : approval.kind === 'uncertain' ? (
+            <p
+              className="projection-notice projection-notice--warning"
+              data-testid="approval-reconciliation-uncertain"
+              role="alert"
+            >
+              {approval.message}
+            </p>
+          ) : approval.kind === 'error' ? (
+            <p
+              className="projection-notice projection-notice--warning"
+              role="alert"
+            >
+              {approval.message}
+            </p>
           ) : (
             <button
               className="button button--primary button--full"
               data-testid="approve-action"
               type="button"
-              disabled={workflow !== 'revised'}
-              onClick={() => setWorkflow('approved')}
+              disabled={approval.kind !== 'pending'}
+              onClick={approveDraft}
             >
-              <UserRoundCheck aria-hidden="true" size={17} /> Complete local
-              effect-disabled ceremony
+              <UserRoundCheck aria-hidden="true" size={17} />{' '}
+              {approval.kind === 'preparing'
+                ? 'Preparing durable approval…'
+                : approval.kind === 'approving'
+                  ? 'Persisting approval…'
+                  : 'Approve exact durable revision'}
             </button>
           )}
         </section>
@@ -1246,25 +1548,16 @@ function ProjectionThreadPage({
   );
 }
 
-function ThreadPage({
-  workflow,
-  setWorkflow,
-}: {
-  readonly workflow: WorkflowState;
-  readonly setWorkflow: (state: WorkflowState) => void;
-}) {
-  const [draft, setDraft] = useState(
-    workflow === 'draft' ? initialDraft : revisedDraft,
-  );
+function ThreadPage() {
+  const [draft, setDraft] = useState(initialDraft);
+  const [isRevised, setIsRevised] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   const navigate = useNavigate();
 
   const revise = () => {
     setDraft(revisedDraft);
-    setWorkflow('revised');
+    setIsRevised(true);
   };
-
-  const approve = () => setWorkflow('approved');
 
   return (
     <div className="page page--thread" data-testid="thread-detail">
@@ -1412,7 +1705,9 @@ function ThreadPage({
                   <span>In review · due today · owner Priya Shah</span>
                 </div>
               </div>
-              <InlineLink>Open fixture task context</InlineLink>
+              <InlineLink to="/evidence#retrieval">
+                Open retrieval evidence
+              </InlineLink>
             </section>
           </div>
         </section>
@@ -1484,7 +1779,7 @@ function ThreadPage({
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Style-matched draft</p>
-                <h2>Revision {workflow === 'draft' ? '1' : '2'}</h2>
+                <h2>Revision {isRevised ? '2' : '1'}</h2>
               </div>
               <span className="style-chip">Direct · concise · no hedging</span>
             </div>
@@ -1493,12 +1788,15 @@ function ThreadPage({
               id="draft-editor"
               data-testid="draft-editor"
               value={draft}
-              onChange={(event) => {
-                setDraft(event.target.value);
-                setWorkflow('draft');
-              }}
+              readOnly
+              aria-describedby="local-bounded-revision-note"
               rows={12}
             />
+            <p className="approval-help" id="local-bounded-revision-note">
+              Read-only fallback body. The bounded control demonstrates “
+              {conciseRevisionInstruction}” without granting durable approval
+              authority.
+            </p>
             <div className="draft-meta">
               <span>Style profile v12</span>
               <span>3 factual citations</span>
@@ -1507,13 +1805,17 @@ function ThreadPage({
             <button
               className="button button--secondary button--full"
               type="button"
+              disabled={isRevised}
               onClick={revise}
             >
-              <PencilLine aria-hidden="true" size={16} /> Revise for brevity
+              <PencilLine aria-hidden="true" size={16} />{' '}
+              {isRevised
+                ? 'Concise revision created'
+                : 'Create concise revision'}
             </button>
           </article>
 
-          {workflow === 'draft' ? null : (
+          {!isRevised ? null : (
             <article className="surface diff-card" data-testid="revision-diff">
               <div className="section-heading">
                 <div>
@@ -1571,42 +1873,34 @@ function ThreadPage({
                 <dd className="mono">8e41…a29c · revision 2</dd>
               </div>
             </dl>
-            {workflow === 'approved' ? (
-              <div className="approved-state">
-                <CheckCircle2 aria-hidden="true" size={18} />
-                <div>
-                  <strong>Exact revision approved</strong>
-                  <span>Approval fx-apr-7721 · 09:44 UTC</span>
-                </div>
-              </div>
-            ) : (
-              <button
-                className="button button--primary button--full"
-                data-testid="approve-action"
-                type="button"
-                disabled={workflow === 'draft'}
-                onClick={approve}
-              >
-                <UserRoundCheck aria-hidden="true" size={17} /> Approve revision
-                2
-              </button>
-            )}
-            {workflow === 'draft' ? (
-              <p className="approval-help">
-                Create revision 2 before approval. Edits always invalidate prior
-                approval.
-              </p>
-            ) : null}
+            <button
+              className="button button--primary button--full"
+              data-testid="approve-action"
+              type="button"
+              disabled
+            >
+              <UserRoundCheck aria-hidden="true" size={17} /> Hosted durable
+              approval required
+            </button>
+            <p className="approval-help">
+              {isRevised
+                ? 'This local fallback revision is not persisted and cannot be approved.'
+                : 'Create revision 2, then use the hosted durable evaluator to approve it.'}
+            </p>
           </article>
-
-          {workflow === 'approved' ? <ExecutionReceipt /> : null}
         </section>
       </div>
     </div>
   );
 }
 
-function ExecutionReceipt() {
+function ExecutionReceipt({
+  proposalId,
+  receipt,
+}: {
+  readonly proposalId: string;
+  readonly receipt: DurableApprovalReceipt;
+}) {
   return (
     <article className="surface receipt-card" data-testid="execution-receipt">
       <div className="receipt-status">
@@ -1614,7 +1908,8 @@ function ExecutionReceipt() {
         <div>
           <strong>Execution completed safely</strong>
           <span>
-            Effect-disabled receipt · no provider or Asana request occurred
+            Durable effect-disabled receipt · no provider or Asana request
+            occurred
           </span>
         </div>
       </div>
@@ -1625,11 +1920,15 @@ function ExecutionReceipt() {
         </div>
         <div>
           <dt>Operation</dt>
-          <dd className="mono">fx-op-7c41</dd>
+          <dd className="mono">{receipt.operationId}</dd>
+        </div>
+        <div>
+          <dt>Proposal</dt>
+          <dd className="mono">{proposalId}</dd>
         </div>
         <div>
           <dt>Idempotency</dt>
-          <dd>Replays return this receipt</dd>
+          <dd className="mono">{receipt.stableIdempotencyKey}</dd>
         </div>
         <div>
           <dt>External network</dt>
@@ -1648,25 +1947,30 @@ function ExecutionReceipt() {
         <li>
           <span />
           <div>
-            <strong>09:44:02</strong> Approval bound to revision hash
+            <strong>
+              {new Date(receipt.observedAt).toLocaleTimeString('en-GB')}
+            </strong>{' '}
+            Approval bound to revision hash
           </div>
         </li>
         <li>
           <span />
           <div>
-            <strong>09:44:03</strong> Outbox operation claimed once
+            <strong>{receipt.operationId}</strong> Outbox operation persisted
+            once
           </div>
         </li>
         <li>
           <span />
           <div>
-            <strong>09:44:03</strong> Preflight confirmed effect switch off
+            <strong>{receipt.artifactHash.slice(0, 12)}…</strong> Preflight
+            confirmed effect switch off
           </div>
         </li>
         <li>
           <span />
           <div>
-            <strong>09:44:03</strong> Receipt persisted; no external call
+            <strong>Durable reload</strong> Receipt persisted; no external call
           </div>
         </li>
       </ol>
@@ -1674,26 +1978,257 @@ function ExecutionReceipt() {
   );
 }
 
+function isProposalNotFound(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as {
+    readonly message?: unknown;
+    readonly data?: { readonly code?: unknown };
+  };
+  return (
+    candidate.data?.code === 'NOT_FOUND' ||
+    (typeof candidate.message === 'string' &&
+      /proposal (?:was )?not found/i.test(candidate.message))
+  );
+}
+
+function ApprovalStatusPage({ apiClient }: { readonly apiClient: ApiClient }) {
+  const { proposalId: routeProposalId } = useParams<{
+    proposalId: string;
+  }>();
+  const [state, setState] = useState<ApprovalRouteState>({ kind: 'loading' });
+
+  useEffect(() => {
+    const parsedProposalId = proposalIdSchema.safeParse(routeProposalId);
+    if (
+      !parsedProposalId.success ||
+      parsedProposalId.data !== routeProposalId
+    ) {
+      setState({ kind: 'not_found' });
+      return;
+    }
+
+    let active = true;
+    setState({ kind: 'loading' });
+    void Promise.all([
+      apiClient.approvals.status.query({
+        proposalId: parsedProposalId.data,
+      }),
+      apiClient.execution.status.query({
+        proposalId: parsedProposalId.data,
+      }),
+    ])
+      .then(([approval, execution]) => {
+        if (!active) return;
+        if (
+          approval.proposalId !== parsedProposalId.data ||
+          execution.proposalId !== parsedProposalId.data
+        ) {
+          setState({
+            kind: 'error',
+            message:
+              'The durable API returned status for a different proposal. No action was taken.',
+          });
+          return;
+        }
+        if (
+          approval.status === 'approved' &&
+          (execution.status !== 'effect_disabled' ||
+            execution.receipt === undefined)
+        ) {
+          setState({
+            kind: 'error',
+            message:
+              'Approval is recorded, but its effect-disabled durable receipt is unavailable.',
+          });
+          return;
+        }
+        if (
+          approval.status !== 'approved' &&
+          (execution.status === 'effect_disabled' ||
+            execution.receipt !== undefined)
+        ) {
+          setState({
+            kind: 'error',
+            message:
+              'The durable approval and execution records disagree. No action was taken.',
+          });
+          return;
+        }
+        setState({
+          kind: 'ready',
+          proposalId: approval.proposalId,
+          approvalStatus: approval.status,
+          executionStatus: execution.status,
+          updatedAt: approval.updatedAt,
+          ...(execution.receipt === undefined
+            ? {}
+            : { receipt: execution.receipt }),
+        });
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setState(
+          isProposalNotFound(error)
+            ? { kind: 'not_found' }
+            : {
+                kind: 'error',
+                message:
+                  'The durable proposal status could not be loaded. No action was taken.',
+              },
+        );
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [apiClient, routeProposalId]);
+
+  if (state.kind === 'loading') {
+    return (
+      <div className="page">
+        <PageHeader
+          eyebrow="Durable approval"
+          title="Loading proposal status"
+          description="Reading the bounded approval and execution records. This route cannot approve or dispatch anything."
+        />
+        <section
+          className="surface empty-state"
+          role="status"
+          data-testid="approval-route-loading"
+        >
+          <RefreshCcw aria-hidden="true" size={24} />
+          <h2>Checking durable records</h2>
+          <p>External effects remain disabled while status is read.</p>
+        </section>
+      </div>
+    );
+  }
+
+  if (state.kind === 'not_found') {
+    return (
+      <div className="page not-found" data-testid="approval-route-not-found">
+        <Search aria-hidden="true" size={34} />
+        <p className="eyebrow">Proposal not found</p>
+        <h1>This durable approval record does not exist.</h1>
+        <p>No approval or external action was created by opening this route.</p>
+        <Link className="button button--primary" to="/approvals">
+          Open approvals
+        </Link>
+      </div>
+    );
+  }
+
+  if (state.kind === 'error') {
+    return (
+      <div className="page">
+        <PageHeader
+          eyebrow="Durable approval"
+          title="Proposal status unavailable"
+          description="The read-only status request failed safely. No approval or external action was attempted."
+        />
+        <section
+          className="surface error-state"
+          role="alert"
+          data-testid="approval-route-error"
+        >
+          <CircleHelp aria-hidden="true" size={24} />
+          <h2>Status could not be verified</h2>
+          <p>{state.message}</p>
+          <Link className="button button--secondary" to="/approvals">
+            Open approvals
+          </Link>
+        </section>
+      </div>
+    );
+  }
+
+  const pending = state.approvalStatus !== 'approved';
+  return (
+    <div className="page" data-testid="approval-route-status">
+      <PageHeader
+        eyebrow="Durable approval · read only"
+        title={pending ? 'Approval is pending' : 'Approval completed safely'}
+        description="This proposal-specific view reads durable approval and execution status only. It cannot approve, send, or dispatch."
+        action={
+          <Link className="button button--secondary" to="/approvals">
+            Back to approvals
+          </Link>
+        }
+      />
+      <section className="surface approval-focus">
+        <p className="eyebrow">Exact proposal</p>
+        <h2 className="mono">{state.proposalId}</h2>
+        <dl className="approval-plan">
+          <div>
+            <dt>Approval state</dt>
+            <dd>{state.approvalStatus}</dd>
+          </div>
+          <div>
+            <dt>Execution state</dt>
+            <dd>{state.executionStatus}</dd>
+          </div>
+          <div>
+            <dt>External effects</dt>
+            <dd>Disabled · no dispatch authority</dd>
+          </div>
+          <div>
+            <dt>Updated</dt>
+            <dd>{new Date(state.updatedAt).toLocaleString('en-GB')}</dd>
+          </div>
+        </dl>
+      </section>
+      {state.receipt === undefined ? (
+        <section
+          className="surface empty-state"
+          role="status"
+          data-testid="approval-route-pending"
+        >
+          <Clock3 aria-hidden="true" size={24} />
+          <h2>No execution receipt yet</h2>
+          <p>
+            The proposal remains {state.approvalStatus}. No provider request or
+            external effect has occurred.
+          </p>
+        </section>
+      ) : (
+        <ExecutionReceipt
+          proposalId={state.proposalId}
+          receipt={state.receipt}
+        />
+      )}
+    </div>
+  );
+}
+
 function ApprovalsPage({
-  workflow,
-  setWorkflow,
+  projection,
 }: {
-  readonly workflow: WorkflowState;
-  readonly setWorkflow: (state: WorkflowState) => void;
+  readonly projection: ProductProjection;
 }) {
+  const pendingApprovalCount = projection.metrics?.pendingApprovalCount ?? 0;
+  const sourceLabel =
+    projection.source === 'hosted_durable'
+      ? 'Durable hosted projection'
+      : projection.source === 'local_fallback'
+        ? 'Local demonstration projection'
+        : 'Checking durable projection';
+
   return (
     <div className="page">
       <PageHeader
         eyebrow="Human control plane"
         title="Pending approvals"
-        description="External actions are never approved implicitly. This signed-out ceremony is local and effect-disabled; the public API can prepare proposals but cannot approve or execute them."
+        description="External actions are never approved implicitly. The signed-out evaluator can persist an exact server-authorized approval and immutable outbox receipt, while provider dispatch remains disabled."
       />
       <div className="approval-page-grid">
         <section className="surface approval-queue">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">6 pending</p>
-              <h2>Action plans</h2>
+              <p className="eyebrow" data-testid="approval-pending-count">
+                {pendingApprovalCount} pending
+              </p>
+              <h2>Prepared effect-disabled examples</h2>
+              <small>{sourceLabel} · demonstration cards below</small>
             </div>
             <Filter aria-hidden="true" size={18} />
           </div>
@@ -1708,8 +2243,8 @@ function ApprovalsPage({
               <strong>Reply to Taylor Reed</strong>
               <p>Q3 launch risk and customer note</p>
               <small>
-                Gmail fixture · revision {workflow === 'draft' ? '1' : '2'} · 2
-                side effects
+                Demonstration only · deterministic non-PII Gmail-shaped seed ·
+                prepared revision · effect disabled
               </small>
             </div>
             <StatusChip status="overdue" />
@@ -1721,7 +2256,9 @@ function ApprovalsPage({
             <div>
               <strong>Update board packet task</strong>
               <p>Operating metrics sensitivity page</p>
-              <small>Asana fixture · 1 side effect</small>
+              <small>
+                Demonstration only · prepared outbox · effect disabled
+              </small>
             </div>
             <StatusChip status="pending" />
           </div>
@@ -1732,7 +2269,9 @@ function ApprovalsPage({
             <div>
               <strong>Acknowledge partner meeting</strong>
               <p>Owner context required first</p>
-              <small>WhatsApp fixture · not approvable</small>
+              <small>
+                Demonstration only · no prepared effect · not approvable
+              </small>
             </div>
             <StatusChip status="context" />
           </div>
@@ -1752,10 +2291,7 @@ function ApprovalsPage({
             </div>
             <div>
               <dt>Draft</dt>
-              <dd>
-                Revision{' '}
-                {workflow === 'draft' ? '1 (must revise)' : '2 · 8e41…a29c'}
-              </dd>
+              <dd>Loaded from the exact persisted thread revision</dd>
             </div>
             <div>
               <dt>Message outcome</dt>
@@ -1770,26 +2306,12 @@ function ApprovalsPage({
               <dd>10:14 UTC · 30 minutes</dd>
             </div>
           </dl>
-          {workflow === 'draft' ? (
-            <button
-              className="button button--primary button--full"
-              type="button"
-              onClick={() => setWorkflow('revised')}
-            >
-              <PencilLine size={16} /> Create immutable revision 2
-            </button>
-          ) : workflow === 'revised' ? (
-            <button
-              className="button button--primary button--full"
-              data-testid="approve-action"
-              type="button"
-              onClick={() => setWorkflow('approved')}
-            >
-              <UserRoundCheck size={17} /> Approve exact action plan
-            </button>
-          ) : (
-            <ExecutionReceipt />
-          )}
+          <Link
+            className="button button--primary button--full"
+            to="/inbox/thread-q3-launch"
+          >
+            <PencilLine size={16} /> Open exact revision and durable status
+          </Link>
         </section>
       </div>
     </div>
@@ -1805,38 +2327,95 @@ function ConnectionsPage({
 }) {
   const modeCount = (mode: ConnectorFixture['mode']) =>
     projection.connectors.filter((connector) => connector.mode === mode).length;
+  const isHosted = projection.source === 'hosted_durable';
+  const hostedSeedCounts = isHosted
+    ? {
+        fixture: modeCount('fixture'),
+        recorded: modeCount('recorded'),
+        blocked: modeCount('blocked'),
+      }
+    : { fixture: 1, recorded: 0, blocked: 0 };
 
   return (
     <div className="page">
       <PageHeader
         eyebrow="Onboarding & capability truth"
         title="Connections"
-        description="Understand what is operational, evidenced, simulated, or externally blocked before relying on a channel."
+        description="Inspect the fixed-scope hosted connector card, then use the legend to understand mode definitions—including modes with zero hosted evidence."
         action={
-          <button className="button button--secondary" type="button">
+          <Link className="button button--secondary" to="/evidence#connections">
             <Plus aria-hidden="true" size={17} /> Connection guide
-          </button>
+          </Link>
         }
       />
+      <section
+        className="surface connection-seed-summary"
+        data-testid="hosted-connector-seed-summary"
+      >
+        <strong>Hosted evaluator seed</strong>
+        <p>
+          Inspect the fixed-scope fixture connector card below. The mode legend
+          defines other states; it does not claim additional hosted connectors.
+        </p>
+        <dl>
+          <div>
+            <dt>Fixture</dt>
+            <dd data-testid="hosted-seed-fixture-count">
+              {hostedSeedCounts.fixture} fixed-scope hosted connector card
+            </dd>
+          </div>
+          <div>
+            <dt>Recorded</dt>
+            <dd data-testid="hosted-seed-recorded-count">
+              {hostedSeedCounts.recorded} hosted evidence cards
+            </dd>
+          </div>
+          <div>
+            <dt>Blocked</dt>
+            <dd data-testid="hosted-seed-blocked-count">
+              {hostedSeedCounts.blocked} hosted connector cards
+            </dd>
+          </div>
+        </dl>
+        {!isHosted ? (
+          <small>
+            The additional cards below are local fallback demonstrations, not
+            hosted seed evidence.
+          </small>
+        ) : null}
+      </section>
       <section className="mode-legend" aria-label="Capability mode legend">
         <article>
           <ModeChip mode="live" testId="capability-mode-legend-live" />
-          <strong>{modeCount('live')} in this session</strong>
+          <strong data-testid="connection-count-live">
+            {modeCount('live')} {isHosted ? 'hosted cards' : 'in this session'}
+          </strong>
           <span>Current provider connection with direct runtime proof</span>
         </article>
         <article>
           <ModeChip mode="recorded" testId="capability-mode-legend-recorded" />
-          <strong>{modeCount('recorded')} evidence sets</strong>
+          <strong data-testid="connection-count-recorded">
+            {modeCount('recorded')}{' '}
+            {isHosted ? 'hosted evidence cards' : 'evidence sets'}
+          </strong>
           <span>Prior provider-shaped receipt; no current call</span>
         </article>
         <article>
           <ModeChip mode="fixture" testId="capability-mode-legend-fixture" />
-          <strong>{modeCount('fixture')} deterministic adapters</strong>
+          <strong data-testid="connection-count-fixture">
+            {modeCount('fixture')}{' '}
+            {isHosted
+              ? 'hosted fixture connector cards'
+              : 'deterministic adapters'}
+          </strong>
           <span>Local seeded records with external effects disabled</span>
         </article>
         <article>
           <ModeChip mode="blocked" testId="capability-mode-legend-blocked" />
-          <strong>{modeCount('blocked')} authorization gates</strong>
+          <strong data-testid="connection-count-blocked">
+            {modeCount('blocked')}{' '}
+            {isHosted ? 'hosted blocked cards' : 'authorization gates'}
+          </strong>
           <span>Unavailable until provider access is proven</span>
         </article>
       </section>
@@ -1849,30 +2428,34 @@ function ConnectionsPage({
             <Check size={16} />
           </span>
           <div>
-            <strong>1. Review scope</strong>
-            <small>Fixture tenant is selected</small>
+            <strong>1. Review hosted scope</strong>
+            <small>One fixed-scope fixture connector</small>
           </div>
         </div>
         <div className="onboarding-line" />
         <div className="onboarding-step onboarding-step--current">
           <span>2</span>
           <div>
-            <strong>Inspect capabilities</strong>
-            <small>Modes are independently labeled</small>
+            <strong>Inspect the connector card</strong>
+            <small>Capabilities are independently labeled</small>
           </div>
         </div>
         <div className="onboarding-line" />
         <div className="onboarding-step">
           <span>3</span>
           <div>
-            <strong>Authorize live account</strong>
-            <small>Unavailable while signed out</small>
+            <strong>Review mode definitions</strong>
+            <small>Zero-count modes are definitions only</small>
           </div>
         </div>
       </section>
-      <div className="connector-grid">
+      <div className="connector-grid" data-testid="connector-grid">
         {projection.connectors.map((connector) => (
-          <article className="surface connector-card" key={connector.id}>
+          <article
+            className="surface connector-card"
+            data-testid="connector-card"
+            key={connector.id}
+          >
             <header>
               <span className="connector-letter" aria-hidden="true">
                 {connector.name[0]}
@@ -1902,16 +2485,21 @@ function ConnectionsPage({
                 <span key={capability}>{capability}</span>
               ))}
             </div>
-            <button
-              className="button button--tertiary button--full"
-              type="button"
-              disabled={connector.mode === 'blocked'}
-            >
-              {connector.mode === 'blocked'
-                ? 'Authorization required'
-                : 'Inspect evidence'}{' '}
-              <ExternalLink aria-hidden="true" size={15} />
-            </button>
+            {connector.mode === 'blocked' ? (
+              <span
+                className="button button--tertiary button--full"
+                aria-disabled="true"
+              >
+                Not available in evaluator mode
+              </span>
+            ) : (
+              <Link
+                className="button button--tertiary button--full"
+                to="/evidence#connections"
+              >
+                Inspect evidence <ExternalLink aria-hidden="true" size={15} />
+              </Link>
+            )}
           </article>
         ))}
       </div>
@@ -1932,7 +2520,7 @@ function ConnectionsPage({
         <span className={`api-indicator api-indicator--${apiState.kind}`}>
           <span />
           {apiState.kind === 'ready'
-            ? 'Hosted fixture API healthy'
+            ? 'Hosted durable API healthy'
             : apiState.kind === 'checking'
               ? 'Checking'
               : 'Local fallback active'}
@@ -1954,17 +2542,18 @@ function EvidencePage({
       <PageHeader
         eyebrow="Evaluator guide"
         title="Evidence, safety & Cursor access"
-        description="Verify the product’s boundaries, repeat the signed-out journey, and connect an authenticated MCP client without exposing credentials."
+        description="Verify the product’s boundaries, repeat the signed-out journey, and connect a fixed-scope MCP client without exposing credentials."
       />
       <section className="evidence-hero" id="capabilities">
         <div>
           <ModeChip mode="fixture" />
           <h2>What this public session proves</h2>
           <p>
-            A deterministic evaluator can inspect a cross-channel inbox,
-            grounded recommendation, style-matched revision, explicit approval,
-            outbox receipt, Asana preparation, SLA, and audit trail without
-            gaining external-effect authority.
+            {projection.source === 'hosted_durable'
+              ? 'A deterministic evaluator can inspect a fixed-scope email communication queue, grounded recommendation, style-matched durable revision, explicit server-authorized approval, outbox receipt, Asana preparation, SLA, and audit trail without gaining external-effect authority. Local multi-channel examples elsewhere are demonstration-only and are not hosted evidence.'
+              : projection.source === 'local_fallback'
+                ? 'The local fallback demonstrates the interface with static multi-channel examples only. It is not durable hosted evidence and cannot grant approval or external-effect authority.'
+                : 'The evaluator is checking the hosted fixed-scope email projection. No hosted evidence is claimed until that read succeeds.'}
           </p>
         </div>
         <dl>
@@ -1976,9 +2565,9 @@ function EvidencePage({
             <dt>Dataset</dt>
             <dd>
               {projection.communications.length.toLocaleString('en-US')}{' '}
-              {projection.source === 'hosted_fixture'
-                ? 'hosted fixture communications'
-                : 'local fallback communications'}
+              {projection.source === 'hosted_durable'
+                ? 'durable hosted fixed-scope email communications'
+                : 'local fallback demonstration communications'}
             </dd>
           </div>
           <div>
@@ -1997,8 +2586,8 @@ function EvidencePage({
           </div>
         </dl>
       </section>
-      <div className="evidence-grid">
-        <section className="surface proof-matrix">
+      <div className="evidence-grid" id="connections">
+        <section className="surface proof-matrix" id="retrieval">
           <div className="section-heading">
             <div>
               <p className="eyebrow">Evaluator journey</p>
@@ -2012,8 +2601,9 @@ function EvidencePage({
               <div>
                 <strong>Capability truth</strong>
                 <p>
-                  Open Connections and compare fixture, recorded, and blocked
-                  modes.
+                  Open Connections and inspect the fixed-scope fixture connector
+                  card. Then review the recorded and blocked definitions; both
+                  have zero hosted cards in this seed.
                 </p>
               </div>
               <Link to="/connections">
@@ -2101,14 +2691,15 @@ function EvidencePage({
         <div className="section-heading">
           <div>
             <p className="eyebrow">Cursor / remote MCP</p>
-            <h2>Connect through the authenticated product flow</h2>
+            <h2>Connect to the fixed-scope evaluator endpoint</h2>
           </div>
           <Code2 aria-hidden="true" size={21} />
         </div>
         <p className="mcp-intro">
-          Use the hosted MCP URL from the deployed evidence manifest. Cursor
-          discovers OAuth metadata and opens the product authorization flow;
-          never paste a bearer token into the URL, source, or chat.
+          Use the hosted MCP URL from the deployment output. The current public
+          evaluator is signed out and server-scoped; it does not provide OAuth
+          or account setup. Never paste a bearer token into the URL, source, or
+          chat.
         </p>
         <div className="mcp-steps">
           <article>
@@ -2135,10 +2726,10 @@ function EvidencePage({
           <article>
             <span>3</span>
             <div>
-              <strong>Complete browser authorization</strong>
+              <strong>Confirm evaluator scope</strong>
               <p>
-                Grant only the tenant, accounts, and read/preparation scopes
-                shown.
+                Verify the endpoint is labeled deterministic, non-PII, and
+                effect-disabled. No account selection is offered.
               </p>
             </div>
           </article>
@@ -2148,7 +2739,7 @@ function EvidencePage({
               <strong>Verify the safe tool list</strong>
               <p>
                 Read context, search knowledge, recommend, draft, revise, and
-                prepare approval handoffs.
+                poll an existing proposal with get_approval_status.
               </p>
             </div>
           </article>
@@ -2161,15 +2752,17 @@ function EvidencePage({
           <span>create_draft</span>
           <span>revise_draft</span>
           <span>prepare_asana_action</span>
-          <span>submit_for_approval</span>
+          <span>get_approval_status</span>
         </div>
         <div className="mcp-warning">
           <ShieldCheck aria-hidden="true" size={18} />
           <div>
             <strong>Approval stays in the product.</strong>
             <p>
-              MCP returns an immutable proposal ID and authenticated approval
-              URL. It cannot execute a message or task directly.
+              Prepare and approve through the server-authorized product browser
+              or API. MCP can poll get_approval_status for the proposal created
+              there; it cannot prepare or approve that proposal, and external
+              effects remain disabled.
             </p>
           </div>
         </div>
@@ -2237,6 +2830,10 @@ export function App() {
       ? configuredApiBaseUrl
       : window.location.origin;
   const api = useMemo(() => createBrowserApi(apiBaseUrl), [apiBaseUrl]);
+  const apiClient = useMemo(
+    () => createApiClient({ baseUrl: apiBaseUrl }),
+    [apiBaseUrl],
+  );
   const [apiState, setApiState] = useState<ApiState>({ kind: 'checking' });
   const [projection, setProjection] = useState<ProductProjection>({
     source: 'checking',
@@ -2244,8 +2841,6 @@ export function App() {
     hostedCommunications: [],
     connectors: [],
   });
-  const [workflow, setWorkflow] = useState<WorkflowState>('draft');
-
   useEffect(() => {
     let active = true;
     const load = async () => {
@@ -2260,7 +2855,7 @@ export function App() {
         if (active) {
           setApiState({ kind: 'ready', health });
           setProjection({
-            source: 'hosted_fixture',
+            source: 'hosted_durable',
             metrics,
             communications: communicationResult.items.map(
               hostedCommunicationToView,
@@ -2288,7 +2883,11 @@ export function App() {
   }, [api]);
 
   return (
-    <AppShell apiState={apiState} source={projection.source}>
+    <AppShell
+      apiState={apiState}
+      source={projection.source}
+      pendingApprovalCount={projection.metrics?.pendingApprovalCount ?? 0}
+    >
       <Routes>
         <Route path="/" element={<Navigate replace to="/overview" />} />
         <Route
@@ -2301,17 +2900,18 @@ export function App() {
           element={
             <RoutedThreadPage
               api={api}
+              apiClient={apiClient}
               projection={projection}
-              workflow={workflow}
-              setWorkflow={setWorkflow}
             />
           }
         />
         <Route
           path="/approvals"
-          element={
-            <ApprovalsPage workflow={workflow} setWorkflow={setWorkflow} />
-          }
+          element={<ApprovalsPage projection={projection} />}
+        />
+        <Route
+          path="/approvals/:proposalId"
+          element={<ApprovalStatusPage apiClient={apiClient} />}
         />
         <Route
           path="/connections"

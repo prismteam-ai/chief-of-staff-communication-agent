@@ -6,15 +6,13 @@ import type {
 import { createObservability } from '@chief/observability';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 
-import {
-  FixtureMcpToolService,
-  publicFixtureScope,
-} from './fixture-service.js';
+import { createDefaultMcpProductAdapter } from './product-service-adapter.js';
 import { createMcpServer } from './server.js';
 import type { McpRequestScope, McpToolService } from './service.js';
 import { MCP_DEFAULT_TOOL_TIMEOUT_MS, MCP_MAX_BODY_BYTES } from './service.js';
 
 const observability = createObservability('chief-mcp');
+const defaultAdapter = createDefaultMcpProductAdapter(process.env);
 
 const headers = {
   'content-type': 'application/json; charset=utf-8',
@@ -78,8 +76,8 @@ export function createHandler(options?: {
   readonly scope?: McpRequestScope;
   readonly timeoutMs?: number;
 }) {
-  const service = options?.service ?? new FixtureMcpToolService();
-  const scope = options?.scope ?? publicFixtureScope;
+  const service = options?.service ?? defaultAdapter.service;
+  const scope = options?.scope ?? defaultAdapter.scope;
   const timeoutMs = options?.timeoutMs ?? MCP_DEFAULT_TOOL_TIMEOUT_MS;
 
   return async (

@@ -18,7 +18,6 @@ import {
   topicLinkSchema,
   type KeyedDigestValue,
   type MessageRevision,
-  type RetrievalDeltaManifest,
   type SyncCheckpoint,
   type TopicLink,
 } from '@chief/contracts';
@@ -27,7 +26,10 @@ import type {
   KeyCodec,
   SensitiveIdentifierKind,
 } from '@chief/persistence-dynamodb';
-import type { RetrievalIndex } from '@chief/rag';
+import type {
+  RetrievalStagingRegistrar,
+  StagedRetrievalMutationV1,
+} from '@chief/rag';
 
 import { toAuthoredSegment } from './authored-segment.js';
 import type {
@@ -776,15 +778,15 @@ export class CanonicalIngestionPipeline {
       readonly store: IngestionStore;
       readonly keyCodec: KeyCodec;
       readonly retrievalSink: RetrievalMutationSink;
-      readonly retrievalIndex: RetrievalIndex;
+      readonly retrievalRegistrar: RetrievalStagingRegistrar;
       readonly now?: () => Date;
     },
   ) {}
 
   public async recoverProjection(
-    manifest: RetrievalDeltaManifest,
+    manifest: StagedRetrievalMutationV1,
   ): Promise<void> {
-    await this.dependencies.retrievalIndex.applyDelta(manifest);
+    await this.dependencies.retrievalRegistrar.register(manifest);
   }
 
   public async process(event: IngestionEvent): Promise<IngestionResult> {
@@ -833,7 +835,7 @@ export class CanonicalIngestionPipeline {
           ...(item.checkpoint === undefined
             ? {}
             : { checkpoint: nextCheckpoint(item, now) }),
-          ...(delta === undefined ? {} : { retrievalDelta: delta }),
+          ...(delta === undefined ? {} : { retrievalMutation: delta }),
         });
         if (committed.status === 'duplicate') source.duplicates += 1;
         else if (committed.status === 'updated') source.updated += 1;
@@ -843,7 +845,7 @@ export class CanonicalIngestionPipeline {
           source.checkpointAdvanced += 1;
         if (delta !== undefined && committed.status !== 'duplicate') {
           try {
-            await this.dependencies.retrievalIndex.applyDelta(delta);
+            await this.dependencies.retrievalRegistrar.register(delta);
             source.retrievalUpdated += 1;
           } catch {
             source.projectionFailed += 1;

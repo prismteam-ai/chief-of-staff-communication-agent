@@ -1,7 +1,7 @@
 # AWS deployment
 
-Status: deployable CDK vertical; this implementation lane synthesized and tested
-the stacks but did not deploy them.
+Status: durable vertical implemented for parent deployment. This implementation
+lane did not deploy, seed AWS, or run hosted acceptance.
 
 ## Runtime shape
 
@@ -15,8 +15,10 @@ The assessment runtime is two stacks in AWS account `417242953053`, region
 - `ChiefFoundationStack` preserves the existing CloudFront distribution and
   HTTP API, deploys the static web build, and binds the API and MCP Lambdas to
   the product-stack exports with separate resource-scoped IAM profiles. The API
-  can write proposal/approval state and enqueue only the outbox; MCP can write
-  core proposal state but has no queue, event-bus, or secret access.
+  reads/writes durable product and approval state, reads the immutable snapshot,
+  prepares scoped query vectors, and can enqueue only the outbox. MCP uses the
+  same durable product/retrieval service but has no outbox-send, event-bus, or
+  secret access.
 
 The product stack is an explicit dependency of the foundation stack. Deploying
 both stack IDs in one command therefore creates or updates product exports
@@ -26,6 +28,13 @@ CloudFront API/MCP endpoints.
 
 No OpenSearch resource is created. The assessment profile uses the bounded
 DynamoDB/S3 retrieval contract.
+
+Outside tests, both public Lambda entry points fail closed into this durable
+composition. The API requires `CORE_TABLE_NAME`, `RETRIEVAL_TABLE_NAME`,
+`SNAPSHOT_BUCKET_NAME`, and `PRODUCT_BASE_URL`; MCP maps
+`CHIEF_PRODUCT_BASE_URL` into the same API composition. The API additionally
+uses `OUTBOX_QUEUE_URL` when approval enqueueing is configured. The hosted
+defaults do not construct the fixture-only product or MCP services.
 
 ### Production ingestion composition
 
@@ -45,19 +54,19 @@ runtime modes are not admitted by the production composition.
 
 The worker receives this explicit configuration:
 
-| Environment variable | Bound value class |
-|---|---|
-| `INGESTION_RUNTIME_MODE` | Literal `production`; missing or different fails closed |
-| `CORE_TABLE_NAME` | CDK token for the core table |
-| `CONNECTOR_RUNTIME_TABLE_NAME` | CDK token for the fenced checkpoint/runtime table |
-| `RETRIEVAL_TABLE_NAME` | CDK token for the bounded retrieval table |
-| `SNAPSHOT_BUCKET_NAME` | CDK token for the private immutable body/snapshot bucket |
-| `DIGEST_KEY_SECRET_ARN` | ARN reference to the generated `{version,key}` digest secret; never secret material |
-| `PRODUCT_DATA_KEY_ARN` | ARN reference to the customer-managed data key |
-| `INGESTION_THREAD_LOOKUP_INDEX_NAME` | `ThreadLookupIndex` |
-| `INGESTION_IDENTITY_LOOKUP_INDEX_NAME` | `IdentityLookupIndex` |
-| `INGESTION_ASANA_TOPIC_LOOKUP_INDEX_NAME` | `AsanaTopicLookupIndex` |
-| `INGESTION_CONNECTOR_BINDINGS` | Fixed `source=connector@descriptor-version` deployment allowlist |
+| Environment variable                      | Bound value class                                                                   |
+| ----------------------------------------- | ----------------------------------------------------------------------------------- |
+| `INGESTION_RUNTIME_MODE`                  | Literal `production`; missing or different fails closed                             |
+| `CORE_TABLE_NAME`                         | CDK token for the core table                                                        |
+| `CONNECTOR_RUNTIME_TABLE_NAME`            | CDK token for the fenced checkpoint/runtime table                                   |
+| `RETRIEVAL_TABLE_NAME`                    | CDK token for the bounded retrieval table                                           |
+| `SNAPSHOT_BUCKET_NAME`                    | CDK token for the private immutable body/snapshot bucket                            |
+| `DIGEST_KEY_SECRET_ARN`                   | ARN reference to the generated `{version,key}` digest secret; never secret material |
+| `PRODUCT_DATA_KEY_ARN`                    | ARN reference to the customer-managed data key                                      |
+| `INGESTION_THREAD_LOOKUP_INDEX_NAME`      | `ThreadLookupIndex`                                                                 |
+| `INGESTION_IDENTITY_LOOKUP_INDEX_NAME`    | `IdentityLookupIndex`                                                               |
+| `INGESTION_ASANA_TOPIC_LOOKUP_INDEX_NAME` | `AsanaTopicLookupIndex`                                                             |
+| `INGESTION_CONNECTOR_BINDINGS`            | Fixed `source=connector@descriptor-version` deployment allowlist                    |
 
 The three lookup indexes have partition keys only and bounded `INCLUDE`
 projections containing exactly the fields consumed by the Dynamo persistence
@@ -66,18 +75,140 @@ private bucket, consume its queue, and read the exact digest secret. It has no
 outbox-send, EventBridge-publish, Bedrock, Lambda-invoke, SES, SNS-publish, or
 provider credential authority.
 
+### `chief-retrieval.v1` staging and promotion
+
+Production ingestion and bounded retrieval share one versioned contract; there
+is no legacy NDJSON delta/read-snapshot dual format.
+
+1. Canonical ingestion/core records continue to use the secret-backed digest
+   `KeyCodec`. Durable retrieval separately uses
+   `retrievalDynamoKeyV1(scope, entityId)`, a versioned, validated,
+   secret-independent key contract. Production writers and API/MCP readers call
+   this literal function, so missing digest material cannot split retrieval
+   partitions.
+2. Each tenant/scope/role authorization domain has an independent DynamoDB
+   `authorization-epoch` item. Its update condition is monotonic: the epoch may
+   initialize or advance but cannot move backward. Staging and persisted
+   query-vector entity names include the epoch, while the domain/head key stays
+   stable across transitions.
+3. `S3RetrievalMutationSink` converts the canonical ingestion write into an
+   immutable upsert or tombstone. Every record carries canonical evidence text,
+   its content hash, citation label, exact entity references,
+   active/tombstoned state, mutation ordinal, and deterministic binary32 vector.
+   The object is content addressed under the tenant/scope snapshot prefix.
+4. `DynamoS3RetrievalAuthority.register` advances/checks the independent epoch
+   and writes the immutable staged manifest under that exact epoch-qualified
+   catalog. A duplicate is accepted only when the complete manifest is
+   canonically identical.
+5. `CompactingRetrievalRegistrar` consistently enumerates the registered scope
+   through bounded DynamoDB `Query` pages (up to 256 per page, 40 pages, and
+   10,000 total). Empty/repeated continuations fail closed. It reads the current
+   head, compacts the bounded catalog, and retries a stale CAS at most three
+   times. No separate parent compactor or fixture promotion is required.
+6. `DurableRetrievalCompactor` deduplicates mutation IDs, orders changes by
+   staging ordinal and mutation ID, and applies only mutations newer than the
+   snapshot record's ordinal. A conflicting equal ordinal fails closed. A newer
+   tombstone remains snapshot-resident and cannot be resurrected by replaying an
+   older upsert.
+7. Compaction sorts final records by UTF-8 chunk ID and writes exactly the
+   newline-delimited projection and `binary32-le-row-major` vector objects
+   consumed by `BoundedDynamoS3RetrievalIndex`. Snapshot-contained evidence,
+   exact refs, and active/tombstoned state are therefore the reader's canonical
+   authorization/citation surface.
+8. The compactor hashes the manifest and asks the real bounded reader to apply
+   the snapshot before promotion. Promotion is one DynamoDB transaction: a
+   `ConditionCheck` requires the independent authority item to equal the
+   proposed epoch, and the second item conditionally creates/replaces the head
+   at the expected manifest hash. A concurrent epoch advance or head writer
+   therefore makes the CAS stale. Replay against a later head with zero newly
+   applied mutations returns `unchanged`, preserves that exact head, and
+   advances neither generation nor published sequence.
+9. Publication start/end advances by applied mutation count. The limits are
+   10,000 staged mutations, 64 MiB staged bytes, 10,000 snapshot chunks, 64 MiB
+   serialized snapshot bytes, 128 MiB decoded bytes, plus an
+   RSS/available-memory guard. Health remains unavailable until a readable
+   validated head exists.
+10. Query preparation normalizes text, derives the profile-bound hash, and
+    produces the deterministic effect-disabled 32-dimensional vector. The
+    package supports persisted vectors for replay/compatibility proof; API/MCP
+    pass the bounded validated vector in process and keep retrieval IAM
+    read-only. The reader rechecks the authorization epoch, filters tombstones,
+    uses snapshot exact refs for fusion, and returns canonical
+    evidence/citations with the actual promoted manifest hash.
+
+The reader strongly reads the independent epoch before loading a head, after
+snapshot load, before scoring, and after building citations. It can retry one
+observed transition using the new authority value, but it never treats the old
+head as authorized for the new epoch. Once the epoch advances, old-epoch queries
+are denied until ingestion registers new-epoch staging and promotes a fresh
+snapshot/head carrying that epoch. Stale-epoch registration and promotion fail
+closed.
+
+The focused integration suite runs the actual production staging writer through
+deduplicating compaction, CAS promotion, persisted query-vector production,
+healthy bounded retrieval, and cited output. Additional contract tests reject
+stale writers, foreign tenants, corrupt objects, catalog pagination loops,
+conflicting ordinals, excess items/bytes, and excess RSS; they also prove
+cross-head replay does not advance sequence and tombstones dominate older
+upserts. Epoch-transition coverage additionally proves monotonic authority,
+epoch-qualified catalog isolation, old-epoch denial, fresh new-epoch promotion,
+transactional epoch/head fencing, and stale-writer rejection.
+
+### Durable API approval composition
+
+The fixed deterministic non-PII evaluator projection is seeded through the core
+repository on first access. Recommendations, cited drafts, draft successors,
+and proposals use immutable revisions plus conditional heads in the same core
+table. Each draft create/revise commits the immutable revision, its exact
+revision lookup, and the conditional head compare-and-swap in one DynamoDB
+transaction. An interrupted or losing writer cannot expose a draft head without
+the exact lookup required by approval and restart.
+
+The hosted projection contains one fixture connector card. Its capability-mode
+legend still defines recorded and blocked, but both have zero hosted evidence in
+the deterministic seed and therefore no hosted connector cards.
+
+Recommendation/draft facts are the snapshot's canonical evidence text, and
+their provenance is the actual promoted manifest hash. Replay returns the
+persisted current value and original timestamp: once revision 2 is current,
+`createDraft` reloads that exact revision 2. Duplicate revision/approval records
+are accepted only when canonical hashes of the complete immutable values match;
+same-key/different-value data is a conflict.
+After approval, `prepareDraft` replay returns the same proposal as `approved`
+with its exact action-plan binding and approved update timestamp.
+
+The evaluator presents the persisted draft body read-only and exposes only
+**Create concise revision**, which submits exactly `Make this draft concise
+while retaining all cited facts.` The real durable-service regression proves
+that revision 2 differs from and is shorter than revision 1 while preserving
+citations, factual-citation count, passed validation, and exact restart reload.
+
+`approvals.approve` requires the server-derived `actions:approve` grant and the
+exact pending proposal update timestamp. One DynamoDB transaction writes the
+approved immutable proposal revision, conditionally advances its head, and
+creates the approval/execution locator, aggregate, and authority records. The
+API then enqueues the stable operation ID when `OUTBOX_QUEUE_URL` is configured.
+The public operation persists a terminal effect-disabled receipt before enqueue;
+it never claims a provider or Asana request. If SQS fails, approval/status stays
+readable. Retrying with the approved-from or current approved timestamp
+re-enqueues the same operation ID and returns the same receipt.
+
+`approvals.status` and `execution.status` reload that durable state. MCP shares
+the product service for retrieval/draft/status, but exposes no approval or
+direct-effect tool and has no outbox queue authority.
+
 ### Production approval execution composition
 
 The deployed execution Lambda consumes the approval-outbox queue through its
 module-level `handler`. Its complete lane-specific configuration is:
 
-| Environment variable | Bound value class |
-|---|---|
-| `EXECUTION_RUNTIME_MODE` | Literal `effect_disabled`; missing or different fails closed |
-| `CORE_TABLE_NAME` | CDK token for the authoritative core table |
-| `EXECUTION_WORKER_ID` | Stable deployment identity `chief-execution-worker` |
-| `EXECUTION_LEASE_DURATION_MS` | Deployment-owned lease `120000` |
-| Four effect switches | Literals `disabled` |
+| Environment variable          | Bound value class                                            |
+| ----------------------------- | ------------------------------------------------------------ |
+| `EXECUTION_RUNTIME_MODE`      | Literal `effect_disabled`; missing or different fails closed |
+| `CORE_TABLE_NAME`             | CDK token for the authoritative core table                   |
+| `EXECUTION_WORKER_ID`         | Stable deployment identity `chief-execution-worker`          |
+| `EXECUTION_LEASE_DURATION_MS` | Deployment-owned lease `120000`                              |
+| Four effect switches          | Literals `disabled`                                          |
 
 The handler constructs the AWS DynamoDB document client and
 `DynamoApprovalExecutionPersistence`, then uses only `EffectDisabledSink`.
@@ -160,11 +291,19 @@ Run from the repository root:
 
 ```powershell
 pnpm format:check
+pnpm --filter @chief/rag test
+pnpm --filter @chief/ingestion-worker test
+pnpm --filter @chief/api test
+pnpm --filter @chief/mcp test
+pnpm --filter @chief/web test
+pnpm --filter @chief/e2e typecheck
+pnpm --filter @chief/e2e test
 pnpm --filter @chief/infra-cdk lint
 pnpm --filter @chief/infra-cdk typecheck
 pnpm --filter @chief/infra-cdk test
 pnpm build
 pnpm --filter @chief/infra-cdk synth
+pnpm verify:force
 ```
 
 The synth command fixes the account and region contexts and uses
@@ -192,6 +331,18 @@ Review both generated templates. Required invariants include:
 - the three production ingestion lookup GSIs, the exact connector/version
   allowlist with no `demo` source, secret/key ARN references, and no wildcard
   worker data-plane policy resource.
+- retrieval writer/reader items use the canonical secret-independent
+  `retrievalDynamoKeyV1` scope partition rather than the canonical-ingestion
+  digest `KeyCodec`, and ingestion can perform the bounded consistent `Query`
+  required to enumerate registered staging;
+- authorization uses an independent monotonic epoch item, epoch-qualified
+  staging/query keys, consistent epoch reads, and a transactional epoch
+  `ConditionCheck` plus head CAS;
+- API/MCP environment bindings select the durable core/retrieval/snapshot
+  composition and credential-free product URL rather than fixture services;
+- API/MCP retrieval-table permissions are read-only because both produce the
+  validated deterministic query vector in process; only API can enqueue the
+  approval operation.
 
 ## Deploy an exact snapshot
 
@@ -272,9 +423,40 @@ Use the `WebUrl`, `ApiHealthUrl`, `McpHealthUrl`, `CloudFrontApiUrl`, and
 the web URL and survive direct deep-link refresh. API and MCP health must return
 HTTP 200. The CloudFront response must include the committed CSP,
 `X-Content-Type-Options`, frame denial, referrer policy, HSTS, and permissions
-policy. A direct UI route such as `/communications/example` must serve the SPA,
+policy. A direct UI route such as `/inbox/thread-q3-launch` must serve the SPA,
 while an unknown `/trpc/...`, unknown `/mcp/...`, and missing asset with a file
 extension must retain their origin error status and must not return HTML 200.
+
+Record evaluator endpoints as deployment outputs rather than committing a
+release-specific URL:
+
+- UI: `<ChiefFoundationStack.WebUrl>`
+- API base: `<ChiefFoundationStack.ApiUrl>`
+- API health: `<ChiefFoundationStack.ApiHealthUrl>`
+- MCP endpoint: `<ChiefFoundationStack.McpUrl>`
+- MCP health: `<ChiefFoundationStack.McpHealthUrl>`
+
+Then run the non-skippable hosted suite. Each value must be a deployed,
+credential-free HTTPS origin/base URL; the configuration rejects missing URLs,
+single-label/private/local/reserved/unspecified hosts, non-public IPv4/IPv6
+ranges, URL credentials, query strings, and fragments.
+
+```powershell
+$env:CHIEF_BASE_URL = '<ChiefFoundationStack.WebUrl>'
+$env:CHIEF_API_BASE_URL = '<ChiefFoundationStack.ApiUrl>'
+$env:CHIEF_MCP_BASE_URL = '<ChiefFoundationStack.ApiUrl>'
+pnpm --filter @chief/e2e test:hosted
+```
+
+The hosted suite has no local web server and no skip path. It requires the
+durable hosted banner, confirms the draft body is read-only, invokes **Create
+concise revision**, approves that exact immutable successor, captures its
+effect-disabled operation receipt, reloads the page, and confirms the same
+proposal/operation through API status. It also performs MCP
+`initialize`, `tools/list`, and `tools/call` against the deployed MCP
+composition, calls `get_approval_status` with the browser proposal ID, requires
+structured content equal to the API's approved proposal status, and asserts
+that approval/send tools are absent.
 
 Also verify:
 
@@ -288,14 +470,33 @@ Also verify:
   canonical write;
 - all four effect switches are `disabled` on all four Lambdas;
 - API access logs and Lambda log groups retain 90 days;
-- the public fixture UI labels fixture/recorded/blocked capabilities truthfully;
-- an approval flow creates only an `effect_disabled` receipt;
+- the public UI shows the one fixture connector card plus capability-mode
+  definitions, reports zero hosted recorded/blocked evidence without rendering
+  unavailable cards, and never claims signed-out OAuth/account setup;
+- the evaluator projection and current retrieval head are durable and contain
+  only the approved deterministic non-PII seed;
+- **Create concise revision** sends the exact bounded instruction, produces a
+  different, shorter immutable revision 2 with unchanged citations/factual
+  count and passed validation, then prepare -> approve creates only an
+  `effect_disabled` receipt; a route reload returns the same revision, proposal,
+  operation ID, and receipt;
+- MCP `initialize -> tools/list -> tools/call` reaches the durable shared
+  service rather than a fixture-only MCP service and returns the same approved
+  proposal created through the browser/API;
+- repeated legacy MCP `submit_for_approval` calls fail with the same stable
+  `TOOL_UNAVAILABLE` result and cannot create approval state;
 - no unauthenticated request exposes a tenant selector, provider endpoint,
   credential, raw table/path authority, or direct effect tool.
 
 Hosted provider, Asana, model, and authenticated MCP acceptance remain separate
-deployment-dependent checks. A successful fixture smoke test is not evidence
-of a live provider effect.
+deployment-dependent checks. A successful deterministic evaluator test is not
+evidence of a live provider effect.
+
+This implementation lane did not execute any command in this deployment or
+hosted-acceptance section. The parent workflow will deploy an exact reviewed
+snapshot, ingest the deterministic seed through the production
+register/enumerate/compact/promote path, and run these checks against the
+emitted URLs.
 
 ## Operations and recovery
 

@@ -5,10 +5,10 @@ import type {
   Message,
   MessageRevision,
   ProviderThread,
-  RetrievalDeltaManifest,
   SyncCheckpoint,
   TopicLink,
 } from '@chief/contracts';
+import type { StagedRetrievalMutationV1 } from '@chief/rag';
 
 export type IngestionSource =
   | 'gmail'
@@ -284,7 +284,7 @@ export interface IngestionStore {
     readonly workItem: IngestionWorkItem;
     readonly canonical: CanonicalWrite;
     readonly checkpoint?: SyncCheckpoint;
-    readonly retrievalDelta?: RetrievalDeltaManifest;
+    readonly retrievalMutation?: StagedRetrievalMutationV1;
   }): Promise<CommitResult>;
   quarantine(input: {
     readonly workItem: IngestionWorkItem;
@@ -297,7 +297,7 @@ export interface RetrievalMutationSink {
   stage(input: {
     readonly workItem: IngestionWorkItem;
     readonly canonical: CanonicalWrite;
-  }): Promise<RetrievalDeltaManifest | undefined>;
+  }): Promise<StagedRetrievalMutationV1 | undefined>;
 }
 
 export interface SourceCounts {

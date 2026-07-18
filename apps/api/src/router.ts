@@ -34,9 +34,13 @@ import {
 } from '@chief/contracts';
 
 import {
+  approveProposalInputSchema,
+  approveProposalResultSchema,
   dashboardMetricsResultSchema,
   executionStatusInputSchema,
   executionStatusResultSchema,
+  prepareDraftApprovalInputSchema,
+  prepareDraftApprovalResultSchema,
   ProductServiceError,
   type ProductResult,
 } from './product-service.js';
@@ -206,6 +210,22 @@ export const approvalsRouter = router({
         ctx.productService.prepareAsanaAction(ctx.requestContext, input),
       ),
     ),
+  prepareDraft: publicProcedure
+    .input(prepareDraftApprovalInputSchema)
+    .output(prepareDraftApprovalResultSchema)
+    .mutation(({ ctx, input }) =>
+      productCall(() =>
+        ctx.productService.prepareDraftApproval(ctx.requestContext, input),
+      ),
+    ),
+  approve: publicProcedure
+    .input(approveProposalInputSchema)
+    .output(approveProposalResultSchema)
+    .mutation(({ ctx, input }) =>
+      productCall(() =>
+        ctx.productService.approveProposal(ctx.requestContext, input),
+      ),
+    ),
   status: publicProcedure
     .input(getApprovalStatusInputSchema)
     .output(getApprovalStatusResultSchema)
@@ -240,3 +260,20 @@ export const appRouter = router({
 });
 
 export type AppRouter = typeof appRouter;
+
+export {
+  approveProposalInputSchema,
+  approveProposalResultSchema,
+  prepareDraftApprovalInputSchema,
+  prepareDraftApprovalResultSchema,
+} from './product-service.js';
+export {
+  createAwsDurableApiDependencies,
+  createDefaultDurableApiDependencies,
+  createDurableRequestContext,
+  createMemoryDurableApiDependencies,
+} from './aws-composition.js';
+export type {
+  ProductRequestContext,
+  ProductService,
+} from './product-service.js';

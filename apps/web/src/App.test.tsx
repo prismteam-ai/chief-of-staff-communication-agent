@@ -7,7 +7,12 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { App } from './App.js';
 
-const { browserApiMock, createBrowserApiMock } = vi.hoisted(() => {
+const {
+  browserApiMock,
+  createBrowserApiMock,
+  apiClientMock,
+  createApiClientMock,
+} = vi.hoisted(() => {
   const browserApi = {
     systemHealth: vi.fn(),
     dashboardMetrics: vi.fn(),
@@ -30,6 +35,15 @@ const { browserApiMock, createBrowserApiMock } = vi.hoisted(() => {
   return {
     browserApiMock: browserApi,
     createBrowserApiMock: vi.fn(() => browserApi),
+    apiClientMock: {
+      approvals: {
+        prepareDraft: { mutate: vi.fn() },
+        approve: { mutate: vi.fn() },
+        status: { query: vi.fn() },
+      },
+      execution: { status: { query: vi.fn() } },
+    },
+    createApiClientMock: vi.fn(),
   };
 });
 
@@ -37,12 +51,26 @@ vi.mock('@chief/browser-api', () => ({
   createBrowserApi: createBrowserApiMock,
 }));
 
+vi.mock('@chief/api-client', () => ({
+  createApiClient: createApiClientMock,
+}));
+
 beforeEach(() => {
   for (const method of Object.values(browserApiMock)) method.mockReset();
+  for (const procedure of [
+    apiClientMock.approvals.prepareDraft.mutate,
+    apiClientMock.approvals.approve.mutate,
+    apiClientMock.approvals.status.query,
+    apiClientMock.execution.status.query,
+  ]) {
+    procedure.mockReset();
+  }
   browserApiMock.systemHealth.mockRejectedValue(
     new Error('hosted API unavailable'),
   );
   createBrowserApiMock.mockClear();
+  createApiClientMock.mockReset();
+  createApiClientMock.mockReturnValue(apiClientMock);
 });
 
 afterEach(() => {
@@ -65,14 +93,14 @@ function arrangeHostedProjection() {
     foundationOnly: false,
   });
   browserApiMock.dashboardMetrics.mockResolvedValue({
-    totalCommunications: 1,
-    pendingApprovalCount: 1,
-    channelBreakdown: [{ channel: 'email', count: 1 }],
+    totalCommunications: 2,
+    pendingApprovalCount: 0,
+    channelBreakdown: [{ channel: 'email', count: 2 }],
     snapshot: {
       schemaVersion: '1',
       window: '7d',
       measuredAt: '2026-07-17T12:00:00.000Z',
-      pendingCount: 0,
+      pendingCount: 1,
       overdueCount: 1,
       answeredCount: 0,
       resolvedCount: 0,
@@ -97,9 +125,236 @@ function arrangeHostedProjection() {
         sourceTimestamp: '2026-07-17T10:52:00.000Z',
         productUrl: 'https://chief.example/communications/message-revision-1-1',
       },
+      {
+        messageId: 'message-2',
+        messageRevisionId: 'message-revision-2-1',
+        revision: 1,
+        threadId: 'thread-2',
+        direction: 'inbound',
+        status: 'pending',
+        senderDisplayName: 'Priya Shah',
+        recipientDisplayNames: ['Avery Morgan'],
+        subject: 'Board update numbers',
+        excerpt:
+          'Please send the approved pipeline numbers for the board note.',
+        attachmentCount: 0,
+        sourceTimestamp: '2026-07-17T11:06:00.000Z',
+        productUrl: 'https://chief.example/communications/message-revision-2-1',
+      },
     ],
   });
-  browserApiMock.getConnectorStatus.mockResolvedValue([]);
+  browserApiMock.getConnectorStatus.mockResolvedValue([
+    {
+      accountId: 'account-evaluator',
+      brandId: 'brand-evaluator',
+      connectorId: 'gmail',
+      displayLabel: 'Deterministic evaluator Gmail data',
+      provider: 'gmail',
+      connectorKind: 'communication',
+      channel: 'email',
+      status: 'active',
+      health: 'healthy',
+      runtimeMode: 'fixture',
+      selectionState: 'selected',
+      capabilities: {
+        read: true,
+        send: false,
+        webhook: false,
+        poll: false,
+        threads: true,
+        attachments: true,
+        deliveryFeedback: false,
+        multipleAccounts: false,
+        historicalBackfill: false,
+        externalEffect: false,
+        replyCorrelation: true,
+        complaintFeedback: false,
+        unsubscribeFeedback: false,
+        optOutFeedback: false,
+        reconsentFeedback: false,
+        consentWindowEligibility: false,
+      },
+      lastSyncAt: '2026-07-17T12:00:00.000Z',
+      productUrl: 'https://chief.example/settings/connectors/gmail',
+    },
+  ]);
+}
+
+function arrangeHostedThread() {
+  const initialDraftResult = {
+    draft: {
+      draftRevisionId: 'draft-revision-1',
+      revision: 1,
+      body: 'Confirm the launch owner and the 16:00 UTC checkpoint.',
+    },
+    factualCitationCount: 1,
+  };
+  const revisedDraftResult = {
+    draft: {
+      draftRevisionId: 'draft-revision-2',
+      revision: 2,
+      body: 'Confirm the owner and review at 16:00 UTC.',
+    },
+    factualCitationCount: 1,
+  };
+  const durableReceipt = {
+    kind: 'effect_disabled',
+    operationId: 'operation-durable-1',
+    artifactHash: 'a'.repeat(64),
+    stableIdempotencyKey: 'durable-idempotency-1',
+    observedAt: '2026-07-17T12:02:00.000Z',
+  };
+  const proposalId = 'proposal-durable-1';
+  const pendingAt = '2026-07-17T12:01:00.000Z';
+  const approvedAt = '2026-07-17T12:02:00.000Z';
+  const approvalResult = {
+    proposalId,
+    approvalUrl: `https://chief.example/approvals/${proposalId}`,
+    directEffectAvailable: false,
+    actionPlanId: 'action-plan-durable-1',
+    actionPlanRevision: 1,
+    actionPlanHash: 'b'.repeat(64),
+  };
+  let persistedDraft = initialDraftResult;
+  let preparedBinding:
+    | {
+        readonly draftRevisionId: string;
+        readonly expectedDraftRevision: number;
+      }
+    | undefined;
+  let approvalPersisted = false;
+
+  arrangeHostedProjection();
+  browserApiMock.getCommunication.mockResolvedValue({
+    messageRevisionId: 'message-revision-1-1',
+    revision: 1,
+    authoredText: 'Can we confirm the Friday launch and the owner for QA?',
+    attachments: [],
+  });
+  browserApiMock.getThread.mockResolvedValue({
+    threadId: 'thread-1',
+    participantDisplayNames: ['Jordan Lee', 'Avery Morgan'],
+    communications: [
+      {
+        messageRevisionId: 'message-revision-1-1',
+        senderDisplayName: 'Jordan Lee',
+        excerpt: 'Can we confirm the Friday launch?',
+        direction: 'inbound',
+        status: 'overdue',
+        sourceTimestamp: '2026-07-17T10:52:00.000Z',
+      },
+    ],
+  });
+  browserApiMock.getRelatedAsanaWork.mockResolvedValue([]);
+  browserApiMock.recommendAction.mockResolvedValue({
+    recommendationId: 'recommendation-1',
+    revision: 1,
+    actionType: 'reply',
+    confidence: 0.9,
+    urgency: 'high',
+    reasonSummary: 'Reply with the cited launch owner and checkpoint.',
+    citations: [{ citationId: 'citation-1', label: 'Decision log' }],
+  });
+  browserApiMock.createDraft.mockImplementation(() => {
+    return Promise.resolve(persistedDraft);
+  });
+  browserApiMock.reviseDraft.mockImplementation(() => {
+    persistedDraft = revisedDraftResult;
+    return Promise.resolve(persistedDraft);
+  });
+  apiClientMock.approvals.prepareDraft.mutate.mockImplementation(
+    (input: {
+      readonly draftRevisionId: string;
+      readonly expectedDraftRevision: number;
+    }) => {
+      const currentBinding = {
+        draftRevisionId: persistedDraft.draft.draftRevisionId,
+        expectedDraftRevision: persistedDraft.draft.revision,
+      };
+      if (
+        input.draftRevisionId !== currentBinding.draftRevisionId ||
+        input.expectedDraftRevision !== currentBinding.expectedDraftRevision
+      ) {
+        return Promise.reject(new Error('STALE_DRAFT_BINDING'));
+      }
+      if (preparedBinding === undefined) {
+        preparedBinding = currentBinding;
+      } else if (
+        input.draftRevisionId !== preparedBinding.draftRevisionId ||
+        input.expectedDraftRevision !== preparedBinding.expectedDraftRevision
+      ) {
+        return Promise.reject(new Error('STALE_APPROVED_BINDING'));
+      }
+      return Promise.resolve({
+        ...approvalResult,
+        status: approvalPersisted ? 'approved' : 'pending_approval',
+        updatedAt: approvalPersisted ? approvedAt : pendingAt,
+      });
+    },
+  );
+  apiClientMock.approvals.status.query.mockImplementation(
+    (input: { readonly proposalId: string }) => {
+      if (input.proposalId !== proposalId || preparedBinding === undefined) {
+        return Promise.reject(new Error('PROPOSAL_NOT_FOUND'));
+      }
+      return Promise.resolve({
+        proposalId,
+        status: approvalPersisted ? 'approved' : 'pending_approval',
+        updatedAt: approvalPersisted ? approvedAt : pendingAt,
+      });
+    },
+  );
+  apiClientMock.execution.status.query.mockImplementation(
+    (input: { readonly proposalId: string }) => {
+      if (input.proposalId !== proposalId || preparedBinding === undefined) {
+        return Promise.reject(new Error('PROPOSAL_NOT_FOUND'));
+      }
+      return Promise.resolve(
+        approvalPersisted
+          ? {
+              proposalId,
+              storageMode: 'durable',
+              effectPolicy: 'effect_disabled',
+              externalEffect: false,
+              status: 'effect_disabled',
+              receipt: durableReceipt,
+            }
+          : {
+              proposalId,
+              status: 'pending_approval',
+            },
+      );
+    },
+  );
+  apiClientMock.approvals.approve.mutate.mockImplementation(
+    (input: {
+      readonly proposalId: string;
+      readonly expectedProposalUpdatedAt: string;
+    }) => {
+      if (
+        preparedBinding === undefined ||
+        approvalPersisted ||
+        input.proposalId !== proposalId ||
+        input.expectedProposalUpdatedAt !== pendingAt
+      ) {
+        return Promise.reject(new Error('STALE_PROPOSAL_BINDING'));
+      }
+      approvalPersisted = true;
+      return Promise.resolve({
+        proposalId,
+        actionPlanId: approvalResult.actionPlanId,
+        actionPlanRevision: approvalResult.actionPlanRevision,
+        actionPlanHash: approvalResult.actionPlanHash,
+        approvalId: 'approval-durable-1',
+        operationId: 'operation-durable-1',
+        status: 'approved',
+        effectPolicy: 'effect_disabled',
+        externalEffect: false,
+        updatedAt: approvedAt,
+        receipt: durableReceipt,
+      });
+    },
+  );
 }
 
 describe('executive evaluator application', () => {
@@ -112,12 +367,21 @@ describe('executive evaluator application', () => {
     expect(createBrowserApiMock).toHaveBeenCalledWith(window.location.origin);
   });
 
-  it('renders typed hosted fixture projections when the product API is available', async () => {
+  it('renders typed durable hosted projections when the product API is available', async () => {
     arrangeHostedProjection();
     renderRoute('/overview');
 
-    expect(await screen.findByText('Hosted assessment fixture.')).toBeTruthy();
-    expect(screen.getByTestId('metric-volume').textContent).toContain('1');
+    expect(
+      await screen.findByText('Durable hosted evaluator data.'),
+    ).toBeTruthy();
+    expect(screen.getByTestId('metric-volume').textContent).toContain('2');
+    expect(screen.getByTestId('metric-pending').textContent).toContain(
+      '0 awaiting approval',
+    );
+    expect(screen.getByTestId('nav-pending-approval-count').textContent).toBe(
+      '0',
+    );
+    expect(screen.getByRole('link', { name: 'View all 2' })).toBeTruthy();
     expect(
       screen
         .getByText('Friday launch decision')
@@ -125,6 +389,191 @@ describe('executive evaluator application', () => {
         ?.getAttribute('href'),
     ).toBe('/inbox/thread-q3-launch');
     expect(screen.queryByText('Taylor Reed')).toBeNull();
+  });
+
+  it('labels hosted evidence as fixed-scope email and static activity as demonstration-only', async () => {
+    arrangeHostedProjection();
+    renderRoute('/overview');
+
+    expect(
+      await screen.findByText('Durable hosted evaluator data.'),
+    ).toBeTruthy();
+    expect(screen.getByTestId('activity-source-label').textContent).toContain(
+      'Demonstration only',
+    );
+    expect(screen.getByTestId('activity-source-label').textContent).toContain(
+      'hosted fixed-scope email projection',
+    );
+
+    cleanup();
+    renderRoute('/inbox');
+    expect(
+      await screen.findByText('Fixed-scope email communications'),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/two fixed-scope email seed communications/i),
+    ).toBeTruthy();
+
+    cleanup();
+    renderRoute('/evidence');
+    expect(
+      await screen.findByText(/fixed-scope email communication queue/i),
+    ).toBeTruthy();
+    expect(screen.getByText(/demonstration-only/i)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/cross-channel/i);
+  });
+
+  it('labels approval examples separately from the zero-pending durable projection', async () => {
+    arrangeHostedProjection();
+    renderRoute('/approvals');
+
+    expect(
+      (await screen.findByTestId('approval-pending-count')).textContent,
+    ).toContain('0 pending');
+    expect(screen.getByTestId('nav-pending-approval-count').textContent).toBe(
+      '0',
+    );
+    expect(
+      screen.getByRole('heading', {
+        name: 'Prepared effect-disabled examples',
+      }),
+    ).toBeTruthy();
+    expect(screen.getAllByText(/demonstration only/i)).toHaveLength(3);
+    expect(screen.getAllByText(/effect disabled/i).length).toBeGreaterThan(1);
+    expect(screen.queryByText(/1 side effect/i)).toBeNull();
+  });
+
+  it('loads an exact pending proposal through the read-only durable route', async () => {
+    apiClientMock.approvals.status.query.mockResolvedValue({
+      proposalId: 'proposal-route-1',
+      status: 'pending_approval',
+      approvalUrl: 'https://chief.example/approvals/proposal-route-1',
+      updatedAt: '2026-07-17T12:01:00.000Z',
+    });
+    apiClientMock.execution.status.query.mockResolvedValue({
+      proposalId: 'proposal-route-1',
+      runtimeMode: 'fixture',
+      storageMode: 'durable',
+      effectPolicy: 'effect_disabled',
+      externalEffect: false,
+      status: 'pending_approval',
+    });
+
+    renderRoute('/approvals/proposal-route-1');
+
+    expect(
+      await screen.findByRole('heading', { name: 'Approval is pending' }),
+    ).toBeTruthy();
+    expect(screen.getByTestId('approval-route-status').textContent).toContain(
+      'proposal-route-1',
+    );
+    expect(screen.getByTestId('approval-route-pending').textContent).toContain(
+      'No provider request or external effect has occurred',
+    );
+    expect(apiClientMock.approvals.status.query).toHaveBeenCalledWith({
+      proposalId: 'proposal-route-1',
+    });
+    expect(apiClientMock.execution.status.query).toHaveBeenCalledWith({
+      proposalId: 'proposal-route-1',
+    });
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('renders the approved proposal only with its durable effect-disabled receipt', async () => {
+    apiClientMock.approvals.status.query.mockResolvedValue({
+      proposalId: 'proposal-route-approved',
+      status: 'approved',
+      approvalUrl: 'https://chief.example/approvals/proposal-route-approved',
+      updatedAt: '2026-07-17T12:02:00.000Z',
+    });
+    apiClientMock.execution.status.query.mockResolvedValue({
+      proposalId: 'proposal-route-approved',
+      runtimeMode: 'fixture',
+      storageMode: 'durable',
+      effectPolicy: 'effect_disabled',
+      externalEffect: false,
+      status: 'effect_disabled',
+      receipt: {
+        kind: 'effect_disabled',
+        operationId: 'operation-route-approved',
+        artifactHash: 'c'.repeat(64),
+        stableIdempotencyKey: 'route-approved-once',
+        observedAt: '2026-07-17T12:02:00.000Z',
+      },
+    });
+
+    renderRoute('/approvals/proposal-route-approved');
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Approval completed safely',
+      }),
+    ).toBeTruthy();
+    expect(screen.getByTestId('execution-receipt').textContent).toContain(
+      'operation-route-approved',
+    );
+    expect(screen.getByTestId('execution-receipt').textContent).toContain(
+      'Durable effect-disabled receipt',
+    );
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('shows bounded loading, not-found, and safe error proposal states', async () => {
+    apiClientMock.approvals.status.query.mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    apiClientMock.execution.status.query.mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    renderRoute('/approvals/proposal-loading');
+    expect(screen.getByTestId('approval-route-loading')).toBeTruthy();
+
+    cleanup();
+    apiClientMock.approvals.status.query.mockRejectedValue(
+      Object.assign(new Error('Proposal was not found.'), {
+        data: { code: 'NOT_FOUND' },
+      }),
+    );
+    apiClientMock.execution.status.query.mockResolvedValue({});
+    renderRoute('/approvals/proposal-missing');
+    expect(await screen.findByTestId('approval-route-not-found')).toBeTruthy();
+
+    cleanup();
+    apiClientMock.approvals.status.query.mockRejectedValue(
+      new Error('temporary read failure'),
+    );
+    renderRoute('/approvals/proposal-error');
+    expect(await screen.findByTestId('approval-route-error')).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'No action was taken',
+    );
+
+    cleanup();
+    renderRoute(`/approvals/${'x'.repeat(161)}`);
+    expect(await screen.findByTestId('approval-route-not-found')).toBeTruthy();
+    expect(apiClientMock.approvals.status.query).toHaveBeenCalledTimes(3);
+  });
+
+  it('separates the one hosted fixture connector from zero-card mode definitions', async () => {
+    arrangeHostedProjection();
+    renderRoute('/connections');
+
+    expect(await screen.findAllByTestId('connector-card')).toHaveLength(1);
+    expect(screen.getByTestId('hosted-seed-fixture-count').textContent).toBe(
+      '1 fixed-scope hosted connector card',
+    );
+    expect(screen.getByTestId('hosted-seed-recorded-count').textContent).toBe(
+      '0 hosted evidence cards',
+    );
+    expect(screen.getByTestId('hosted-seed-blocked-count').textContent).toBe(
+      '0 hosted connector cards',
+    );
+    expect(screen.getByTestId('connection-count-recorded').textContent).toBe(
+      '0 hosted evidence cards',
+    );
+    expect(screen.getByTestId('connection-count-blocked').textContent).toBe(
+      '0 hosted blocked cards',
+    );
   });
 
   it('filters the local fallback inbox with an accessible native select', async () => {
@@ -153,29 +602,251 @@ describe('executive evaluator application', () => {
     expect(screen.queryByText('Taylor Reed')).toBeNull();
   });
 
-  it('requires a new immutable revision before explicit local approval', async () => {
+  it('never grants approval authority to the local fallback', async () => {
     const user = userEvent.setup();
     renderRoute('/inbox/thread-q3-launch');
 
     const approve = await screen.findByRole('button', {
-      name: 'Approve revision 2',
+      name: 'Hosted durable approval required',
     });
     expect(approve.hasAttribute('disabled')).toBe(true);
 
+    const draft =
+      await screen.findByTestId<HTMLTextAreaElement>('draft-editor');
+    const original = draft.value;
+    expect(draft.hasAttribute('readonly')).toBe(true);
+
     await user.click(
-      screen.getByRole('button', { name: 'Revise for brevity' }),
+      screen.getByRole('button', { name: 'Create concise revision' }),
     );
     expect(screen.getByTestId('revision-diff')).toBeTruthy();
-    expect(approve.hasAttribute('disabled')).toBe(false);
+    expect(draft.value).not.toBe(original);
+    expect(draft.value.length).toBeLessThan(original.length);
+    expect(approve.hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByTestId('execution-receipt')).toBeNull();
+    expect(
+      screen.getByText(/not persisted and cannot be approved/i),
+    ).toBeTruthy();
+  });
 
-    await user.click(approve);
-    await waitFor(() => {
-      expect(screen.getByTestId('execution-receipt')).toBeTruthy();
-    });
-    expect(screen.getByText('effect_disabled')).toBeTruthy();
-    expect(screen.getByTestId('asana-status').textContent).toContain(
-      'external task unchanged',
+  it('persists the exact hosted revision through server-authorized approval', async () => {
+    arrangeHostedThread();
+    const user = userEvent.setup();
+    renderRoute('/inbox/thread-q3-launch');
+
+    const editor =
+      await screen.findByTestId<HTMLTextAreaElement>('draft-editor');
+    const originalDraft = editor.value;
+    expect(editor.hasAttribute('readonly')).toBe(true);
+    expect(screen.getByText(/persisted body is read-only/i)).toBeTruthy();
+    expect(screen.getByTestId('approve-action').hasAttribute('disabled')).toBe(
+      true,
     );
+
+    await user.click(
+      screen.getByRole('button', { name: 'Create concise revision' }),
+    );
+    expect(browserApiMock.reviseDraft).toHaveBeenCalledWith({
+      draftRevisionId: 'draft-revision-1',
+      expectedDraftRevision: 1,
+      revisionInstruction:
+        'Make this draft concise while retaining all cited facts.',
+    });
+    await waitFor(() => {
+      expect(apiClientMock.approvals.prepareDraft.mutate).toHaveBeenCalledWith({
+        draftRevisionId: 'draft-revision-2',
+        expectedDraftRevision: 2,
+      });
+    });
+    expect(editor.value).not.toBe(originalDraft);
+    expect(editor.value.length).toBeLessThan(originalDraft.length);
+    expect(screen.getByTestId('revision-diff').textContent).toContain(
+      'Make this draft concise while retaining all cited facts.',
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('approve-action').hasAttribute('disabled'),
+      ).toBe(false);
+    });
+    await user.click(screen.getByTestId('approve-action'));
+
+    expect(
+      await screen.findByText('Durable effect-disabled receipt', {
+        exact: false,
+      }),
+    ).toBeTruthy();
+    expect(apiClientMock.approvals.approve.mutate).toHaveBeenCalledWith({
+      proposalId: 'proposal-durable-1',
+      expectedProposalUpdatedAt: '2026-07-17T12:01:00.000Z',
+    });
+    expect(screen.getByTestId('execution-receipt').textContent).toContain(
+      'operation-durable-1',
+    );
+
+    cleanup();
+    renderRoute('/inbox/thread-q3-launch');
+
+    expect(
+      await screen.findByText('Durable hosted draft revision 2'),
+    ).toBeTruthy();
+    expect(
+      await screen.findByText('Durable effect-disabled receipt', {
+        exact: false,
+      }),
+    ).toBeTruthy();
+    expect(screen.getByTestId('execution-receipt').textContent).toContain(
+      'operation-durable-1',
+    );
+    expect(browserApiMock.createDraft).toHaveBeenCalledTimes(2);
+    expect(apiClientMock.approvals.prepareDraft.mutate).toHaveBeenNthCalledWith(
+      2,
+      {
+        draftRevisionId: 'draft-revision-2',
+        expectedDraftRevision: 2,
+      },
+    );
+    expect(apiClientMock.approvals.approve.mutate).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId<HTMLTextAreaElement>('draft-editor').value).toBe(
+      'Confirm the owner and review at 16:00 UTC.',
+    );
+  });
+
+  it('recovers a committed effect-disabled receipt after approval acknowledgement failure', async () => {
+    arrangeHostedThread();
+    const user = userEvent.setup();
+    renderRoute('/inbox/thread-q3-launch');
+
+    await screen.findByTestId<HTMLTextAreaElement>('draft-editor');
+    await user.click(
+      screen.getByRole('button', { name: 'Create concise revision' }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('approve-action').hasAttribute('disabled'),
+      ).toBe(false);
+    });
+
+    apiClientMock.approvals.approve.mutate.mockRejectedValue(
+      new Error('SQS_UNAVAILABLE'),
+    );
+    apiClientMock.approvals.status.query.mockResolvedValue({
+      proposalId: 'proposal-durable-1',
+      status: 'approved',
+      updatedAt: '2026-07-17T12:02:00.000Z',
+    });
+    apiClientMock.execution.status.query.mockResolvedValue({
+      proposalId: 'proposal-durable-1',
+      runtimeMode: 'fixture',
+      storageMode: 'durable',
+      effectPolicy: 'effect_disabled',
+      externalEffect: false,
+      status: 'effect_disabled',
+      receipt: {
+        kind: 'effect_disabled',
+        operationId: 'operation-durable-recovered',
+        artifactHash: 'd'.repeat(64),
+        stableIdempotencyKey: 'durable-recovered-once',
+        observedAt: '2026-07-17T12:02:00.000Z',
+      },
+    });
+
+    await user.click(screen.getByTestId('approve-action'));
+
+    expect(await screen.findByTestId('approval-recovered')).toBeTruthy();
+    expect(screen.getByTestId('approval-recovered').textContent).toContain(
+      'effect-disabled receipt were recovered',
+    );
+    expect(screen.getByTestId('execution-receipt').textContent).toContain(
+      'operation-durable-recovered',
+    );
+    expect(screen.queryByText(/approval was not persisted/i)).toBeNull();
+    expect(apiClientMock.approvals.status.query).toHaveBeenLastCalledWith({
+      proposalId: 'proposal-durable-1',
+    });
+    expect(apiClientMock.execution.status.query).toHaveBeenLastCalledWith({
+      proposalId: 'proposal-durable-1',
+    });
+  });
+
+  it('keeps a reconciled pending proposal pending after acknowledgement failure', async () => {
+    arrangeHostedThread();
+    const user = userEvent.setup();
+    renderRoute('/inbox/thread-q3-launch');
+
+    await screen.findByTestId<HTMLTextAreaElement>('draft-editor');
+    await user.click(
+      screen.getByRole('button', { name: 'Create concise revision' }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('approve-action').hasAttribute('disabled'),
+      ).toBe(false);
+    });
+    apiClientMock.approvals.approve.mutate.mockRejectedValue(
+      new Error('SQS_UNAVAILABLE'),
+    );
+    apiClientMock.approvals.status.query.mockResolvedValue({
+      proposalId: 'proposal-durable-1',
+      status: 'pending_approval',
+      updatedAt: '2026-07-17T12:01:00.000Z',
+    });
+    apiClientMock.execution.status.query.mockResolvedValue({
+      proposalId: 'proposal-durable-1',
+      runtimeMode: 'fixture',
+      storageMode: 'durable',
+      effectPolicy: 'effect_disabled',
+      externalEffect: false,
+      status: 'pending_approval',
+    });
+
+    await user.click(screen.getByTestId('approve-action'));
+
+    const notice = await screen.findByTestId('approval-reconciliation-pending');
+    expect(notice.textContent).toContain('durable status remains pending');
+    expect(notice.textContent).toContain('No external effect');
+    expect(screen.queryByTestId('execution-receipt')).toBeNull();
+    expect(screen.getByTestId('approve-action').hasAttribute('disabled')).toBe(
+      false,
+    );
+    expect(screen.queryByText(/approval was not persisted/i)).toBeNull();
+  });
+
+  it('reports uncertain durable status without claiming non-persistence', async () => {
+    arrangeHostedThread();
+    const user = userEvent.setup();
+    renderRoute('/inbox/thread-q3-launch');
+
+    await screen.findByTestId<HTMLTextAreaElement>('draft-editor');
+    await user.click(
+      screen.getByRole('button', { name: 'Create concise revision' }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('approve-action').hasAttribute('disabled'),
+      ).toBe(false);
+    });
+    apiClientMock.approvals.approve.mutate.mockRejectedValue(
+      new Error('SQS_UNAVAILABLE'),
+    );
+    apiClientMock.approvals.status.query.mockRejectedValue(
+      new Error('STATUS_UNAVAILABLE'),
+    );
+    apiClientMock.execution.status.query.mockRejectedValue(
+      new Error('STATUS_UNAVAILABLE'),
+    );
+
+    await user.click(screen.getByTestId('approve-action'));
+
+    const warning = await screen.findByTestId(
+      'approval-reconciliation-uncertain',
+    );
+    expect(warning.textContent).toContain(
+      'durable status could not be reconciled',
+    );
+    expect(warning.textContent).toContain('Reload this exact thread');
+    expect(warning.textContent).toContain('External effects remain disabled');
+    expect(warning.textContent).not.toContain('not persisted');
+    expect(screen.queryByTestId('execution-receipt')).toBeNull();
   });
 
   it('provides visible, safe Cursor MCP instructions', () => {
@@ -186,6 +857,16 @@ describe('executive evaluator application', () => {
     expect(instructions.textContent).toContain(
       'Approval stays in the product.',
     );
+    expect(instructions.textContent).toContain(
+      'Prepare and approve through the server-authorized product browser or API.',
+    );
+    expect(instructions.textContent).toContain('does not provide OAuth');
+    expect(instructions.textContent).not.toContain('authenticated');
+    expect(instructions.textContent).toContain('get_approval_status');
+    expect(instructions.textContent).toContain(
+      'external effects remain disabled',
+    );
+    expect(instructions.textContent).not.toContain('submit_for_approval');
     expect(instructions.textContent).not.toContain('bearer_example');
   });
 });

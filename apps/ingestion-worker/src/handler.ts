@@ -28,7 +28,7 @@ export function createFixtureIngestionHandler(): IngestionHandler {
       store,
       keyCodec,
       retrievalSink: new DeterministicRetrievalMutationSink(),
-      retrievalIndex: new RecordingRetrievalIndex(),
+      retrievalRegistrar: new RecordingRetrievalIndex(),
     }),
   );
 }

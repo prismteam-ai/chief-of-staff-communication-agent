@@ -67,5 +67,9 @@ export const retrievalArchitecture = Object.freeze({
   maximumSnapshotChunks: 10_000,
   warmStateRequired: false,
   tableScanAllowed: false,
-  automaticPromotionTarget: 'opensearch',
+  automaticPromotionTarget: 'dynamodb-s3-cas-head',
 } as const);
+
+export * from './bounded-retrieval.js';
+export * from './durable-retrieval.js';
+export * from './aws-durable-retrieval.js';

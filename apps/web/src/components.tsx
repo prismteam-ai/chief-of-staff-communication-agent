@@ -12,6 +12,7 @@ import {
   Link2,
   type LucideIcon,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import type { CapabilityMode, CommunicationStatus } from './data.js';
 
@@ -107,13 +108,13 @@ export function AttachmentCard() {
         <strong>pilot-risk-register.pdf</strong>
         <span>PDF · 1.8 MB · Malware scan: clean</span>
       </div>
-      <button
+      <Link
         className="quiet-icon"
-        type="button"
-        aria-label="Open attachment evidence"
+        to="/evidence#retrieval"
+        aria-label="Open attachment evidence details"
       >
         <ArrowUpRight size={17} aria-hidden="true" />
-      </button>
+      </Link>
     </article>
   );
 }
@@ -130,11 +131,17 @@ export function QueueIcon({
   );
 }
 
-export function InlineLink({ children }: { readonly children: ReactNode }) {
+export function InlineLink({
+  children,
+  to,
+}: {
+  readonly children: ReactNode;
+  readonly to: string;
+}) {
   return (
-    <button className="inline-link" type="button">
+    <Link className="inline-link" to={to}>
       {children}
       <ChevronRight aria-hidden="true" size={14} />
-    </button>
+    </Link>
   );
 }

@@ -275,7 +275,7 @@ function runtime(): {
       },
     }),
     retrievalSink: new DeterministicRetrievalMutationSink(),
-    retrievalIndex: retrieval,
+    retrievalRegistrar: retrieval,
     now: () => new Date(FIXED_NOW),
   });
   return { pipeline, store, retrieval };
@@ -359,7 +359,7 @@ describe('canonical ingestion worker', () => {
 
   it('never applies a retrieval delta when the canonical store commit fails', async () => {
     const { pipeline, store, retrieval } = runtime();
-    const applyDelta = vi.spyOn(retrieval, 'applyDelta');
+    const applyDelta = vi.spyOn(retrieval, 'register');
     vi.spyOn(store, 'commit').mockRejectedValueOnce(
       new Error('simulated commit failure'),
     );
@@ -381,7 +381,7 @@ describe('canonical ingestion worker', () => {
   it('surfaces post-commit projection failure as recoverable without quarantining or replaying the delta', async () => {
     const { pipeline, store, retrieval } = runtime();
     const applyDelta = vi
-      .spyOn(retrieval, 'applyDelta')
+      .spyOn(retrieval, 'register')
       .mockRejectedValueOnce(new Error('simulated projection failure'));
     const item = workItem(demo(), {
       id: 'projection-failure',
@@ -407,7 +407,7 @@ describe('canonical ingestion worker', () => {
       status: 'partial',
     });
     expect(store.writes).toHaveLength(1);
-    expect(store.writes[0]?.retrievalDelta).toBeDefined();
+    expect(store.writes[0]?.retrievalMutation).toBeDefined();
     expect(store.quarantined).toHaveLength(0);
     expect(replay.sources[0]).toMatchObject({
       duplicates: 1,
@@ -416,7 +416,7 @@ describe('canonical ingestion worker', () => {
       projectionFailed: 0,
     });
     expect(applyDelta).toHaveBeenCalledTimes(1);
-    const pendingDelta = store.writes[0]?.retrievalDelta;
+    const pendingDelta = store.writes[0]?.retrievalMutation;
     expect(pendingDelta).toBeDefined();
     if (pendingDelta === undefined)
       throw new Error('committed projection delta missing');

@@ -2,26 +2,20 @@ import { createHash } from 'node:crypto';
 
 import {
   immutableBlobRefSchema,
-  retrievalDeltaManifestSchema,
-  retrievalQuerySchema,
-  retrievalScopeSchema,
-  retrievalSnapshotManifestSchema,
   type ImmutableBlobRef,
-  type RetrievalCandidate,
-  type RetrievalDeltaManifest,
-  type RetrievalQuery,
-  type RetrievalScope,
-  type RetrievalSnapshotManifest,
   type SyncCheckpoint,
 } from '@chief/contracts';
 import { DomainInvariantError } from '@chief/domain';
 import {
-  type RetrievalDeltaApplyResult,
-  type RetrievalHealthResult,
-  type RetrievalIndex,
-  type RetrievalSnapshotApplyResult,
+  DeterministicEffectDisabledEmbedding,
+  canonicalJson,
+  serializeBinary32Le,
+  sha256Bytes,
+  tokenize,
+  validateStagedRetrievalMutation,
+  type RetrievalStagingRegistrar,
+  type StagedRetrievalMutationV1,
 } from '@chief/rag';
-import { hashManifest } from '@chief/rag/bounded-retrieval';
 
 import type {
   CanonicalAsanaWrite,
@@ -43,7 +37,7 @@ interface IdentityEntry {
 interface StoredWrite {
   readonly canonical: CanonicalWrite;
   readonly checkpoint?: SyncCheckpoint;
-  readonly retrievalDelta?: RetrievalDeltaManifest;
+  readonly retrievalMutation?: StagedRetrievalMutationV1;
 }
 
 function hash(value: string): string {
@@ -174,7 +168,7 @@ export class InMemoryIngestionStore implements IngestionStore {
     readonly workItem: IngestionWorkItem;
     readonly canonical: CanonicalWrite;
     readonly checkpoint?: SyncCheckpoint;
-    readonly retrievalDelta?: RetrievalDeltaManifest;
+    readonly retrievalMutation?: StagedRetrievalMutationV1;
   }): Promise<CommitResult> {
     const key = mapKey(
       input.workItem.tenantId,
@@ -183,8 +177,8 @@ export class InMemoryIngestionStore implements IngestionStore {
     );
     if (this.#writes.has(key)) return Promise.resolve({ status: 'duplicate' });
     this.#assertCheckpoint(input.workItem, input.checkpoint);
-    if (input.retrievalDelta !== undefined)
-      retrievalDeltaManifestSchema.parse(input.retrievalDelta);
+    if (input.retrievalMutation !== undefined)
+      validateStagedRetrievalMutation(input.retrievalMutation);
     const status = input.canonical.deleted
       ? 'deleted'
       : this.#isUpdate(input.canonical)
@@ -195,9 +189,9 @@ export class InMemoryIngestionStore implements IngestionStore {
       ...(input.checkpoint === undefined
         ? {}
         : { checkpoint: input.checkpoint }),
-      ...(input.retrievalDelta === undefined
+      ...(input.retrievalMutation === undefined
         ? {}
-        : { retrievalDelta: input.retrievalDelta }),
+        : { retrievalMutation: input.retrievalMutation }),
     });
     if (input.checkpoint !== undefined)
       this.#checkpoints.set(
@@ -326,120 +320,98 @@ export class DeterministicRetrievalMutationSink implements RetrievalMutationSink
   public stage(input: {
     readonly workItem: IngestionWorkItem;
     readonly canonical: CanonicalWrite;
-  }): Promise<RetrievalDeltaManifest | undefined> {
+  }): Promise<StagedRetrievalMutationV1 | undefined> {
     const text =
       input.canonical.source === 'asana'
         ? `${input.canonical.title}\n${input.canonical.notes ?? ''}`.trim()
         : input.canonical.retrievalText;
     const operation = input.canonical.deleted ? 'delete' : 'upsert';
-    const payload = JSON.stringify({
-      operation,
-      dedupeKey: input.canonical.dedupeKey,
-      text,
-    });
-    const contentHash = hash(payload);
     const createdAt =
       input.canonical.source === 'asana'
         ? input.canonical.providerTimestamp
         : input.canonical.revision.ingestedAt;
-    const sequence = Number.parseInt(
-      hash(input.canonical.dedupeKey).slice(0, 8),
-      16,
-    );
-    const candidate = retrievalDeltaManifestSchema.parse({
-      schemaVersion: '1',
-      tenantId: input.workItem.tenantId,
-      role: 'factual',
-      scopeHash: input.workItem.scopeHash,
-      baseGeneration: 1,
-      authorizationEpoch: input.workItem.authorizationEpoch,
-      sequenceStart: sequence,
-      sequenceEnd: sequence,
-      changeCount: 1,
-      byteLength: Buffer.byteLength(payload),
-      object: {
-        schemaVersion: '1',
-        tenantId: input.workItem.tenantId,
-        bucketRef: 'ingestion-retrieval-deltas',
-        objectKey: `delta/${contentHash}`,
-        objectVersion: contentHash,
-        contentHash,
-        byteLength: Buffer.byteLength(payload),
-        mediaType: 'application/x-ndjson',
-        encryptionKeyRef: 'retrieval-key',
-        retentionPolicyVersion: '1',
-      },
-      manifestHash: hash('pending-manifest-hash'),
-      createdAt,
-    });
+    const stagingOrdinal = `${createdAt}#${hash(input.canonical.dedupeKey)}`;
+    const record = {
+      schemaVersion: '1' as const,
+      chunkId: input.canonical.dedupeKey,
+      sourceId: input.canonical.dedupeKey,
+      sourceVersion: input.canonical.contentHash,
+      text,
+      tokenCount: tokenize(text).length,
+      exactEntityRefs:
+        input.canonical.source === 'asana'
+          ? [input.canonical.providerObjectId, ...input.canonical.projectIds]
+          : [input.canonical.thread.threadId],
+      citationLabel:
+        input.canonical.source === 'asana'
+          ? 'Asana work evidence'
+          : `${input.canonical.source} communication evidence`,
+      contentHash: sha256Bytes(text),
+      state:
+        operation === 'upsert' ? ('active' as const) : ('tombstoned' as const),
+      mutationOrdinal: stagingOrdinal,
+    };
+    const document = {
+      schemaVersion: '1' as const,
+      stagingOrdinal,
+      operation,
+      record,
+      vectorBinary32LeBase64: Buffer.from(
+        serializeBinary32Le(
+          new DeterministicEffectDisabledEmbedding().embed(text),
+        ),
+      ).toString('base64'),
+    };
+    const payload = canonicalJson([document]);
+    const contentHash = hash(payload);
     return Promise.resolve(
-      retrievalDeltaManifestSchema.parse({
-        ...candidate,
-        manifestHash: hashManifest(candidate),
+      validateStagedRetrievalMutation({
+        contractVersion: 'chief-retrieval.v1',
+        kind: 'staged-mutation',
+        scope: {
+          derivation: 'server_grants',
+          tenantId: input.workItem.tenantId,
+          accountIds: [input.workItem.accountId],
+          brandIds: [...(input.workItem.brandIds ?? [])],
+          authorizationEpoch: input.workItem.authorizationEpoch,
+          scopeHash: input.workItem.scopeHash,
+          role: 'factual',
+        },
+        mutationId: sha256Bytes(payload),
+        stagingOrdinal,
+        changeCount: 1,
+        byteLength: Buffer.byteLength(payload),
+        object: {
+          schemaVersion: '1',
+          tenantId: input.workItem.tenantId,
+          bucketRef: 'ingestion-retrieval-deltas',
+          objectKey: `retrieval-staged/${input.workItem.scopeHash}/${contentHash}`,
+          objectVersion: contentHash,
+          contentHash,
+          byteLength: Buffer.byteLength(payload),
+          mediaType: 'application/x-ndjson',
+          encryptionKeyRef: 'retrieval-key',
+          retentionPolicyVersion: '1',
+        },
+        createdAt,
       }),
     );
   }
 }
 
-export class RecordingRetrievalIndex implements RetrievalIndex {
-  readonly #deltas: RetrievalDeltaManifest[] = [];
-  readonly #snapshots: RetrievalSnapshotManifest[] = [];
+export class RecordingRetrievalIndex implements RetrievalStagingRegistrar {
+  readonly #mutations: StagedRetrievalMutationV1[] = [];
 
-  public get deltas(): readonly RetrievalDeltaManifest[] {
-    return Object.freeze([...this.#deltas]);
+  public get deltas(): readonly StagedRetrievalMutationV1[] {
+    return Object.freeze([...this.#mutations]);
   }
 
-  public applySnapshot(
-    manifest: RetrievalSnapshotManifest,
-  ): Promise<RetrievalSnapshotApplyResult> {
-    const safe = retrievalSnapshotManifestSchema.parse(manifest);
-    this.#snapshots.push(safe);
-    return Promise.resolve({
-      kind: 'snapshot',
-      tenantId: safe.tenantId,
-      scopeHash: safe.scopeHash,
-      role: safe.role,
-      generation: safe.generation,
-      authorizationEpoch: safe.authorizationEpoch,
-      manifestHash: safe.manifestHash,
-      appliedAt: safe.createdAt,
-    });
-  }
-
-  public applyDelta(
-    manifest: RetrievalDeltaManifest,
-  ): Promise<RetrievalDeltaApplyResult> {
-    const safe = retrievalDeltaManifestSchema.parse(manifest);
-    if (hashManifest(safe) !== safe.manifestHash)
-      throw new Error('INDEX_REFRESH_REQUIRED');
-    this.#deltas.push(safe);
-    return Promise.resolve({
-      kind: 'delta',
-      tenantId: safe.tenantId,
-      scopeHash: safe.scopeHash,
-      role: safe.role,
-      baseGeneration: safe.baseGeneration,
-      authorizationEpoch: safe.authorizationEpoch,
-      sequenceEnd: safe.sequenceEnd,
-      manifestHash: safe.manifestHash,
-      appliedAt: safe.createdAt,
-    });
-  }
-
-  public query(input: RetrievalQuery): Promise<readonly RetrievalCandidate[]> {
-    retrievalQuerySchema.parse(input);
-    return Promise.resolve([]);
-  }
-
-  public health(scope: RetrievalScope): Promise<RetrievalHealthResult> {
-    const safe = retrievalScopeSchema.parse(scope);
-    return Promise.resolve({
-      status: 'healthy',
-      scope: safe,
-      authorizationEpoch: safe.authorizationEpoch,
-      indexedChunkCount: this.#deltas.length,
-      pendingDeltaCount: 0,
-      observedAt: new Date(0).toISOString(),
-    });
+  public register(manifest: StagedRetrievalMutationV1): Promise<void> {
+    const safe = validateStagedRetrievalMutation(manifest);
+    if (
+      !this.#mutations.some(({ mutationId }) => mutationId === safe.mutationId)
+    )
+      this.#mutations.push(safe);
+    return Promise.resolve();
   }
 }

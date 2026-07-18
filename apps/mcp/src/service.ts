@@ -22,10 +22,12 @@ export class McpToolError extends Error {
       | 'STALE_REVISION'
       | 'INVALID_CURSOR'
       | 'SCOPE_VIOLATION'
+      | 'TOOL_UNAVAILABLE'
       | 'TOOL_TIMEOUT'
       | 'INTERNAL_ERROR',
+    public readonly safeMessage: string = code,
   ) {
-    super(code);
+    super(safeMessage);
     this.name = 'McpToolError';
   }
 }

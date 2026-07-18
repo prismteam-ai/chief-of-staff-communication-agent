@@ -1,18 +1,15 @@
-# Cursor-accessible remote MCP
-
-Status: Wave 2B implemented for the public assessment fixture.
+# Cursor-accessible durable MCP
 
 ## Outcome
 
-`apps/mcp` exposes the Chief product contract through standards-compatible MCP
-Streamable HTTP. It supports `initialize`, `tools/list`, `tools/call`, and a
-cheap `GET /mcp/health` route on the existing API Gateway HTTP API and Lambda
-transport.
+`apps/mcp` exposes the Chief product contract through MCP Streamable HTTP. It
+supports `initialize`, `tools/list`, `tools/call`, and a cheap
+`GET /mcp/health` route on API Gateway/Lambda.
 
-The public deployment is deliberately read-and-prepare only. Cursor can inspect
-communications, retrieve cited context, recommend an action, create or revise a
-draft, request missing context, and prepare an approval handoff. It cannot
-approve, send a provider message, or create/update Asana work directly.
+The non-test Lambda entry point now defaults to the same durable
+`DurableProductService` used by the API. It imports `@chief/api`, constructs the
+AWS DynamoDB/S3 composition, and adapts the shared service to MCP tools. The
+hosted default no longer instantiates `FixtureMcpToolService`.
 
 ## Architecture
 
@@ -21,158 +18,167 @@ Cursor / MCP Inspector
         |
         | JSON-RPC 2.0 over MCP Streamable HTTP
         v
-API Gateway -> Lambda transport adapter -> official MCP SDK server
-                                             |
-                                             v
-                                  schema-validating tool runtime
-                                             |
-                                             v
-                         injected service or deterministic fixture service
+API Gateway -> Lambda transport -> official MCP SDK server
+                                      |
+                                      v
+                       strict tool schemas + timeout guard
+                                      |
+                                      v
+                           ProductServiceMcpAdapter
+                                      |
+                                      v
+          shared durable API service -> DynamoDB + bounded DynamoDB/S3 RAG
 ```
 
-The Lambda creates a stateless MCP transport per request. This fits Lambda and
-API Gateway without depending on process affinity, in-memory session authority,
-or an SSE connection for correctness. The official MCP SDK performs protocol
-negotiation and publishes JSON schemas derived from the frozen
-`@chief/contracts` Zod schemas.
+The Lambda creates a stateless transport and MCP server for every request. It
+does not depend on process affinity, an in-memory session, or an SSE connection
+for correctness. `Mcp-Session-Id` is not authority.
 
-The service boundary is injectable. Wave 2B supplies a deterministic,
-credentialless fixture implementation; a later composition root can inject the
-same product services used by the browser API without changing the MCP
-protocol, schemas, or approval boundary.
+Outside `NODE_ENV=test`, startup requires the API's durable AWS bindings:
+`CORE_TABLE_NAME`, `RETRIEVAL_TABLE_NAME`, `SNAPSHOT_BUCKET_NAME`, and the
+credential-free `CHIEF_PRODUCT_BASE_URL` mapped to `PRODUCT_BASE_URL`. Tests can
+inject the production-shaped memory durable service, but the tool adapter,
+schemas, authorization checks, and protocol transport are identical.
+
+The shared AWS service reads the same `retrievalDynamoKeyV1` head as ingestion,
+uses an in-process bounded/profile-bound query vector, and returns canonical
+snapshot evidence with the actual promoted manifest hash. MCP does not own a
+parallel key codec, snapshot format, proposal store, or fixture-only RAG path.
+Its reads use the independent monotonic authorization-epoch item and the same
+consistent pre/post-query rechecks as API retrieval. Epoch-qualified staging/
+query keys cannot make old-epoch evidence readable; MCP requires a freshly
+promoted new-epoch snapshot.
 
 ## Tool surface
 
-| Tool                          | Behavior                                             | External effect |
-| ----------------------------- | ---------------------------------------------------- | --------------- |
-| `list_pending_communications` | Bounded, filtered, cursor-paginated inbox            | None            |
-| `get_communication`           | One authorized communication revision with citations | None            |
-| `get_thread_context`          | Bounded thread chronology                            | None            |
-| `search_knowledge`            | Bounded cited knowledge results                      | None            |
-| `get_related_asana_work`      | Read-only related task/project context               | None            |
-| `recommend_action`            | Immutable cited recommendation proposal              | None            |
-| `create_draft`                | Immutable cited draft revision                       | None            |
-| `revise_draft`                | New immutable cited draft revision                   | None            |
-| `request_context`             | Focused missing-fact request                         | None            |
-| `prepare_asana_action`        | Immutable proposal plus HTTPS approval link          | None            |
-| `submit_for_approval`         | Immutable proposal plus HTTPS approval link          | None            |
-| `get_approval_status`         | Read-only proposal status                            | None            |
-| `get_connector_status`        | Truthful mode, health, and capability facts          | None            |
-| `get_sla_metrics`             | Bounded SLA snapshot                                 | None            |
+| Tool                          | Durable behavior                                       | External effect |
+| ----------------------------- | ------------------------------------------------------ | --------------- |
+| `list_pending_communications` | Bounded, filtered, cursor-paginated durable projection | None            |
+| `get_communication`           | One authorized communication revision with citations   | None            |
+| `get_thread_context`          | Bounded thread chronology                              | None            |
+| `search_knowledge`            | Promoted-head bounded retrieval and citations          | None            |
+| `get_related_asana_work`      | Read-only related task/project context                 | None            |
+| `recommend_action`            | Persisted cited recommendation                         | None            |
+| `create_draft`                | Persisted cited immutable draft                        | None            |
+| `revise_draft`                | Persisted successor draft revision                     | None            |
+| `request_context`             | Focused missing-fact request                           | None            |
+| `prepare_asana_action`        | Prepared-only Asana handoff                            | None            |
+| `submit_for_approval`         | Legacy handoff contract; no approval authority         | None            |
+| `get_approval_status`         | Read-only durable proposal status                      | None            |
+| `get_connector_status`        | Truthful mode, health, and capability facts            | None            |
+| `get_sla_metrics`             | Bounded SLA snapshot                                   | None            |
+
+The durable exact-draft approval ceremony lives on the fixed-scope,
+server-authorized product API (`approvals.prepareDraft` and
+`approvals.approve`); the public evaluator remains signed out. Its persisted
+draft body is read-only and its sole revision control is **Create concise
+revision**, submitting exactly `Make this draft concise while retaining all
+cited facts.` MCP can create/revise a durable draft and poll a proposal prepared
+by the product API, but it cannot approve. The legacy
+`submit_for_approval` tool is rejected deterministically with the stable
+`TOOL_UNAVAILABLE` code and guidance to use the exact persisted-draft route; it
+is not a second approval path. MCP draft creation/revision uses the shared API
+service's atomic revision, exact-lookup, and draft-head transaction.
 
 There is intentionally no `approve`, `send_message`, `create_task`,
-`update_task`, provider credential, raw table/path/SQL, or arbitrary provider
-tool. Cursor confirmation and auto-run settings never become product approval.
+`update_task`, provider credential, raw table/path/SQL, arbitrary endpoint, or
+effect-enable tool. Cursor confirmation and auto-run settings never become
+product approval.
 
-## Scope and access boundary
+## Fixed public scope
 
-- The assessment tenant, evaluator actor, and authorization epoch are selected
-  by the server. No tool accepts a tenant selector.
-- Frozen input schemas are strict. Extra tenant/account/provider authority is
-  rejected before a service is invoked.
-- Parsed tool outputs are checked recursively; any tenant-bearing object from
-  an injected service must match the server-derived tenant before it leaves the
-  MCP boundary.
-- Query strings are rejected, including bearer tokens or tenant identifiers.
-- Bearer tokens and provider credentials are never returned, copied into an
-  approval URL, or passed downstream.
-- `Mcp-Session-Id` is not authorization. This fixture transport is stateless.
-- Result and input bounds come from `@chief/contracts`; the HTTP body is also
-  capped at 64 KiB before parsing.
-- Product deep links must be HTTPS. The deployment should set
-  `CHIEF_PRODUCT_BASE_URL` to the credential-free hosted product origin. Paths,
-  query strings, fragments, and `user:password@host` authority are rejected;
-  local fixture output uses the reserved `https://chief.example.test` origin until
-  composition supplies it.
+- The tenant, evaluator user, account/brand grants, and authorization epoch are
+  selected by the server.
+- Tool inputs use strict shared Zod schemas. Extra tenant/account/provider or
+  storage authority is rejected before service invocation.
+- The adapter requires its request scope to match the server-derived API
+  context, and output validation recursively rejects cross-tenant data.
+- Query strings are rejected, including bearer-token or tenant parameters.
+- HTTP request bodies are capped at 64 KiB before JSON parsing.
+- Product deep-link output schemas require HTTPS, and CDK injects the
+  credential-free CloudFront product origin. No tool accepts URL authority.
+- Deterministic non-PII evaluator data is labeled fixture-origin even though its
+  product and approval state uses the production durable interfaces.
+- The hosted connector status contains one fixture connector card. Recorded and
+  blocked are mode definitions with zero hosted evidence in the deterministic
+  seed, so clients must not infer unavailable connector cards.
 
-The hosted authenticated profile will derive the same scope from verified
-OAuth/OIDC claims and server-side grants. That integration must not add a
-caller-selected tenant or downstream provider-token passthrough.
+The current public evaluator does not implement OAuth or account selection.
+Use the deployment URL directly without adding a token to the URL or source
+configuration. Strict hosted acceptance additionally requires every configured
+URL to resolve to a syntactically public HTTPS host: single-label,
+private/local/reserved/unspecified names and non-public IPv4/IPv6 ranges are
+rejected before Playwright starts.
 
-## Product API fixture parity
+## Protocol and error behavior
 
-The public MCP and product API intentionally present one deterministic product
-story rather than two independent demos. The MCP fixture mirrors the product
-API's server-selected `tenant_public_assessment` and `user_public_evaluator`,
-five communication revisions, four threads with email/SMS channel identity,
-four connector/account records, two related Asana objects, cited knowledge
-identifiers, recommendations, cited draft/context flows, action-plan and
-proposal identifiers, effect-disabled proposal status, and SLA snapshot.
+- malformed JSON -> JSON-RPC parse error `-32700`;
+- unknown JSON-RPC method -> `-32601`;
+- invalid or cross-boundary arguments -> schema/tool error;
+- stale immutable revision -> redacted `STALE_REVISION`;
+- unknown durable entity -> redacted `NOT_FOUND`;
+- retained legacy `submit_for_approval` -> stable `TOOL_UNAVAILABLE`;
+- service deadline -> redacted `TOOL_TIMEOUT`;
+- oversized body -> HTTP `413` and invalid-request error;
+- unexpected failure -> `TOOL_FAILED` or generic transport error.
 
-Parity is asserted at the MCP protocol boundary, including cursor pagination,
-thread membership, connector capability truthfulness, citation/source pairing,
-immutable proposal IDs, and the shared counts and latency metrics. The MCP does
-not import `@chief/api`; both surfaces implement the frozen contracts behind
-injectable services, avoiding a browser/API package dependency in the Lambda.
+Raw exceptions, tenant data, credentials, and provider responses are not
+serialized. Retrying a read or deterministic immutable mutation cannot invoke
+an external provider because all public effect switches remain disabled.
 
-## Proposal and timeout behavior
+## Local protocol proof
 
-Proposal IDs are deterministic over immutable proposal inputs. Repeating the
-same MCP request after a client disconnect therefore returns the same proposal
-instead of preparing a second logical action. A proposal response contains:
+The focused MCP suite exercises:
 
-- immutable proposal ID;
-- `prepared` or `pending_approval` state;
-- HTTPS product approval deep link;
-- `directEffectAvailable: false`.
+- `initialize` protocol negotiation;
+- exact `tools/list` schema/name parity and absence of direct-effect tools;
+- `tools/call` for durable bounded retrieval, cited recommendation and draft;
+- approval status for a proposal prepared through the shared durable API
+  service, including exact proposal ID/status equality;
+- stale revision, unknown proposal/tool, cross-scope input, malformed JSON-RPC,
+  unknown method, body limit, query-token rejection, base64 handling, timeout,
+  and health.
 
-The default tool deadline is five seconds and is injectable for deployed
-profiles and tests. A deadline returns the redacted tool error `TOOL_TIMEOUT`;
-polling or retrying does not perform a provider/Asana effect. Model-backed
-composition must retain the architecture rule from the frozen plan: if measured
-deployed p99 plus margin cannot fit the shortest client/gateway/runtime timeout,
-return a durable idempotent proposal/job and make status polling read-only.
-
-## Error contract
-
-- Malformed JSON returns JSON-RPC parse error `-32700`.
-- Unknown JSON-RPC methods return `-32601`.
-- Invalid or cross-boundary tool arguments are rejected by published schemas.
-- Unknown tools return a tool-level error and cannot reach a service adapter.
-- Stale immutable revisions return the redacted tool error `STALE_REVISION`.
-- Oversized HTTP bodies return HTTP `413` with JSON-RPC invalid-request error.
-- Unexpected failures return only `TOOL_FAILED` or a generic transport error;
-  raw exceptions, credentials, tenant data, and provider responses are not
-  serialized.
-
-## Verification
-
-The focused suite covers:
-
-- initialize negotiation and generated tool schemas;
-- exact frozen tool-name parity and direct-effect-tool absence;
-- cited knowledge candidate/citation alignment;
-- public product API fixture parity for communications, thread channels,
-  connectors, Asana facts, knowledge IDs, recommendations/drafts/context,
-  proposal status, and SLA metrics;
-- deterministic proposal idempotency and HTTPS approval links;
-- stale revision, cross-tenant/account input, unknown direct-effect tool,
-  malformed JSON-RPC, unknown method, oversized input, and query-token denial;
-- API Gateway base64 behavior;
-- bounded timeout behavior;
-- cheap truthful health behavior.
-
-Run with the repository-pinned Node `22.18.0`:
+Run with Node `22.18.0` and pnpm `10.33.0`:
 
 ```powershell
-node C:\Program` Files\nodejs\node_modules\pnpm\bin\pnpm.cjs --filter @chief/mcp test
-node C:\Program` Files\nodejs\node_modules\pnpm\bin\pnpm.cjs --filter @chief/mcp lint
-node C:\Program` Files\nodejs\node_modules\pnpm\bin\pnpm.cjs --filter @chief/mcp typecheck
-node C:\Program` Files\nodejs\node_modules\pnpm\bin\pnpm.cjs --filter @chief/mcp build
+$env:PATH = 'E:\nvm\v22.18.0;' + $env:PATH
+pnpm --filter @chief/mcp lint
+pnpm --filter @chief/mcp typecheck
+pnpm --filter @chief/mcp test
+pnpm --filter @chief/mcp build
 ```
+
+## Strict hosted proof
+
+Use the root documented hosted command. It requires separate UI, API, and MCP
+credential-free HTTPS base URLs and has no local fallback or skip behavior:
+
+```powershell
+$env:CHIEF_BASE_URL = 'https://<parent-deployment-web-host>'
+$env:CHIEF_API_BASE_URL = 'https://<parent-deployment-api-host>'
+$env:CHIEF_MCP_BASE_URL = 'https://<parent-deployment-mcp-host>'
+pnpm --filter @chief/e2e test:hosted
+```
+
+The hosted suite asserts `initialize -> tools/list -> tools/call`, rejects an
+approval/send tool, and combines that protocol proof with the browser's
+read-only draft, exact concise successor, approval, receipt, and reload/status
+journey. Its representative `tools/call` is `get_approval_status` with the
+browser-created proposal ID; MCP must return structured content exactly equal
+to the API approval status for that same approved proposal.
+
+This implementation lane did not deploy AWS or run the hosted command. The
+parent workflow will deploy, seed deterministic non-PII evaluator data, and run
+hosted acceptance against the emitted URLs.
 
 ## Tradeoffs
 
-- **Stateless JSON responses over stateful/SSE-first sessions:** Lambda requests
-  remain portable and horizontally scalable. Server notifications and durable
-  resumability are deferred until a real Cursor compatibility test proves they
-  are required.
-- **Frozen contract breadth over an ad hoc demo tool:** all product-facing MCP
-  tools share browser/API schemas now, which adds fixture work but prevents
-  protocol drift.
-- **Deterministic fixture service over provider-backed calls:** the public MCP
-  is reproducible and safe without credentials. It is labeled fixture and does
-  not claim live retrieval, generation, provider delivery, or Asana mutation.
-- **Product approval deep link over MCP approval:** this adds one intentional
-  human step and preserves the immutable approval/outbox invariant even when
-  Cursor auto-runs tools.
+- **Stateless transport:** favors Lambda portability and bounded requests over
+  server notifications that the evaluator does not require.
+- **Shared product service:** removes API/MCP behavior drift at the cost of one
+  explicit MCP-to-API workspace dependency.
+- **Product-owned approval:** keeps approval outside Cursor auto-run and ensures
+  the exact revision/timestamp ceremony has one durable authority boundary.
+- **Deterministic public data with durable storage:** gives reproducible grading
+  without claiming a live provider connection or exposing PII.

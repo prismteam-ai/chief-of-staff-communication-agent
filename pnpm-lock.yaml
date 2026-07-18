@@ -44,6 +44,18 @@ importers:
 
   apps/api:
     dependencies:
+      '@aws-sdk/client-dynamodb':
+        specifier: 3.1089.0
+        version: 3.1089.0
+      '@aws-sdk/client-s3':
+        specifier: 3.1089.0
+        version: 3.1089.0
+      '@aws-sdk/client-sqs':
+        specifier: 3.1089.0
+        version: 3.1089.0
+      '@aws-sdk/lib-dynamodb':
+        specifier: 3.1089.0
+        version: 3.1089.0(@aws-sdk/client-dynamodb@3.1089.0)
       '@chief/agent':
         specifier: workspace:*
         version: link:../../packages/agent
@@ -263,6 +275,9 @@ importers:
       '@chief/agent':
         specifier: workspace:*
         version: link:../../packages/agent
+      '@chief/api':
+        specifier: workspace:*
+        version: link:../api
       '@chief/approval-outbox':
         specifier: workspace:*
         version: link:../../packages/approval-outbox
@@ -315,6 +330,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@chief/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
       '@chief/browser-api':
         specifier: workspace:*
         version: link:../../packages/browser-api

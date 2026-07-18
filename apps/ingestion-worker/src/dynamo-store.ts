@@ -1,9 +1,9 @@
 import {
   immutableBlobRefSchema,
   type ImmutableBlobRef,
-  type RetrievalDeltaManifest,
   type SyncCheckpoint,
 } from '@chief/contracts';
+import type { StagedRetrievalMutationV1 } from '@chief/rag';
 import {
   PersistenceConflictError,
   type DynamoPersistence,
@@ -186,7 +186,7 @@ export class DynamoRepositoryIngestionStore implements IngestionStore {
     readonly workItem: IngestionWorkItem;
     readonly canonical: CanonicalWrite;
     readonly checkpoint?: SyncCheckpoint;
-    readonly retrievalDelta?: RetrievalDeltaManifest;
+    readonly retrievalMutation?: StagedRetrievalMutationV1;
   }): Promise<CommitResult> {
     let duplicate = false;
     try {
@@ -203,7 +203,7 @@ export class DynamoRepositoryIngestionStore implements IngestionStore {
           attributes: this.#factAttributes(
             input.workItem,
             input.canonical,
-            input.retrievalDelta,
+            input.retrievalMutation,
           ),
         },
         eventOutbox: {
@@ -300,7 +300,7 @@ export class DynamoRepositoryIngestionStore implements IngestionStore {
   #factAttributes(
     workItem: IngestionWorkItem,
     canonical: CanonicalWrite,
-    retrievalDelta: RetrievalDeltaManifest | undefined,
+    retrievalMutation: StagedRetrievalMutationV1 | undefined,
   ): Readonly<Record<string, unknown>> {
     const common = {
       source: canonical.source,
@@ -308,7 +308,7 @@ export class DynamoRepositoryIngestionStore implements IngestionStore {
       contentHash: canonical.contentHash,
       connectorSnapshot: workItem.connectorSnapshot,
       rawReference: workItem.rawReference,
-      ...(retrievalDelta === undefined ? {} : { retrievalDelta }),
+      ...(retrievalMutation === undefined ? {} : { retrievalMutation }),
     };
     if (canonical.source === 'asana')
       return {

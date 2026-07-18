@@ -4,6 +4,8 @@ import type {
 } from 'aws-lambda';
 import { describe, expect, it } from 'vitest';
 
+import { createMemoryDurableApiDependencies } from '@chief/api';
+
 import {
   mcpCreateDraftResultSchema,
   mcpGetApprovalStatusResultSchema,
@@ -25,6 +27,7 @@ import {
   publicFixtureIdentifiers,
 } from './fixture-service.js';
 import { createHandler, handler } from './handler.js';
+import { ProductServiceMcpAdapter } from './product-service-adapter.js';
 import type { McpToolService } from './service.js';
 
 interface JsonRpcResponse {
@@ -128,6 +131,9 @@ async function callTool(
 }
 
 describe('Chief remote MCP Lambda', () => {
+  const frozenFixtureHandler = createHandler({
+    service: new FixtureMcpToolService(),
+  });
   it('accepts only a credential-free HTTPS product origin', () => {
     expect(configuredProductBaseUrl('https://chief.example.test')).toBe(
       'https://chief.example.test',
@@ -203,6 +209,129 @@ describe('Chief remote MCP Lambda', () => {
     expect(names).not.toContain('update_task');
   });
 
+  it('initializes, describes, and truthfully rejects the legacy approval tool in the default durable handler', async () => {
+    const initialized = await invoke(
+      rpcRequest('initialize', {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'durable-approval-test', version: '1.0.0' },
+      }),
+    );
+    expect(initialized.rpc.error).toBeUndefined();
+
+    const listed = await invoke(rpcRequest('tools/list'));
+    const tools = (listed.rpc.result?.tools ?? []) as readonly {
+      readonly name: string;
+      readonly description?: string;
+    }[];
+    expect(
+      tools.find(({ name }) => name === 'submit_for_approval')?.description,
+    ).toBe(
+      'Legacy compatibility tool; unavailable in the durable fixed-scope MCP runtime. Use the HTTPS product draft-approval flow. No effect is executed.',
+    );
+
+    const rejected = await callTool('submit_for_approval', {
+      actionPlanId: publicFixtureIdentifiers.actionPlanId,
+      expectedActionPlanRevision: publicFixtureIdentifiers.actionPlanRevision,
+      actionPlanHash: publicFixtureIdentifiers.actionPlanHash,
+    });
+    expect(rejected.rpc.error).toBeUndefined();
+    expect(rejected.result).toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: 'TOOL_UNAVAILABLE: submit_for_approval is legacy and unavailable in the durable fixed-scope MCP runtime; use the HTTPS product draft-approval flow.',
+        },
+      ],
+    });
+    expect(rejected.result?.structuredContent).toBeUndefined();
+  });
+
+  it('runs initialize, list, retrieval, cited draft, and approval status through durable composition', async () => {
+    const dependencies = createMemoryDurableApiDependencies({
+      baseUrl: 'https://chief.example.test',
+    });
+    const context = dependencies.requestContext;
+    const durableHandler = createHandler({
+      service: new ProductServiceMcpAdapter(
+        dependencies.productService,
+        context,
+      ),
+      scope: {
+        kind: 'public_fixture',
+        tenantId: context.actor.tenantId,
+        userId: context.actor.userId,
+        authorizationEpoch: context.retrievalScope?.authorizationEpoch ?? 1,
+      },
+    });
+
+    const initialized = await invoke(
+      rpcRequest('initialize', {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'durable-test', version: '1.0.0' },
+      }),
+      durableHandler,
+    );
+    expect(initialized.rpc.error).toBeUndefined();
+    const listed = await invoke(rpcRequest('tools/list'), durableHandler);
+    expect(listed.rpc.result?.tools).toBeDefined();
+
+    const searched = await callTool(
+      'search_knowledge',
+      { queryText: 'Friday launch owner', exactEntityRefs: [], limit: 2 },
+      durableHandler,
+    );
+    expect(
+      mcpSearchKnowledgeResultSchema.parse(searched.result?.structuredContent)
+        .citations,
+    ).toHaveLength(2);
+
+    const recommended = await callTool(
+      'recommend_action',
+      {
+        messageRevisionId: 'message-revision-1-1',
+        expectedMessageRevision: 1,
+      },
+      durableHandler,
+    );
+    const recommendation = mcpRecommendActionResultSchema.parse(
+      recommended.result?.structuredContent,
+    ).recommendation;
+    const drafted = await callTool(
+      'create_draft',
+      {
+        recommendationId: recommendation.recommendationId,
+        expectedRecommendationRevision: 1,
+      },
+      durableHandler,
+    );
+    const draft = mcpCreateDraftResultSchema.parse(
+      drafted.result?.structuredContent,
+    ).result.draft;
+    expect(draft.citations).toHaveLength(2);
+
+    const proposal = await dependencies.productService.prepareDraftApproval(
+      context,
+      {
+        draftRevisionId: draft.draftRevisionId,
+        expectedDraftRevision: draft.revision,
+      },
+    );
+    const status = await callTool(
+      'get_approval_status',
+      { proposalId: proposal.proposalId },
+      durableHandler,
+    );
+    expect(
+      mcpGetApprovalStatusResultSchema.parse(status.result?.structuredContent),
+    ).toMatchObject({
+      proposalId: proposal.proposalId,
+      status: 'pending_approval',
+    });
+  });
+
   it.each([
     ['list_pending_communications', { limit: 1 }],
     ['get_communication', { messageRevisionId: 'message-revision-1-1' }],
@@ -268,7 +397,11 @@ describe('Chief remote MCP Lambda', () => {
   ] as const)(
     'executes %s through its frozen input and output schemas',
     async (name, args) => {
-      const { response, rpc, result } = await callTool(name, args);
+      const { response, rpc, result } = await callTool(
+        name,
+        args,
+        frozenFixtureHandler,
+      );
 
       expect(response.statusCode).toBe(200);
       expect(rpc.error).toBeUndefined();
@@ -581,13 +714,16 @@ describe('Chief remote MCP Lambda', () => {
   });
 
   it('creates an idempotent immutable approval handoff with no direct effect', async () => {
+    const fixtureHandler = createHandler({
+      service: new FixtureMcpToolService(),
+    });
     const args = {
       actionPlanId: publicFixtureIdentifiers.actionPlanId,
       expectedActionPlanRevision: publicFixtureIdentifiers.actionPlanRevision,
       actionPlanHash: publicFixtureIdentifiers.actionPlanHash,
     };
-    const first = await callTool('submit_for_approval', args);
-    const second = await callTool('submit_for_approval', args);
+    const first = await callTool('submit_for_approval', args, fixtureHandler);
+    const second = await callTool('submit_for_approval', args, fixtureHandler);
     const firstProposal = proposalHandoffSchema.parse(
       first.result?.structuredContent,
     );
@@ -667,18 +803,31 @@ describe('Chief remote MCP Lambda', () => {
   });
 
   it('denies unknown recommendation, action-plan, and proposal identifiers', async () => {
-    const unknownRecommendation = await callTool('prepare_asana_action', {
-      recommendationId: 'recommendation-unknown',
-      expectedRecommendationRevision: 1,
+    const fixtureHandler = createHandler({
+      service: new FixtureMcpToolService(),
     });
-    const unknownActionPlan = await callTool('submit_for_approval', {
-      actionPlanId: 'action-plan-unknown',
-      expectedActionPlanRevision: 1,
-      actionPlanHash: 'c'.repeat(64),
-    });
-    const unknownProposal = await callTool('get_approval_status', {
-      proposalId: 'proposal-unknown',
-    });
+    const unknownRecommendation = await callTool(
+      'prepare_asana_action',
+      {
+        recommendationId: 'recommendation-unknown',
+        expectedRecommendationRevision: 1,
+      },
+      fixtureHandler,
+    );
+    const unknownActionPlan = await callTool(
+      'submit_for_approval',
+      {
+        actionPlanId: 'action-plan-unknown',
+        expectedActionPlanRevision: 1,
+        actionPlanHash: 'c'.repeat(64),
+      },
+      fixtureHandler,
+    );
+    const unknownProposal = await callTool(
+      'get_approval_status',
+      { proposalId: 'proposal-unknown' },
+      fixtureHandler,
+    );
 
     expect(unknownRecommendation.result?.isError).toBe(true);
     expect(unknownRecommendation.result?.content?.[0]?.text).toBe('NOT_FOUND');

@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@chief/agent": "workspace:*",
+    "@chief/api": "workspace:*",
     "@chief/approval-outbox": "workspace:*",
     "@chief/connector-core": "workspace:*",
     "@chief/contracts": "workspace:*",

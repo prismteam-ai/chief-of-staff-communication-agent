@@ -1,8 +1,14 @@
 import { z } from 'zod';
 
 import {
+  actionPlanIdSchema,
+  approvalIdSchema,
   getApprovalStatusInputSchema,
   getSlaMetricsResultSchema,
+  operationIdSchema,
+  proposalIdSchema,
+  sha256Schema,
+  timestampSchema,
 } from '@chief/contracts';
 import type {
   getApprovalStatusResultSchema,
@@ -58,6 +64,7 @@ export const executionStatusResultSchema = z
   .object({
     proposalId: getApprovalStatusInputSchema.shape.proposalId,
     runtimeMode: z.literal('fixture'),
+    storageMode: z.literal('durable'),
     effectPolicy: z.literal('effect_disabled'),
     externalEffect: z.literal(false),
     status: z.enum(['not_requested', 'pending_approval', 'effect_disabled']),
@@ -74,11 +81,70 @@ export const executionStatusResultSchema = z
   })
   .strict();
 
+export const prepareDraftApprovalInputSchema = z
+  .object({
+    draftRevisionId: z.string().min(1),
+    expectedDraftRevision: z.number().int().positive(),
+  })
+  .strict();
+
+export const prepareDraftApprovalResultSchema = z
+  .object({
+    proposalId: proposalIdSchema,
+    approvalUrl: z
+      .url()
+      .refine((value) => new URL(value).protocol === 'https:'),
+    status: z.enum(['pending_approval', 'approved']),
+    directEffectAvailable: z.literal(false),
+    actionPlanId: actionPlanIdSchema,
+    actionPlanRevision: z.number().int().positive(),
+    actionPlanHash: sha256Schema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+
+export const approveProposalInputSchema = z
+  .object({
+    proposalId: proposalIdSchema,
+    expectedProposalUpdatedAt: timestampSchema,
+  })
+  .strict();
+
+const effectDisabledReceiptSchema = z
+  .object({
+    kind: z.literal('effect_disabled'),
+    operationId: operationIdSchema,
+    artifactHash: sha256Schema,
+    stableIdempotencyKey: z.string().min(1),
+    observedAt: timestampSchema,
+  })
+  .strict();
+
+export const approveProposalResultSchema = z
+  .object({
+    proposalId: proposalIdSchema,
+    actionPlanId: actionPlanIdSchema,
+    actionPlanRevision: z.number().int().positive(),
+    actionPlanHash: sha256Schema,
+    approvalId: approvalIdSchema,
+    operationId: operationIdSchema,
+    status: z.literal('approved'),
+    effectPolicy: z.literal('effect_disabled'),
+    externalEffect: z.literal(false),
+    receipt: effectDisabledReceiptSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+
 export type ProductRequestContext = z.infer<typeof serverRequestContextSchema>;
 export type DashboardMetricsResult = z.infer<
   typeof dashboardMetricsResultSchema
 >;
 export type ExecutionStatusResult = z.infer<typeof executionStatusResultSchema>;
+export type PrepareDraftApprovalResult = z.infer<
+  typeof prepareDraftApprovalResultSchema
+>;
+export type ApproveProposalResult = z.infer<typeof approveProposalResultSchema>;
 export type ProductResult<T> = T | Promise<T>;
 
 export class ProductServiceError extends Error {
@@ -149,6 +215,14 @@ export interface ProductService {
     context: ProductRequestContext,
     input: z.infer<typeof submitApprovalInputSchema>,
   ): ProductResult<z.infer<typeof submitApprovalResultSchema>>;
+  prepareDraftApproval(
+    context: ProductRequestContext,
+    input: z.infer<typeof prepareDraftApprovalInputSchema>,
+  ): ProductResult<PrepareDraftApprovalResult>;
+  approveProposal(
+    context: ProductRequestContext,
+    input: z.infer<typeof approveProposalInputSchema>,
+  ): ProductResult<ApproveProposalResult>;
   prepareAsanaAction(
     context: ProductRequestContext,
     input: z.infer<typeof prepareAsanaActionInputSchema>,

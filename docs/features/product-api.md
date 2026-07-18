@@ -1,179 +1,242 @@
-# Typed Product API
+# Typed durable product API
 
 ## Purpose
 
-The Chief product API is an executable tRPC surface for the dashboard, browser
-application, and other trusted product consumers. It runs through the official
-tRPC AWS Lambda adapter and uses the frozen Wave 1 schemas for every contracted
-input and output.
+The Chief product API is the executable tRPC surface used by the dashboard and
+browser client. The Lambda entry point defaults to the durable composition:
+DynamoDB product revisions and approval/execution state, bounded DynamoDB/S3
+retrieval, a cited deterministic agent, and optional approval-outbox enqueueing.
+The fixture-only service remains a test/local compatibility adapter; it is not
+the hosted default.
 
-The public assessment tenant is selected by the server. No procedure accepts a
-tenant, connector account, provider endpoint, table, path, SQL statement, raw
-credential, or bearer token as authority.
+The public evaluator is signed out but not caller-scoped. The server selects and
+validates one fixed deterministic tenant, evaluator user, account, brand,
+grants, authorization epoch, and retrieval scope. No procedure or header may
+supply tenant, account, provider, table, path, SQL, endpoint, credential, or
+bearer-token authority.
 
-## Architecture
+## Default composition
 
 ```text
 API Gateway HTTP API
         |
         v
-tRPC Lambda adapter
-        |
-        +-- strict Zod input/output schemas
-        +-- server-derived ProductRequestContext
-        +-- Powertools observability
+tRPC Lambda adapter -> strict Zod inputs/outputs
         |
         v
-injectable ProductService
+server-derived ProductRequestContext
         |
-        +-- deterministic assessment fixture (default)
-        +-- durable domain-service adapter (deployment injection point)
+        v
+DurableProductService
+  +-- DynamoDurableProductRepository -> core DynamoDB table
+  +-- deterministic in-process query-vector producer
+  +-- BoundedDynamoS3RetrievalIndex -> promoted snapshot in S3
+  +-- cited recommendation/draft agent
+  +-- immutable approval/execution record builder
+  +-- approval-outbox SQS enqueue (when configured)
 ```
 
-Routers are deliberately thin. They validate the frozen contract, call one
-`ProductService` method with the server-derived request context, validate the
-result, and translate bounded service errors into tRPC errors. This keeps the
-transport independent from fixture or durable persistence choices.
+Outside `NODE_ENV=test`, `createApiHandler()` constructs this AWS composition
+from `CORE_TABLE_NAME`, `RETRIEVAL_TABLE_NAME`, `SNAPSHOT_BUCKET_NAME`,
+`PRODUCT_BASE_URL`, and optional `OUTBOX_QUEUE_URL`. Missing required bindings
+fail startup rather than silently selecting fixture data. Tests can inject a
+production-shaped in-memory repository and retrieval port while exercising the
+same product service and schemas.
 
-The default service is deterministic and credentialless. It provides a useful
-multi-thread inbox, connector capability states, cited knowledge, action and
-draft revisions, focused context requests, approval proposals, related Asana
-facts, SLA/dashboard metrics, and a truthful effect-disabled receipt. It makes
-no network or provider call.
+Retrieval uses Owner A's canonical, secret-independent
+`retrievalDynamoKeyV1(scope, entityId)` for the exact ingestion head and staged
+catalog. The API does not construct a digest `KeyCodec`; that secret-backed
+codec remains isolated to canonical ingestion/core persistence. This separation
+prevents an API process without the digest secret from deriving a different
+retrieval partition than the production writer.
 
-Product links are derived only from a validated, credential-free HTTPS origin.
-Origins containing username/password data, a non-root path, query string, or
-fragment fail during service construction before any link is rendered.
+Authorization epoch is not inferred from the current snapshot head. Each
+tenant/scope/role domain has an independent, strongly read, monotonic DynamoDB
+epoch item. Staging and persisted query-vector entity names include the epoch;
+the head/domain partition remains stable so a new-epoch compaction can replace
+the prior head without reading old-epoch staging as current input.
+
+The fixed non-PII evaluator projection is written through the durable
+repository on first access. It is deterministic, credentialless, tenant scoped,
+and labeled `runtimeMode: fixture` where the contract describes data origin.
+`storageMode: durable` independently describes persisted approval/execution
+state. Deterministic data must not be relabeled as a live provider connection.
+The hosted connector result contains one fixture connector card. Recorded and
+blocked remain capability-mode definitions with zero hosted evidence in this
+seed; the API does not fabricate cards for them.
 
 ## Routes
 
-| Router           | Procedure        |     Kind | Result                                           |
-| ---------------- | ---------------- | -------: | ------------------------------------------------ |
-| `system`         | `health`         |    query | Frozen compatibility health                      |
-| `dashboard`      | `metrics`        |    query | Volume, status/SLA, approvals, channel breakdown |
-| `dashboard`      | `sla`            |    query | Frozen SLA snapshot                              |
-| `communications` | `list`           |    query | Filtered cursor page                             |
-| `communications` | `get`            |    query | Communication, attachments, citations            |
-| `communications` | `thread`         |    query | Bounded chronological thread page                |
-| `connectors`     | `status`         |    query | Health, runtime mode, exact capabilities         |
-| `work`           | `relatedAsana`   |    query | Related Asana task/project facts                 |
-| `knowledge`      | `search`         |    query | Authorized candidates and citations              |
-| `agent`          | `recommend`      | mutation | Immutable recommendation proposal                |
-| `agent`          | `createDraft`    | mutation | Cited immutable draft revision                   |
-| `agent`          | `reviseDraft`    | mutation | Immediate immutable successor revision           |
-| `agent`          | `requestContext` | mutation | Focused context request                          |
-| `approvals`      | `prepare`        | mutation | Immutable approval handoff                       |
-| `approvals`      | `prepareAsana`   | mutation | Asana proposal handoff                           |
-| `approvals`      | `status`         |    query | Proposal status and HTTPS approval link          |
-| `execution`      | `status`         |    query | Truthful public effect-disabled status/receipt   |
+| Router           | Procedure        |     Kind | Result                                                  |
+| ---------------- | ---------------- | -------: | ------------------------------------------------------- |
+| `system`         | `health`         |    query | Product health with `foundationOnly: false`             |
+| `dashboard`      | `metrics`        |    query | Volume, status/SLA, approvals, channel breakdown        |
+| `dashboard`      | `sla`            |    query | Bounded SLA snapshot                                    |
+| `communications` | `list`           |    query | Filtered cursor page                                    |
+| `communications` | `get`            |    query | Communication, attachments, citations                   |
+| `communications` | `thread`         |    query | Bounded chronological thread page                       |
+| `connectors`     | `status`         |    query | Health, data mode, and exact capabilities               |
+| `work`           | `relatedAsana`   |    query | Related Asana task/project facts                        |
+| `knowledge`      | `search`         |    query | Scoped bounded candidates and citations                 |
+| `agent`          | `recommend`      | mutation | Persisted cited recommendation                          |
+| `agent`          | `createDraft`    | mutation | Persisted cited immutable draft revision                |
+| `agent`          | `reviseDraft`    | mutation | Immediate immutable successor revision                  |
+| `agent`          | `requestContext` | mutation | Focused context request                                 |
+| `approvals`      | `prepare`        | mutation | Legacy handoff; durable service requires `prepareDraft` |
+| `approvals`      | `prepareAsana`   | mutation | Prepared-only Asana handoff                             |
+| `approvals`      | `prepareDraft`   | mutation | Bind exact persisted draft to action plan               |
+| `approvals`      | `approve`        | mutation | Server-authorized immutable approval and safe receipt   |
+| `approvals`      | `status`         |    query | Durable proposal status and HTTPS deep link             |
+| `execution`      | `status`         |    query | Durable pending/effect-disabled status and receipt      |
 
-There is intentionally no `approve`, `send`, `createTask`, `updateTask`, raw
-provider, or storage procedure. Mutation-shaped agent calls only prepare
-immutable product records or proposals. Human approval is a separate explicit
-product ceremony, and approved effects are consumed by the guarded outbox
-worker rather than this API.
+There is still no public send, provider, create-task, update-task, raw-storage,
+or arbitrary action procedure. The `approvals.approve` operation is narrowly
+server-authorized for the fixed evaluator scope; it cannot enable an external
+effect and always binds the expected current proposal timestamp.
 
-## Assessment fixture references
+## Retrieval-to-draft path
 
-The fixture service exports stable references for automated tests and the demo:
+`knowledge.search`, recommendation, and draft creation call the same bounded
+retrieval port. The AWS port:
 
-- action plan: `action_plan_fixture_reply`, revision `1`;
-- its canonical fixture hash is exported as
-  `fixtureProductReferences.actionPlanHash` rather than copied into clients;
-- completed non-effect proposal: `proposal_fixture_effect_disabled`.
+1. derives the factual role and authorization epoch from the server context;
+2. produces a deterministic query vector and binds it to the normalized query
+   hash and embedding-profile manifest hash in process;
+3. reads only a validated `chief-retrieval.v1` promoted head for that exact
+   tenant/scope/role/epoch through `retrievalDynamoKeyV1`;
+4. verifies immutable S3 projection/vector objects containing canonical
+   evidence text/hash, citation label, exact entity references,
+   active/tombstoned state, and mutation ordinal, then applies configured item,
+   byte, and RSS bounds;
+5. rechecks the authorization epoch, filters tombstones, performs exact-ref plus
+   lexical/vector fusion, and returns citations/evidence bound to the actual
+   promoted manifest hash;
+6. persists the resulting recommendation and cited draft as immutable product
+   revisions.
 
-The completed fixture proposal returns:
+The RAG package also supports scoped persisted query vectors for replay and the
+production-writer compatibility test. Hosted API/MCP pass the validated vector
+directly to the bounded reader, so their retrieval-table IAM remains read-only.
 
-```json
-{
-  "runtimeMode": "fixture",
-  "effectPolicy": "effect_disabled",
-  "externalEffect": false,
-  "status": "effect_disabled",
-  "receipt": { "kind": "effect_disabled" }
-}
-```
+Agent facts use the canonical evidence text returned by this reader, and the
+recommendation/draft provenance contains the reader's actual snapshot manifest
+hash. No readable head means retrieval is unavailable; the API does not
+fabricate a healthy index or silently fall back to the old fixture RAG service.
+The reader strongly checks the independent epoch before loading, after loading,
+before scoring, and after citation construction. It retries one observed epoch
+transition against the new authority and otherwise fails closed; an old-epoch
+snapshot is denied until ingestion promotes a fresh snapshot carrying the new
+epoch.
 
-It never returns a provider request ID, `provider_accepted`, or `delivered`.
+## Durable approval and reload
 
-## Pagination and bounds
+The approved browser flow is:
 
-Communication cursors are opaque, versioned, and bound to the active status
-filter. Reusing a cursor with another filter fails with `BAD_REQUEST` rather
-than skipping or leaking records. Frozen schemas enforce:
+1. The evaluator renders the persisted draft body read-only and exposes one
+   revision action: **Create concise revision**. It calls `agent.reviseDraft`
+   with exactly `Make this draft concise while retaining all cited facts.`
+2. `agent.reviseDraft` persists the successor's immutable revision, exact
+   revision lookup, and conditionally advanced draft head in one DynamoDB
+   transaction using expected-version and expected-revision compare-and-swap
+   checks. `agent.createDraft` uses the same atomic shape, so a visible head can
+   never outlive or precede its exact lookup.
+3. `approvals.prepareDraft` loads that immutable revision, builds the action
+   plan and canonical hash, persists a `pending_approval` proposal, and returns
+   its HTTPS deep link and update timestamp.
+4. `approvals.approve` requires that exact proposal timestamp and the
+   server-derived `actions:approve` authority. A stale or already advanced
+   proposal returns a conflict.
+5. The service builds an immutable approval bundle and operation binding, then
+   uses one DynamoDB transaction to write the approval/execution locator,
+   aggregate, authority projection, immutable approved proposal revision, and
+   conditional proposal-head advance.
+6. When `OUTBOX_QUEUE_URL` is configured, the stable operation ID is enqueued
+   only after durable state is committed. An SQS failure is returned to the
+   caller but does not roll back or hide the committed approval.
+7. The persisted aggregate is terminal `effect_disabled`; the receipt contains
+   the operation ID, artifact hash, stable idempotency key, and observed time.
+8. Fresh service/browser instances read the same state through
+   `approvals.status` and `execution.status`.
 
-- page limits from 1 through 100;
-- knowledge query text up to 16,000 characters;
-- at most 100 exact entity references and results;
-- revision instructions up to 16,000 characters;
-- focused context questions up to 4,000 characters;
-- strict objects that reject unknown tenant/account/provider/storage fields.
+Recommendation, `createDraft`, proposal preparation, and approval are
+idempotent reads of the persisted winner. Once revision 2 is current,
+`createDraft` returns that exact revision 2—including its original timestamp—on
+reload. Duplicate writes are accepted only when canonical hashes of the full
+immutable revision/execution values match. A same-key/different-value replay is
+a persistence conflict rather than a false duplicate.
 
-## Injection
+Approval accepts both the originally approved-from timestamp and the current
+approved timestamp for safe retry. A retry after successful commit (including
+after an SQS failure) re-enqueues the same operation ID and returns the same
+approval/receipt; it never creates a new approval or external-effect claim.
+Replaying `approvals.prepareDraft` after that approval returns the exact
+persisted proposal with `status: approved`, the same action-plan identity/hash,
+and the approved update timestamp rather than creating another pending handoff.
 
-`createApiHandler(dependencies)` accepts a `ProductService` and a
-`ProductRequestContext`. Production persistence can implement the same service
-without changing routers, `AppRouter`, the generated-style client, or browser
-facade. The default Lambda handler injects the credentialless fixture service
-and the fixed public assessment scope.
+The focused API and repository suites cover canonical snapshot evidence and
+actual manifest provenance, cited recommendation/draft creation, and the real
+service's concise successor. The revision-2 regression proves its body differs
+from and is shorter than revision 1 while citations, factual-citation count,
+and passed validation are preserved; a restarted service reloads that exact
+revision 2. The suites also cover atomic draft revision/exact-lookup/head commit
+and failure recovery, idempotent proposal/approval replay, immutable conflict
+comparison, post-commit SQS failure/retry with a stable operation ID, stored
+effect-disabled execution aggregate, fresh-instance approval/status reload,
+and stale proposal rejection.
 
-`createApiClient` centralizes the normalized `/trpc` URL and optional safe
-header provider. `createBrowserApi` adds runtime parsing for frozen contract
-results and exposes product-oriented methods without duplicating tRPC setup.
+## Bounds and errors
 
-## Security decisions and tradeoffs
+Frozen schemas enforce bounded pages, result counts, query/instruction lengths,
+exact entity references, timestamps, hashes, and strict objects. Communication
+cursors are opaque and filter-bound. Known service errors translate to bounded
+tRPC results:
 
-- **Server-selected public tenant:** the fixed fixture identity enables a
-  signed-out assessment path without creating caller-selected multi-tenant
-  authority. The fixture validates the complete fixed actor, user, account and
-  brand scopes, grants, membership version, verified-claims binding, retrieval
-  scope, and authorization epoch—not only the tenant ID. Durable authenticated
-  deployments replace the injected context, not request schemas.
-- **Strict rejection instead of stripping:** unknown input fields and authority
-  headers fail visibly. Silent stripping could hide an integration attempting
-  to rely on unsafe tenant/account selection.
-- **Proposal-only mutations:** the API is less convenient than a direct send or
-  Asana mutation endpoint, but approval cannot be bypassed by browser code,
-  Cursor auto-run, or a crafted API request.
-- **Frozen health compatibility:** Wave 1 froze a health schema containing
-  `foundationOnly: true`. The API preserves that wire response to avoid a
-  contract edit in this wave; active product readiness is proven by the typed
-  route and integration tests. A later contract version should rename this
-  compatibility field rather than changing it in place.
-- **Fixture state is process-local:** it is appropriate for deterministic,
-  networkless assessment behavior and injectable tests. Durable deployments
-  must inject repository-backed services; callers and contracts stay stable.
+- invalid or filter-mismatched cursor -> `BAD_REQUEST`;
+- missing durable entity -> `NOT_FOUND`;
+- stale revision/proposal -> `CONFLICT`;
+- attempted caller authority -> `FORBIDDEN`;
+- invalid product operation -> `BAD_REQUEST`.
+
+Unexpected failures are not converted into successful fixture responses.
+
+## Browser clients
+
+`@chief/api-client` centralizes the normalized `/trpc` transport and typed
+router surface. `@chief/browser-api` exposes product-oriented bounded methods
+and performs runtime result parsing. The web application uses the same-origin
+API by default or `VITE_API_BASE_URL` when explicitly configured.
+
+If the hosted API is unavailable, the UI labels a local fallback. That fallback
+can demonstrate layout/read states but cannot prepare or approve a durable
+revision. The strict hosted Playwright configuration fails before execution
+unless a deployed API is supplied and separately asserts that no local fallback
+label is present. Hosted URL validation requires HTTPS and a public host, and
+rejects credentials, query/fragment authority, single-label/private/local/
+reserved/unspecified hosts, and non-public IPv4/IPv6 ranges.
 
 ## Verification
 
-Use the repository-pinned Node `22.18.0` and pnpm `10.33.0`, then run:
+Use Node `22.18.0` and pnpm `10.33.0`:
 
 ```powershell
-node C:\Program Files\nodejs\node_modules\pnpm\bin\pnpm.cjs --filter @chief/api test
-node C:\Program Files\nodejs\node_modules\pnpm\bin\pnpm.cjs --filter @chief/api typecheck
-node C:\Program Files\nodejs\node_modules\pnpm\bin\pnpm.cjs --filter @chief/api lint
-node C:\Program Files\nodejs\node_modules\pnpm\bin\pnpm.cjs --filter @chief/api build
-node C:\Program Files\nodejs\node_modules\pnpm\bin\pnpm.cjs --filter @chief/api-client test
-node C:\Program Files\nodejs\node_modules\pnpm\bin\pnpm.cjs --filter @chief/browser-api test
+$env:PATH = 'E:\nvm\v22.18.0;' + $env:PATH
+pnpm --filter @chief/rag test
+pnpm --filter @chief/ingestion-worker test
+pnpm --filter @chief/api lint
+pnpm --filter @chief/api typecheck
+pnpm --filter @chief/api test
+pnpm --filter @chief/api build
+pnpm --filter @chief/api-client test
+pnpm --filter @chief/browser-api test
 ```
 
-The suite covers schema parity, cursor pagination, stale message/
-recommendation/draft/action-plan revisions, unsafe product origins, exact
-server authority-envelope substitution, unauthorized tenant/account inputs
-and headers, channel reconciliation/SMS threads, bounded payloads, malformed
-input, absent direct-effect procedures, and API Gateway/Lambda behavior.
+This lane proved the composition through focused local contract/integration
+tests only. It did not deploy AWS or run hosted acceptance; the parent workflow
+owns deployment, deterministic seeding, and hosted proof.
 
 ## Team Kit provenance
 
-This surface follows the Team Kit `metagross` agent with the
-`build-frontend-backends` and `apply-engineering-guidelines` skills:
-
-- TypeScript and strict Zod contracts;
-- tRPC through the AWS Lambda adapter;
-- one shared typed API client package;
-- browser interaction centralized in a reusable package;
-- Powertools observability inherited from the foundation;
-- Vitest unit and Lambda integration coverage.
-
-Material implementation run: `gpt-5.6-sol`, reasoning level `high`, inherited
-from the authoritative Chief Wave 2B outer process.
+This surface follows the Team Kit `metagross` frontend-backend boundary,
+contract-first routing, engineering, RAG, and guarded-approval practices. The
+durable composition implementation used `gpt-5.6-sol` with reasoning level
+`high`.
