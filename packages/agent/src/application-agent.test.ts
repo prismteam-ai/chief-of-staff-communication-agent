@@ -338,7 +338,7 @@ describe('Chief communication application agent', () => {
     expect(model.model.doGenerateCalls).toHaveLength(0);
   });
 
-  it('still requests context when only one cited fact supports an action', async () => {
+  it('keeps a model-selected action supported by one cited fact', async () => {
     const model = gateway([
       {
         actionType: 'reply',
@@ -360,10 +360,47 @@ describe('Chief communication application agent', () => {
 
     const result = await agent.recommend(recommendationRequest());
 
+    expect(result.recommendation.actionType).toBe('reply');
+    expect(result.recommendation.status).toBe('current');
+    expect(result.recommendation.confidence).toBe(0.67);
+    expect(result.recommendation.citations).toHaveLength(1);
+    expect(result.recommendation.missingFacts).toEqual([]);
+    expect(result.contextRequest).toBeUndefined();
+    expect(model.model.doGenerateCalls).toHaveLength(1);
+  });
+
+  it('requests context when one cited fact still has a missing fact', async () => {
+    const model = gateway([
+      {
+        actionType: 'reply',
+        urgency: 'high',
+        selectedFactIds: [communicationFact.factId],
+        missingFacts: ['the confirmed delivery date'],
+      },
+    ]);
+    const agent = new ChiefCommunicationAgent({
+      gateway: model.gateway,
+      retriever: retriever({
+        communication: [communicationFact],
+        organization_knowledge: [],
+        asana: [],
+      }),
+      recommendationHeads,
+      clock,
+    });
+
+    const result = await agent.recommend(recommendationRequest());
+
     expect(result.recommendation.actionType).toBe('request_context');
     expect(result.recommendation.status).toBe('needs_context');
-    expect(result.recommendation.confidence).toBeLessThan(0.67);
+    expect(result.recommendation.confidence).toBe(0.47);
     expect(result.recommendation.citations).toHaveLength(1);
+    expect(result.recommendation.missingFacts).toEqual([
+      'the confirmed delivery date',
+    ]);
+    expect(result.contextRequest?.missingFacts).toEqual([
+      'the confirmed delivery date',
+    ]);
     expect(model.model.doGenerateCalls).toHaveLength(1);
   });
 

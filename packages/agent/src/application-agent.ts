@@ -179,7 +179,7 @@ function confidenceFor(
   if (actionType === 'ignore_system' || actionType === 'no_action') return 0.9;
   const diversity = new Set(facts.map(({ sourceKind }) => sourceKind)).size;
   const value =
-    0.38 +
+    0.5 +
     Math.min(0.32, facts.length * 0.12) +
     Math.min(0.15, diversity * 0.05) -
     Math.min(0.5, missingFacts.length * 0.2);

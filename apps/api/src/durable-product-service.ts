@@ -2012,17 +2012,27 @@ export class DurableProductService implements ProductService {
         'STALE_REVISION',
         'The durable proposal index does not match proposal state.',
       );
+    let pendingApprovalCount = 0;
     for (const proposal of proposals) {
       if (proposal === undefined)
         throw new ProductServiceError(
           'STALE_REVISION',
           'The durable proposal index does not match proposal state.',
         );
-      await this.#assertProposalLineage(context, proposal.value);
+      try {
+        await this.#assertProposalLineage(context, proposal.value);
+      } catch (error) {
+        if (
+          error instanceof ProductServiceError &&
+          error.code === 'STALE_REVISION'
+        )
+          continue;
+        throw error;
+      }
+      if (proposal.value.status === 'pending_approval')
+        pendingApprovalCount += 1;
     }
-    return proposals.filter(
-      (proposal) => proposal?.value.status === 'pending_approval',
-    ).length;
+    return pendingApprovalCount;
   }
 
   #prepareApprovalResult(proposal: StoredProposal): PrepareDraftApprovalResult {

@@ -30,6 +30,7 @@ import {
   type DurableRetrievalPort,
   type OperationQueue,
 } from './durable-product-service.js';
+import { ProductServiceError } from './product-service.js';
 
 function sha256Text(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -503,7 +504,7 @@ describe('durable hosted product vertical', () => {
 
     expect(recommendation.recommendation).toMatchObject({
       actionType: 'reply',
-      confidence: 0.67,
+      confidence: 0.79,
       status: 'current',
     });
     await expect(
@@ -586,7 +587,7 @@ describe('durable hosted product vertical', () => {
         included: /Production cutover|SEC-4821/iu,
         excluded: /board|pipeline numbers|Unrelated Asana/iu,
         requiredText: 'Production cutover requires validation ownership.',
-        confidence: 0.72,
+        confidence: 0.84,
         citationSources: [
           'source-asana-word-but-typed-communication',
           'source-asana-launch-work',
@@ -598,7 +599,7 @@ describe('durable hosted product vertical', () => {
         excluded: /Friday launch|QA owner|SEC-4821/iu,
         requiredText:
           'Directors approved the sales outlook for the quarterly governance pack.',
-        confidence: 0.67,
+        confidence: 0.79,
         citationSources: [
           'source-communication-board-note',
           'source-communication-board-pipeline',
@@ -660,7 +661,7 @@ describe('durable hosted product vertical', () => {
     }
   });
 
-  it('abstains when only one exact topically relevant fact remains', async () => {
+  it('creates a cited draft when one exact topically relevant fact remains', async () => {
     const boardRef =
       deterministicEvaluatorIdentityV1.communications[1]
         .retrievalExactEntityRef;
@@ -688,11 +689,20 @@ describe('durable hosted product vertical', () => {
     );
 
     expect(result.recommendation).toMatchObject({
-      actionType: 'request_context',
-      confidence: 0.55,
-      status: 'needs_context',
+      actionType: 'reply',
+      confidence: 0.67,
+      status: 'current',
     });
     expect(result.recommendation.citations).toHaveLength(1);
+    expect(result).not.toHaveProperty('contextRequest');
+    await expect(
+      service.createDraft(createDurableRequestContext(), {
+        recommendationId: result.recommendation.recommendationId,
+        expectedRecommendationRevision: 1,
+      }),
+    ).resolves.toMatchObject({
+      result: { draft: { citations: result.recommendation.citations } },
+    });
   });
 
   it('maps each public thread alias to its canonical exact retrieval entity and preserves tenant isolation', async () => {
@@ -1449,6 +1459,158 @@ describe('durable hosted product vertical', () => {
         window: '7d',
       }),
     ).resolves.toMatchObject({ pendingApprovalCount: 0 });
+  });
+
+  it('omits stale pending proposals from passive metrics while direct operations reject them', async () => {
+    const repository = new MemoryDurableProductRepository();
+    const dependencies = createMemoryDurableApiDependencies({ repository });
+    const { context, draft, proposal } =
+      await preparePendingApproval(dependencies);
+    const staleService = new DurableProductService(
+      repository,
+      topicalBoundaryRetrieval([]),
+      'https://chief.example.test',
+    );
+
+    await expect(
+      staleService.dashboardMetrics(context, { window: '7d' }),
+    ).resolves.toMatchObject({ pendingApprovalCount: 0 });
+    await expect(
+      staleService.prepareDraftApproval(context, {
+        draftRevisionId: draft.result.draft.draftRevisionId,
+        expectedDraftRevision: draft.result.draft.revision,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      staleService.getApprovalStatus(context, {
+        proposalId: proposal.proposalId,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      staleService.getExecutionStatus(context, {
+        proposalId: proposal.proposalId,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      staleService.approveProposal(context, {
+        proposalId: proposal.proposalId,
+        expectedProposalUpdatedAt: proposal.updatedAt,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+  });
+
+  it('omits stale approved proposals from passive metrics while direct replay remains quarantined', async () => {
+    const repository = new MemoryDurableProductRepository();
+    const dependencies = createMemoryDurableApiDependencies({ repository });
+    const { context, draft, proposal } =
+      await preparePendingApproval(dependencies);
+    const approved = await dependencies.productService.approveProposal(
+      context,
+      {
+        proposalId: proposal.proposalId,
+        expectedProposalUpdatedAt: proposal.updatedAt,
+      },
+    );
+    const staleService = new DurableProductService(
+      repository,
+      topicalBoundaryRetrieval([]),
+      'https://chief.example.test',
+    );
+
+    await expect(
+      staleService.dashboardMetrics(context, { window: '7d' }),
+    ).resolves.toMatchObject({ pendingApprovalCount: 0 });
+    await expect(
+      staleService.prepareDraftApproval(context, {
+        draftRevisionId: draft.result.draft.draftRevisionId,
+        expectedDraftRevision: draft.result.draft.revision,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      staleService.getApprovalStatus(context, {
+        proposalId: proposal.proposalId,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      staleService.getExecutionStatus(context, {
+        proposalId: proposal.proposalId,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      staleService.approveProposal(context, {
+        proposalId: proposal.proposalId,
+        expectedProposalUpdatedAt: approved.updatedAt,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+  });
+
+  it('fails passive metrics closed for malformed indexes and missing indexed state', async () => {
+    const malformedIndexRepository = new MemoryDurableProductRepository();
+    await malformedIndexRepository.putRevision(
+      durableEvaluatorAuthority.tenantId,
+      {
+        entityType: 'proposal-index',
+        entityId: 'public-evaluator',
+        revisionId: 'malformed-index:1',
+        version: 1,
+        committedAt: '2026-07-18T08:00:00.000Z',
+        value: { schemaVersion: '1', proposalIds: ['z', 'a'] },
+      },
+    );
+    const malformedIndex = createMemoryDurableApiDependencies({
+      repository: malformedIndexRepository,
+    });
+    await expect(
+      malformedIndex.productService.dashboardMetrics(
+        createDurableRequestContext(),
+        { window: '7d' },
+      ),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+
+    const missingStateRepository = new MemoryDurableProductRepository();
+    await missingStateRepository.putRevision(
+      durableEvaluatorAuthority.tenantId,
+      {
+        entityType: 'proposal-index',
+        entityId: 'public-evaluator',
+        revisionId: 'missing-state-index:1',
+        version: 1,
+        committedAt: '2026-07-18T08:00:00.000Z',
+        value: { schemaVersion: '1', proposalIds: ['proposal_missing'] },
+      },
+    );
+    const missingState = createMemoryDurableApiDependencies({
+      repository: missingStateRepository,
+    });
+    await expect(
+      missingState.productService.dashboardMetrics(
+        createDurableRequestContext(),
+        { window: '7d' },
+      ),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+  });
+
+  it('fails passive metrics closed when lineage validation raises a non-stale error', async () => {
+    const repository = new MemoryDurableProductRepository();
+    const dependencies = createMemoryDurableApiDependencies({ repository });
+    const { context } = await preparePendingApproval(dependencies);
+    const unavailable = new DurableProductService(
+      repository,
+      {
+        search: () =>
+          Promise.reject(
+            new ProductServiceError(
+              'FORBIDDEN_AUTHORITY',
+              'Retrieval authority is unavailable.',
+            ),
+          ),
+      },
+      'https://chief.example.test',
+    );
+
+    await expect(
+      unavailable.dashboardMetrics(context, { window: '7d' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN_AUTHORITY' });
   });
 
   it('rejects stale recommendation revisions for context and Asana preparation', async () => {

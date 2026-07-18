@@ -415,9 +415,17 @@ test.describe('signed-out evaluator journey', () => {
     await expect(page.getByTestId('thread-detail')).toContainText(
       /answered|pending|overdue/i,
     );
-    await expect(
-      page.getByRole('region', { name: 'Related Asana work' }),
-    ).toContainText(/SEC-4821/i);
+    const durableHosted = await page
+      .getByText('Durable hosted evaluator data.')
+      .isVisible();
+    const relatedAsana = page.getByRole('region', {
+      name: 'Related Asana work',
+    });
+    if (durableHosted) {
+      await expect(relatedAsana).toHaveCount(0);
+    } else {
+      await expect(relatedAsana).toContainText(/SEC-4821/i);
+    }
     await expectNoCredentialLeakage(page);
   });
 
@@ -432,9 +440,20 @@ test.describe('signed-out evaluator journey', () => {
     );
     await expect(page.getByTestId('confidence')).toContainText(/confidence|%/i);
     const citations = page.locator('[data-testid^="citation-"]');
-    expect(await citations.count()).toBeGreaterThanOrEqual(2);
+    const durableHosted = await page
+      .getByText('Durable hosted evaluator data.')
+      .isVisible();
+    expect(await citations.count()).toBeGreaterThanOrEqual(
+      durableHosted ? 1 : 2,
+    );
     for (const citation of await citations.all()) {
       await expect(citation).not.toBeEmpty();
+      if (durableHosted) {
+        await expect(citation).not.toContainText(/asana|SEC-4821/i);
+        expect(await citation.getAttribute('data-testid')).not.toMatch(
+          /asana|SEC-4821/i,
+        );
+      }
     }
     await page
       .getByRole('button', { name: 'Request additional context' })
