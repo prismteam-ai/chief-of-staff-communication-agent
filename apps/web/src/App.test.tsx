@@ -183,7 +183,7 @@ function arrangeHostedProjection() {
       channel,
       status: 'active',
       health: 'healthy',
-      runtimeMode: 'fixture',
+      runtimeMode: channel === 'linkedin_archive' ? 'manual' : 'fixture',
       selectionState: 'selected',
       capabilities: {
         read: true,
@@ -718,14 +718,20 @@ describe('executive evaluator application', () => {
       '7 hosted connector cards',
     );
     expect(screen.getByTestId('hosted-seed-recorded-count').textContent).toBe(
-      '0 hosted evidence cards',
+      '1 hosted evidence card',
     );
     expect(screen.getByTestId('hosted-seed-blocked-count').textContent).toBe(
       '0 hosted connector cards',
     );
     expect(screen.getByTestId('connection-count-recorded').textContent).toBe(
-      '0 hosted evidence cards',
+      '1 hosted evidence cards',
     );
+    expect(screen.getByTestId('connection-count-fixture').textContent).toBe(
+      '6 hosted fixture connector cards',
+    );
+    expect(
+      screen.getByTestId('capability-mode-linkedin_archive').textContent,
+    ).toContain('Recorded evidence');
     expect(screen.getByTestId('connection-count-blocked').textContent).toBe(
       '0 hosted blocked cards',
     );

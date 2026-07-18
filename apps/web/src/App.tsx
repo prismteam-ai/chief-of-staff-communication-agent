@@ -2539,11 +2539,11 @@ function ConnectionsPage({
   const isHosted = projection.source === 'hosted_durable';
   const hostedSeedCounts = isHosted
     ? {
-        fixture: modeCount('fixture'),
+        sourceOwnedFixture: projection.connectors.length,
         recorded: modeCount('recorded'),
         blocked: modeCount('blocked'),
       }
-    : { fixture: 1, recorded: 0, blocked: 0 };
+    : { sourceOwnedFixture: 1, recorded: 0, blocked: 0 };
 
   return (
     <div className="page">
@@ -2568,15 +2568,16 @@ function ConnectionsPage({
         </p>
         <dl>
           <div>
-            <dt>Fixture</dt>
+            <dt>Source-owned fixture</dt>
             <dd data-testid="hosted-seed-fixture-count">
-              {hostedSeedCounts.fixture} hosted connector cards
+              {hostedSeedCounts.sourceOwnedFixture} hosted connector cards
             </dd>
           </div>
           <div>
             <dt>Recorded</dt>
             <dd data-testid="hosted-seed-recorded-count">
-              {hostedSeedCounts.recorded} hosted evidence cards
+              {hostedSeedCounts.recorded} hosted evidence{' '}
+              {hostedSeedCounts.recorded === 1 ? 'card' : 'cards'}
             </dd>
           </div>
           <div>

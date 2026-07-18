@@ -61,7 +61,7 @@ const fixtureConnectors = [
   channel,
   status: 'active',
   health: 'healthy',
-  runtimeMode: 'fixture',
+  runtimeMode: channel === 'linkedin_archive' ? 'manual' : 'fixture',
   selectionState: 'selected',
   capabilities: fixtureConnectorCapabilities,
   lastSyncAt: '2026-07-17T09:00:00.000Z',
@@ -307,7 +307,7 @@ test.describe('signed-out evaluator journey', () => {
       '7 hosted connector cards',
     );
     await expect(page.getByTestId('hosted-seed-recorded-count')).toHaveText(
-      '0 hosted evidence cards',
+      '1 hosted evidence card',
     );
     await expect(page.getByTestId('hosted-seed-blocked-count')).toHaveText(
       '0 hosted connector cards',
