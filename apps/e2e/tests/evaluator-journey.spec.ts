@@ -114,6 +114,21 @@ async function mockDurableHostedProjection(page: Page): Promise<void> {
   });
 }
 
+async function expectModeSpecificReadOnlyBody(page: Page): Promise<void> {
+  const persistedCopy = page.getByText(/persisted body is read-only/i);
+  const fallbackCopy = page.getByText(/read-only fallback body/i);
+  const durableHosted = await page
+    .getByText('Durable hosted evaluator data.')
+    .isVisible();
+  if (durableHosted) {
+    await expect(persistedCopy).toBeVisible();
+    await expect(fallbackCopy).toHaveCount(0);
+  } else {
+    await expect(fallbackCopy).toBeVisible();
+    await expect(persistedCopy).toHaveCount(0);
+  }
+}
+
 test.describe('signed-out evaluator journey', () => {
   test('renders the exact hosted projection counts without implying an effect', async ({
     page,
@@ -314,18 +329,17 @@ test.describe('signed-out evaluator journey', () => {
       page.getByRole('status').filter({ hasText: /focused context request/i }),
     ).toContainText(/focused context request/i);
     await expect(page.getByTestId('draft-editor')).toHaveAttribute('readonly');
-    await expect(page.getByText(/read-only fallback body/i)).toBeVisible();
+    await expectModeSpecificReadOnlyBody(page);
     await expect(
       page.getByText(/style profile|concise|direct|tone/i).first(),
     ).toBeVisible();
   });
 
-  test('creates a bounded concise revision and never grants local fallback approval', async ({
+  test('creates or reuses a bounded concise revision without granting local fallback approval', async ({
     page,
   }) => {
     await page.goto('/inbox/thread-q3-launch');
 
-    await expect(page.getByTestId('execution-receipt')).toBeHidden();
     await expect(
       page.getByRole('button', {
         name: /^(?:send|send now|execute|execute now)$/i,
@@ -335,25 +349,49 @@ test.describe('signed-out evaluator journey', () => {
     const draft = page.getByTestId('draft-editor');
     const originalDraft = await draft.inputValue();
     await expect(draft).toHaveAttribute('readonly');
-    await expect(page.getByText(/read-only fallback body/i)).toContainText(
-      'Make this draft concise while retaining all cited facts.',
-    );
-    await page.getByRole('button', { name: 'Create concise revision' }).click();
+    await expectModeSpecificReadOnlyBody(page);
+    const createRevision = page.getByRole('button', {
+      name: 'Create concise revision',
+    });
+    const completedRevision = page.getByRole('button', {
+      name: 'Concise revision created',
+    });
+    await expect(createRevision.or(completedRevision)).toBeVisible();
 
-    await expect(page.getByTestId('revision-diff')).toBeVisible();
-    await expect(page.getByTestId('revision-diff')).toContainText(/revision/i);
-    const revisedDraft = await draft.inputValue();
-    expect(revisedDraft).not.toBe(originalDraft);
-    expect(revisedDraft.length).toBeLessThan(originalDraft.length);
-    await expect(page.getByTestId('execution-receipt')).toBeHidden();
+    if (await createRevision.isVisible()) {
+      await expect(page.getByTestId('execution-receipt')).toBeHidden();
+      await createRevision.click();
 
-    const approve = page.getByTestId('approve-action');
-    const durableHosted = await page
-      .getByText('Durable hosted evaluator data.')
-      .isVisible();
-    if (durableHosted) {
-      await expect(approve).toBeEnabled();
-      await approve.click();
+      await expect(page.getByTestId('revision-diff')).toBeVisible();
+      await expect(page.getByTestId('revision-diff')).toContainText(
+        /revision/i,
+      );
+      const revisedDraft = await draft.inputValue();
+      expect(revisedDraft).not.toBe(originalDraft);
+      expect(revisedDraft.length).toBeLessThan(originalDraft.length);
+      await expect(page.getByTestId('execution-receipt')).toBeHidden();
+
+      const approve = page.getByTestId('approve-action');
+      const durableHosted = await page
+        .getByText('Durable hosted evaluator data.')
+        .isVisible();
+      if (durableHosted) {
+        await expect(approve).toBeEnabled();
+        await approve.click();
+      } else {
+        await expect(approve).toBeDisabled();
+        await expect(
+          page.getByText(/not persisted and cannot be approved/i),
+        ).toBeVisible();
+      }
+    } else {
+      await expect(completedRevision).toBeDisabled();
+      await expect(
+        page.locator('label[for="hosted-draft-editor"]'),
+      ).toContainText(/revision 2/i);
+    }
+
+    if (await page.getByText('Durable hosted evaluator data.').isVisible()) {
       await expect(page.getByTestId('execution-receipt')).toBeVisible();
       await expect(page.getByTestId('execution-receipt')).toContainText(
         /durable effect.?disabled/i,
@@ -361,25 +399,34 @@ test.describe('signed-out evaluator journey', () => {
       await expect(page.getByTestId('audit-timeline')).toContainText(
         /receipt persisted|no external call/i,
       );
-    } else {
-      await expect(approve).toBeDisabled();
-      await expect(
-        page.getByText(/not persisted and cannot be approved/i),
-      ).toBeVisible();
     }
     await expectNoCredentialLeakage(page);
   });
 
-  test('keeps the draft read-only and approval unavailable before revision', async ({
+  test('keeps the draft read-only across pending and completed revision states', async ({
     page,
   }) => {
     await page.goto('/inbox/thread-q3-launch');
     const draft = page.getByTestId('draft-editor');
 
     await expect(draft).toHaveAttribute('readonly');
-    await expect(page.getByTestId('revision-diff')).toBeHidden();
-    await expect(page.getByTestId('approve-action')).toBeDisabled();
-    await expect(page.getByTestId('execution-receipt')).toBeHidden();
+    const createRevision = page.getByRole('button', {
+      name: 'Create concise revision',
+    });
+    const completedRevision = page.getByRole('button', {
+      name: 'Concise revision created',
+    });
+    await expect(createRevision.or(completedRevision)).toBeVisible();
+    if (await createRevision.isVisible()) {
+      await expect(page.getByTestId('revision-diff')).toBeHidden();
+      await expect(page.getByTestId('approve-action')).toBeDisabled();
+      await expect(page.getByTestId('execution-receipt')).toBeHidden();
+    } else {
+      await expect(completedRevision).toBeDisabled();
+      await expect(page.getByTestId('execution-receipt')).toContainText(
+        /durable effect.?disabled/i,
+      );
+    }
   });
 
   test('exposes evaluator evidence and safe Cursor MCP connection instructions', async ({

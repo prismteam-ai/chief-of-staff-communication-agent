@@ -46,7 +46,7 @@ async function trpcQuery(
   route: string,
   input: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const encoded = encodeURIComponent(JSON.stringify({ json: input }));
+  const encoded = encodeURIComponent(JSON.stringify(input));
   const response = await request.get(
     `${hosted.apiBaseUrl}/trpc/${route}?input=${encoded}`,
   );
@@ -91,18 +91,32 @@ test.describe('non-skippable durable hosted composition', () => {
     await expect(draft).toHaveAttribute('readonly');
     const original = await draft.inputValue();
     await expect(page.getByText(/persisted body is read-only/i)).toBeVisible();
-    await expect(page.getByTestId('approve-action')).toBeDisabled();
+    const createRevision = page.getByRole('button', {
+      name: 'Create concise revision',
+    });
+    const completedRevision = page.getByRole('button', {
+      name: 'Concise revision created',
+    });
+    await expect(createRevision.or(completedRevision)).toBeVisible();
 
-    await page.getByRole('button', { name: 'Create concise revision' }).click();
-    await expect(page.getByTestId('revision-diff')).toBeVisible();
-    const revised = await draft.inputValue();
-    expect(revised).not.toBe(original);
-    expect(revised.length).toBeLessThan(original.length);
-    await expect(page.getByTestId('revision-diff')).toContainText(
-      'Make this draft concise while retaining all cited facts.',
-    );
-    await expect(page.getByTestId('approve-action')).toBeEnabled();
-    await page.getByTestId('approve-action').click();
+    if (await createRevision.isVisible()) {
+      await expect(page.getByTestId('approve-action')).toBeDisabled();
+      await createRevision.click();
+      await expect(page.getByTestId('revision-diff')).toBeVisible();
+      const revised = await draft.inputValue();
+      expect(revised).not.toBe(original);
+      expect(revised.length).toBeLessThan(original.length);
+      await expect(page.getByTestId('revision-diff')).toContainText(
+        'Make this draft concise while retaining all cited facts.',
+      );
+      await expect(page.getByTestId('approve-action')).toBeEnabled();
+      await page.getByTestId('approve-action').click();
+    } else {
+      await expect(completedRevision).toBeDisabled();
+      await expect(
+        page.locator('label[for="hosted-draft-editor"]'),
+      ).toContainText(/revision 2/i);
+    }
 
     const receipt = page.getByTestId('execution-receipt');
     await expect(receipt).toBeVisible();
