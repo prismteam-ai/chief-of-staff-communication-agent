@@ -154,6 +154,19 @@ upserts. Epoch-transition coverage additionally proves monotonic authority,
 epoch-qualified catalog isolation, old-epoch denial, fresh new-epoch promotion,
 transactional epoch/head fencing, and stale-writer rejection.
 
+These local suites use deterministic in-memory AWS-port adapters. They prove
+the application contracts and recovery decisions, not AWS service enforcement
+of DynamoDB transactions, S3 versioning, KMS policies, or Object Lock. Template
+assertions and post-deployment checks are the separate evidence for those AWS
+properties.
+
+After a fresh product-stack deployment, run the executable
+[`seed:evaluator-retrieval`](deterministic-evaluator-seed.md) operator command.
+It uses this exact writer, bounded catalog, compactor, CAS, and reader-validation
+composition for the fixed evaluator authority. The command is idempotent,
+prints a non-secret JSON identity, and rejects stale/mixed state before staging;
+no console write or hosted in-memory retrieval fallback is required.
+
 ### Durable API approval composition
 
 The fixed deterministic non-PII evaluator projection is seeded through the core

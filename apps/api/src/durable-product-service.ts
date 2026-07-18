@@ -7,15 +7,14 @@ import type {
 import { deterministicId } from '@chief/agent/canonical';
 
 import {
-  accountIdSchema,
   attemptIdSchema,
-  brandIdSchema,
   citationSchema,
   communicationDetailViewSchema,
   communicationSummaryViewSchema,
   connectorStatusViewSchema,
   connectorSnapshotSchema,
   contextRequestSchema,
+  deterministicEvaluatorIdentityV1,
   getApprovalStatusResultSchema,
   getCommunicationResultSchema,
   getConnectorStatusResultSchema,
@@ -27,8 +26,6 @@ import {
   searchKnowledgeResultSchema,
   serverRequestContextSchema,
   threadContextViewSchema,
-  tenantIdSchema,
-  userIdSchema,
   workObjectFactSchema,
   type ActionPlan,
   type CommunicationDetailView,
@@ -64,10 +61,10 @@ import {
   type ProductService,
 } from './product-service.js';
 
-const TENANT_ID = tenantIdSchema.parse('tenant_public_assessment');
-const USER_ID = userIdSchema.parse('user_public_evaluator');
-const ACCOUNT_ID = accountIdSchema.parse('account-gmail-fixture');
-const BRAND_ID = brandIdSchema.parse('brand-executive');
+const TENANT_ID = deterministicEvaluatorIdentityV1.tenantId;
+const USER_ID = deterministicEvaluatorIdentityV1.userId;
+const ACCOUNT_ID = deterministicEvaluatorIdentityV1.accountId;
+const BRAND_ID = deterministicEvaluatorIdentityV1.brandId;
 const SEED_AT = '2026-07-17T12:00:00.000Z';
 const EXPIRES_AT = '2099-01-01T00:00:00.000Z';
 const RECIPIENT_DIGEST = `h1_v1_${'A'.repeat(43)}`;
@@ -147,12 +144,14 @@ function citation(sourceId: string, chunkId: string, label: string): Citation {
 }
 
 function createSeed(baseUrl: string): SeedProjection {
+  const launchIdentity = deterministicEvaluatorIdentityV1.communications[0];
+  const boardIdentity = deterministicEvaluatorIdentityV1.communications[1];
   const summaries = [
     communicationSummaryViewSchema.parse({
-      messageId: 'message-1',
-      messageRevisionId: 'message-revision-1-1',
+      messageId: launchIdentity.messageId,
+      messageRevisionId: launchIdentity.messageRevisionId,
       revision: 1,
-      threadId: 'thread-1',
+      threadId: launchIdentity.productThreadAlias,
       direction: 'inbound',
       status: 'overdue',
       senderDisplayName: 'Jordan Lee',
@@ -164,10 +163,10 @@ function createSeed(baseUrl: string): SeedProjection {
       productUrl: productUrl(baseUrl, '/communications/message-revision-1-1'),
     }),
     communicationSummaryViewSchema.parse({
-      messageId: 'message-2',
-      messageRevisionId: 'message-revision-2-1',
+      messageId: boardIdentity.messageId,
+      messageRevisionId: boardIdentity.messageRevisionId,
       revision: 1,
-      threadId: 'thread-2',
+      threadId: boardIdentity.productThreadAlias,
       direction: 'inbound',
       status: 'pending',
       senderDisplayName: 'Priya Shah',
@@ -198,14 +197,14 @@ function createSeed(baseUrl: string): SeedProjection {
     connectorStatusViewSchema.parse({
       accountId: ACCOUNT_ID,
       brandId: BRAND_ID,
-      connectorId: 'gmail',
+      connectorId: deterministicEvaluatorIdentityV1.connector.connectorId,
       displayLabel: 'Deterministic evaluator Gmail data',
       provider: 'gmail',
       connectorKind: 'communication',
       channel: 'email',
       status: 'active',
       health: 'healthy',
-      runtimeMode: 'fixture',
+      runtimeMode: deterministicEvaluatorIdentityV1.connector.runtimeMode,
       selectionState: 'selected',
       capabilities: {
         read: true,
@@ -483,6 +482,16 @@ export class DurableProductService implements ProductService {
       context,
       now: this.now,
     });
+    const communicationIdentity =
+      deterministicEvaluatorIdentityV1.communications.find(
+        ({ messageRevisionId }) =>
+          messageRevisionId === detail.messageRevisionId,
+      );
+    if (communicationIdentity === undefined)
+      throw new ProductServiceError(
+        'NOT_FOUND',
+        'Evaluator communication identity was not found.',
+      );
     const artifact = await agent.recommend({
       tenantId: TENANT_ID,
       userId: USER_ID,
@@ -493,7 +502,7 @@ export class DurableProductService implements ProductService {
       subject: detail.subject,
       authoredText: detail.authoredText,
       scopeHash: context.retrievalScope?.scopeHash ?? sha256('missing-scope'),
-      exactEntityRefs: [`thread:${detail.threadId}`],
+      exactEntityRefs: [communicationIdentity.retrievalExactEntityRef],
       styleExamples: [
         {
           exampleId: 'approved-style-example-1',

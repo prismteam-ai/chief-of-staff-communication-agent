@@ -4,6 +4,7 @@ export * from './approval.js';
 export * from './communications.js';
 export * from './connectors.js';
 export * from './errors.js';
+export * from './evaluator.js';
 export * from './events.js';
 export * from './foundation.js';
 export * from './ids.js';

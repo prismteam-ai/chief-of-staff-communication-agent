@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { messageRevisionIdSchema } from '@chief/contracts';
+import {
+  deterministicEvaluatorIdentityV1,
+  messageRevisionIdSchema,
+  serverRequestContextSchema,
+  tenantIdSchema,
+} from '@chief/contracts';
 import type { RecommendationArtifact } from '@chief/agent/application-agent';
 import { deterministicId } from '@chief/agent/canonical';
 
@@ -12,7 +17,11 @@ import {
   MemoryDurableProductRepository,
   type AtomicRevisionWithExactLookup,
 } from './durable-product-repository.js';
-import { durableEvaluatorAuthority } from './durable-product-service.js';
+import {
+  durableEvaluatorAuthority,
+  DurableProductService,
+  type DurableRetrievalPort,
+} from './durable-product-service.js';
 
 class FailFirstAtomicDraftCommitRepository extends MemoryDurableProductRepository {
   #fail = true;
@@ -53,6 +62,58 @@ async function preparePendingApproval(dependencies: ApiDependencies) {
 }
 
 describe('durable hosted product vertical', () => {
+  it('maps each public thread alias to its canonical exact retrieval entity and preserves tenant isolation', async () => {
+    const context = createDurableRequestContext();
+    for (const identity of deterministicEvaluatorIdentityV1.communications) {
+      let observedExactRefs: readonly string[] | undefined;
+      const retrieval: DurableRetrievalPort = {
+        search: (_context, input) => {
+          observedExactRefs = input.exactEntityRefs;
+          return Promise.reject(new Error('EXACT_ENTITY_CAPTURED'));
+        },
+      };
+      const service = new DurableProductService(
+        new MemoryDurableProductRepository(),
+        retrieval,
+        'https://chief.example.test',
+      );
+      const listed = await service.listCommunications(context, { limit: 10 });
+      const communication = listed.items.find(
+        ({ messageRevisionId }) =>
+          messageRevisionId === identity.messageRevisionId,
+      );
+      expect(communication?.threadId).toBe(identity.productThreadAlias);
+      expect(JSON.stringify(communication)).not.toContain('evaluator-thread');
+
+      await expect(
+        service.recommendAction(context, {
+          messageRevisionId: identity.messageRevisionId,
+          expectedMessageRevision: 1,
+        }),
+      ).rejects.toThrow('EXACT_ENTITY_CAPTURED');
+      expect(observedExactRefs).toEqual([identity.retrievalExactEntityRef]);
+    }
+
+    const foreignTenantId = tenantIdSchema.parse('tenant_foreign_assessment');
+    const foreignContext = serverRequestContextSchema.parse({
+      ...context,
+      actor: { ...context.actor, tenantId: foreignTenantId },
+      retrievalScope: {
+        ...context.retrievalScope,
+        derivation: 'server_grants',
+        tenantId: foreignTenantId,
+      },
+    });
+    const isolated = new DurableProductService(
+      new MemoryDurableProductRepository(),
+      { search: () => Promise.reject(new Error('MUST_NOT_QUERY')) },
+      'https://chief.example.test',
+    );
+    await expect(
+      isolated.listCommunications(foreignContext, { limit: 10 }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN_AUTHORITY' });
+  });
+
   it('persists cited draft, exact approval, outbox receipt, and reload state', async () => {
     const repository = new MemoryDurableProductRepository();
     const timestamps = [

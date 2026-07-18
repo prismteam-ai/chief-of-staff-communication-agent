@@ -17,7 +17,7 @@
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint src",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run src"
+    "test": "pnpm --workspace-root exec turbo run build --filter=@chief/api^... && vitest run src"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "3.1089.0",

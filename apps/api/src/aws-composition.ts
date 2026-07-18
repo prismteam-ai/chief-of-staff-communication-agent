@@ -13,6 +13,7 @@ import {
 } from '@chief/rag';
 import {
   citationSchema,
+  deterministicEvaluatorIdentityV1,
   retrievalCandidateSchema,
   serverRequestContextSchema,
   type RetrievalQuery,
@@ -30,8 +31,6 @@ import {
   type OperationQueue,
 } from './durable-product-service.js';
 
-const SCOPE_HASH =
-  'b591109c0ddfc4a602f56768cbbd7df2eb9606f7d45dc986cf5ca6f914dca4f1';
 const CLAIMS_HASH =
   '34d276d72d3cd8f6f75364fc1a68f18e380d714b2dc5058d44c3be9b56d57b9b';
 
@@ -84,8 +83,8 @@ export function createDurableRequestContext() {
       tenantId: durableEvaluatorAuthority.tenantId,
       accountIds: [durableEvaluatorAuthority.accountId],
       brandIds: [durableEvaluatorAuthority.brandId],
-      authorizationEpoch: 1,
-      scopeHash: SCOPE_HASH,
+      authorizationEpoch: deterministicEvaluatorIdentityV1.authorizationEpoch,
+      scopeHash: deterministicEvaluatorIdentityV1.scopeHash,
     },
   });
 }
