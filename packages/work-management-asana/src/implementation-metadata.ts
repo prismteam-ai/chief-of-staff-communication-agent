@@ -27,7 +27,7 @@ const descriptor = workManagementDescriptorSchema.parse({
   },
   constraints: [
     'WorkManagementConnector only; never register as CommunicationConnector.',
-    'Provider I/O is constructor-injected; no credential reader, default endpoint, or live client exists in this package.',
+    'Provider I/O remains constructor-injected; the production REST transport is hard-bound to the Asana API origin and receives credentials only through an injected redacting source.',
     'Ambiguous effects freeze for reconciliation and never enter ordinary retry.',
   ],
 });

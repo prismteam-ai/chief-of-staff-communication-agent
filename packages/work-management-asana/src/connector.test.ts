@@ -56,6 +56,7 @@ import type {
 
 class ProviderShapedTransport implements AsanaTransport {
   public readonly requests: AsanaRequest[] = [];
+  public reconciliationCalls = 0;
   readonly #route: AsanaFixtureRoute;
   public reconciliation:
     | Awaited<ReturnType<NonNullable<AsanaTransport['reconcileEffect']>>>
@@ -75,6 +76,7 @@ class ProviderShapedTransport implements AsanaTransport {
   }
 
   public reconcileEffect = () => {
+    this.reconciliationCalls += 1;
     if (this.reconciliation === undefined) {
       return Promise.resolve({
         outcome: 'unknown' as const,
@@ -775,6 +777,203 @@ describe('Asana WorkManagementConnector', () => {
         (request) => request.path === '/tasks' && request.method === 'POST',
       ),
     ).toHaveLength(1);
+  });
+
+  it('requires comment preconditions and exact in-scope preflight bindings before mutation', async () => {
+    const missingPrecondition = {
+      kind: 'create_comment',
+      taskGid: 'task-a',
+      text: 'Controlled comment',
+    } as unknown as AsanaEffectPayload;
+    const missingTransport = new ProviderShapedTransport();
+    const missingConnector = new AsanaWorkManagementConnector(
+      options(missingTransport, missingPrecondition),
+    );
+    await expect(
+      missingConnector.execute(
+        accountRef(),
+        asanaFixtureArtifact(missingPrecondition, 'comment-no-precondition'),
+      ),
+    ).rejects.toThrow('ASANA_EFFECT_PRECONDITION_REQUIRED');
+    expect(missingTransport.requests).toHaveLength(0);
+
+    const commentPayload: AsanaEffectPayload = {
+      kind: 'create_comment',
+      taskGid: 'task-a',
+      text: 'Controlled comment',
+      precondition: { modifiedAt: ASANA_FIXTURE_NOW },
+    };
+    const outsideTransport = new ProviderShapedTransport((request) =>
+      request.method === 'GET' && request.path === '/tasks/task-a'
+        ? providerResponse(200, {
+            data: {
+              ...asanaFixtureTask.data,
+              workspace: { gid: 'workspace-other' },
+              memberships: [{ project: { gid: 'project-other' } }],
+            },
+          })
+        : defaultRoute(request),
+    );
+    const outsideConnector = new AsanaWorkManagementConnector(
+      options(outsideTransport, commentPayload),
+    );
+    await expect(
+      outsideConnector.execute(
+        accountRef(),
+        asanaFixtureArtifact(commentPayload, 'comment-outside-scope'),
+      ),
+    ).rejects.toThrow('ASANA_TASK_SCOPE_REJECTED');
+    expect(
+      outsideTransport.requests.filter(({ method }) => method === 'POST'),
+    ).toHaveLength(0);
+
+    const mismatchedTransport = new ProviderShapedTransport((request) =>
+      request.method === 'GET' && request.path === '/tasks/task-a'
+        ? providerResponse(200, {
+            data: { ...asanaFixtureTask.data, gid: 'task-other' },
+          })
+        : defaultRoute(request),
+    );
+    const mismatchedConnector = new AsanaWorkManagementConnector(
+      options(mismatchedTransport, asanaFixtureUpdatePayload),
+    );
+    await expect(
+      mismatchedConnector.execute(
+        accountRef(),
+        asanaFixtureArtifact(
+          asanaFixtureUpdatePayload,
+          'update-mismatched-preflight',
+        ),
+      ),
+    ).rejects.toThrow('ASANA_OBJECT_BINDING_MISMATCH');
+    expect(
+      mismatchedTransport.requests.filter(({ method }) => method === 'PUT'),
+    ).toHaveLength(0);
+
+    const mismatchedUpdateResult = new ProviderShapedTransport((request) =>
+      request.method === 'PUT' && request.path === '/tasks/task-a'
+        ? providerResponse(200, { data: { gid: 'task-other' } })
+        : defaultRoute(request),
+    );
+    const resultConnector = new AsanaWorkManagementConnector(
+      options(mismatchedUpdateResult, asanaFixtureUpdatePayload),
+    );
+    await expect(
+      resultConnector.execute(
+        accountRef(),
+        asanaFixtureArtifact(
+          asanaFixtureUpdatePayload,
+          'update-mismatched-result',
+        ),
+      ),
+    ).rejects.toThrow('ASANA_OBJECT_BINDING_MISMATCH');
+    expect(
+      mismatchedUpdateResult.requests.filter(({ method }) => method === 'PUT'),
+    ).toHaveLength(1);
+  });
+
+  it('keeps update reconciliation bound to exact in-scope task identity', async () => {
+    for (const [name, task] of [
+      [
+        'outside scope',
+        {
+          ...asanaFixtureTask.data,
+          workspace: { gid: 'workspace-other' },
+          memberships: [{ project: { gid: 'project-other' } }],
+        },
+      ],
+      ['mismatched gid', { ...asanaFixtureTask.data, gid: 'task-other' }],
+    ] as const) {
+      const transport = new ProviderShapedTransport((request) =>
+        request.method === 'GET' && request.path === '/tasks/task-a'
+          ? providerResponse(200, { data: task })
+          : defaultRoute(request),
+      );
+      const connector = new AsanaWorkManagementConnector(
+        options(transport, asanaFixtureUpdatePayload),
+      );
+      await expect(
+        connector.reconcileEffect(
+          accountRef(),
+          asanaFixtureArtifact(
+            asanaFixtureUpdatePayload,
+            `reconcile-${name.replace(' ', '-')}`,
+          ),
+        ),
+      ).rejects.toThrow(
+        name === 'outside scope'
+          ? 'ASANA_TASK_SCOPE_REJECTED'
+          : 'ASANA_OBJECT_BINDING_MISMATCH',
+      );
+      expect(transport.reconciliationCalls).toBe(0);
+    }
+
+    const correlationMismatch = new ProviderShapedTransport();
+    correlationMismatch.reconciliation = {
+      outcome: 'accepted',
+      gid: 'task-other',
+      response: { data: { gid: 'task-other' } },
+    };
+    const connector = new AsanaWorkManagementConnector(
+      options(correlationMismatch, asanaFixtureUpdatePayload),
+    );
+    await expect(
+      connector.reconcileEffect(
+        accountRef(),
+        asanaFixtureArtifact(
+          asanaFixtureUpdatePayload,
+          'reconcile-correlation-mismatch',
+        ),
+      ),
+    ).rejects.toThrow('ASANA_OBJECT_BINDING_MISMATCH');
+  });
+
+  it('preflights exact project identity and workspace scope before create reconciliation', async () => {
+    const createPayload: AsanaEffectPayload = {
+      kind: 'create_task',
+      workspaceGid: 'workspace-a',
+      projectGid: 'project-a',
+      fields: { name: 'Controlled reconciliation task' },
+    };
+    for (const [name, project] of [
+      [
+        'outside scope',
+        {
+          ...asanaFixtureProject.data,
+          workspace: { gid: 'workspace-other' },
+        },
+      ],
+      [
+        'mismatched gid',
+        {
+          ...asanaFixtureProject.data,
+          gid: 'project-other',
+        },
+      ],
+    ] as const) {
+      const transport = new ProviderShapedTransport((request) =>
+        request.method === 'GET' && request.path === '/projects/project-a'
+          ? providerResponse(200, { data: project })
+          : defaultRoute(request),
+      );
+      const connector = new AsanaWorkManagementConnector(
+        options(transport, createPayload),
+      );
+      await expect(
+        connector.reconcileEffect(
+          accountRef(),
+          asanaFixtureArtifact(
+            createPayload,
+            `create-reconcile-${name.replace(' ', '-')}`,
+          ),
+        ),
+      ).rejects.toThrow(
+        name === 'outside scope'
+          ? 'ASANA_PROJECT_SCOPE_REJECTED'
+          : 'ASANA_OBJECT_BINDING_MISMATCH',
+      );
+      expect(transport.reconciliationCalls).toBe(0);
+    }
   });
 
   it('returns heartbeat-linked subscription facts without replacing the webhook', async () => {

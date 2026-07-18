@@ -22,6 +22,7 @@ export interface AsanaRequest {
   readonly body?: unknown;
   readonly account: ConnectorAccountRef;
   readonly operationId?: string;
+  readonly signal?: AbortSignal;
 }
 
 export interface AsanaResponse {
@@ -36,7 +37,31 @@ export interface AsanaTransport {
     account: ConnectorAccountRef,
     artifact: EffectExecutionArtifact,
     payload: AsanaEffectPayload,
+    signal?: AbortSignal,
   ): Promise<AsanaReconciliationResult>;
+}
+
+/**
+ * Keeps the bearer credential inside an operator/runtime-owned boundary. The
+ * transport receives the token only for the duration of one request and never
+ * stores it on the transport instance or exposes it through an error/result.
+ */
+export interface AsanaCredentialSource {
+  withBearerToken<T>(
+    account: ConnectorAccountRef,
+    use: (token: string) => Promise<T>,
+  ): Promise<T>;
+}
+
+export interface AsanaTransportEvidence {
+  readonly method: AsanaRequest['method'];
+  readonly status: number;
+  readonly requestId?: string;
+  readonly retryAfterSeconds?: number;
+}
+
+export interface AsanaTransportEvidenceSink {
+  record(evidence: AsanaTransportEvidence): void;
 }
 
 export type AsanaReconciliationResult =
@@ -79,7 +104,7 @@ export interface AsanaCreateCommentPayload {
   readonly kind: 'create_comment';
   readonly taskGid: string;
   readonly text: string;
-  readonly precondition?: Readonly<{ modifiedAt: string }>;
+  readonly precondition: Readonly<{ modifiedAt: string }>;
 }
 
 export type AsanaEffectPayload =
@@ -105,6 +130,7 @@ export interface AsanaConnectorOptions {
   readonly webhookVerificationKey: string;
   readonly webhookTargetUrl: string;
   readonly clock: AsanaClock;
+  readonly signal?: AbortSignal;
 }
 
 export interface AsanaWebhookEvent {

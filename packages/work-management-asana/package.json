@@ -8,12 +8,17 @@
       "types": "./src/index.ts",
       "default": "./dist/index.js"
     },
-    "./*": {
-      "types": "./src/*.ts",
-      "default": "./dist/*.js"
+    "./acceptance": {
+      "types": "./src/acceptance.ts",
+      "default": "./dist/acceptance.js"
+    },
+    "./acceptance-cli": {
+      "types": "./src/acceptance-cli.ts",
+      "default": "./dist/acceptance-cli.js"
     }
   },
   "scripts": {
+    "accept": "node dist/acceptance-cli.js",
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint src",
     "typecheck": "tsc -p tsconfig.json --noEmit",

@@ -490,7 +490,7 @@ export class AsanaWorkManagementConnector {
     const payload =
       await this.#options.effectPayloads.loadExactPayload(artifact);
     this.#assertPayload(artifact, payload);
-    if (payload.kind !== 'create_task' && payload.precondition !== undefined) {
+    if (payload.kind !== 'create_task') {
       await this.#assertPrecondition(
         account,
         payload.taskGid,
@@ -516,7 +516,15 @@ export class AsanaWorkManagementConnector {
         observedAt: this.#options.clock.now(),
       });
     }
-    return this.#effectResult(response);
+    const result = this.#effectResult(response);
+    if (
+      result.outcome === 'accepted' &&
+      payload.kind === 'update_task' &&
+      result.providerCorrelation !== payload.taskGid
+    ) {
+      throw new AsanaConnectorError('ASANA_OBJECT_BINDING_MISMATCH');
+    }
+    return result;
   }
 
   public async reconcileEffect(
@@ -527,6 +535,11 @@ export class AsanaWorkManagementConnector {
     const payload =
       await this.#options.effectPayloads.loadExactPayload(artifact);
     this.#assertPayload(artifact, payload);
+    if (payload.kind === 'create_task' && payload.projectGid !== undefined) {
+      await this.#assertProjectReconciliationScope(account, payload.projectGid);
+    } else if (payload.kind !== 'create_task') {
+      await this.#assertReconciliationScope(account, payload.taskGid);
+    }
     if (this.#options.transport.reconcileEffect === undefined) {
       return providerSendResultSchema.parse({
         outcome: 'acceptance_unknown',
@@ -538,8 +551,12 @@ export class AsanaWorkManagementConnector {
       account,
       artifact,
       payload,
+      this.#options.signal,
     );
     if (result.outcome === 'accepted') {
+      if (payload.kind === 'update_task' && result.gid !== payload.taskGid) {
+        throw new AsanaConnectorError('ASANA_OBJECT_BINDING_MISMATCH');
+      }
       return providerSendResultSchema.parse({
         outcome: 'accepted',
         providerResponseHash: sha256(result.response),
@@ -628,6 +645,14 @@ export class AsanaWorkManagementConnector {
       );
     }
     if (
+      payload.kind !== 'create_task' &&
+      (payload.precondition === undefined ||
+        typeof payload.precondition.modifiedAt !== 'string' ||
+        payload.precondition.modifiedAt.length === 0)
+    ) {
+      throw new AsanaConnectorError('ASANA_EFFECT_PRECONDITION_REQUIRED');
+    }
+    if (
       payload.kind === 'create_task' &&
       (payload.workspaceGid !== this.#options.scope.workspaceGid ||
         (this.#options.scope.projectGids.length > 0 &&
@@ -653,10 +678,51 @@ export class AsanaWorkManagementConnector {
     });
     if (response.status !== 200) providerError(response);
     const data = responseData(response);
+    if (getString(data, 'gid') !== taskGid) {
+      throw new AsanaConnectorError('ASANA_OBJECT_BINDING_MISMATCH');
+    }
     this.#assertObjectScope('task', data);
     if (data.modified_at !== expectedModifiedAt) {
       throw new AsanaConnectorError('ASANA_PRECONDITION_STALE');
     }
+  }
+
+  async #assertReconciliationScope(
+    account: ConnectorAccountRef,
+    taskGid: string,
+  ): Promise<void> {
+    const response = await this.#request({
+      method: 'GET',
+      path: `/tasks/${encodeURIComponent(taskGid)}`,
+      query: {
+        opt_fields: 'gid,workspace.gid,memberships.project.gid',
+      },
+      account,
+    });
+    if (response.status !== 200) providerError(response);
+    const data = responseData(response);
+    if (getString(data, 'gid') !== taskGid) {
+      throw new AsanaConnectorError('ASANA_OBJECT_BINDING_MISMATCH');
+    }
+    this.#assertObjectScope('task', data);
+  }
+
+  async #assertProjectReconciliationScope(
+    account: ConnectorAccountRef,
+    projectGid: string,
+  ): Promise<void> {
+    const response = await this.#request({
+      method: 'GET',
+      path: `/projects/${encodeURIComponent(projectGid)}`,
+      query: { opt_fields: 'gid,workspace.gid' },
+      account,
+    });
+    if (response.status !== 200) providerError(response);
+    const data = responseData(response);
+    if (getString(data, 'gid') !== projectGid) {
+      throw new AsanaConnectorError('ASANA_OBJECT_BINDING_MISMATCH');
+    }
+    this.#assertObjectScope('project', data);
   }
 
   #effectRequest(
@@ -681,9 +747,7 @@ export class AsanaWorkManagementConnector {
         },
       };
     }
-    const headers = {
-      'if-unmodified-since': payload.precondition?.modifiedAt ?? '',
-    };
+    const headers = { 'if-unmodified-since': payload.precondition.modifiedAt };
     return payload.kind === 'update_task'
       ? {
           method: 'PUT',
@@ -787,7 +851,14 @@ export class AsanaWorkManagementConnector {
   }
 
   #request(request: AsanaRequest): Promise<AsanaResponse> {
-    return this.#options.transport.request(freezeDeep(request));
+    return this.#options.transport.request(
+      freezeDeep({
+        ...request,
+        ...(this.#options.signal === undefined
+          ? {}
+          : { signal: this.#options.signal }),
+      }),
+    );
   }
 }
 
