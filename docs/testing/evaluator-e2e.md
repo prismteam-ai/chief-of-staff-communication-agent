@@ -79,12 +79,14 @@ does not invent deployment evidence. A final hosted acceptance run must supply
 both origins (or one shared API/MCP origin) and must finish with no skipped
 health assertion.
 
-The assessed `fbfc0babb6c8c358ff6c4c8cc81b3e66865aad42` runtime release uses
+The assessed `16a36872f2ecaea82574d569fbbcf6bdc2553ba4` runtime release uses
 `https://d3hgq3e86d3knk.cloudfront.net` for the UI and
 `https://prjip3os8i.execute-api.us-east-2.amazonaws.com` for API/MCP. Its strict
 hosted run passed all 19 runnable checks, skipped 2 explicitly fixture-only
 mock-dependent scenarios, and had 0 failures. Neither health assertion was
-skipped.
+skipped. The run required dashboard HTTP 200, one genuine communication-backed
+citation, empty related-Asana results, no Asana/SEC-4821 citation, and equal API
+and MCP retrieval content before completing the durable approval journey.
 
 Artifacts for failures (trace, screenshot, and video) stay under
 `apps/e2e/node_modules/.cache/playwright-results`; they are ignored workspace

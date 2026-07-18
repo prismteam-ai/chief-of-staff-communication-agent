@@ -85,16 +85,25 @@ while retaining all cited facts.` before approve/receipt/reload; also added
   adapter must verify the exact tenant/scope/epoch/role/scoring/manifest binding
   and issued source/chunk/version/epoch/evidence rows; a 64-hex string alone is
   rejected. The AWS composition now rechecks the bounded index's active stable-
-  epoch manifest and rejects altered or non-issued results. This worktree change
-  is not present in the deployed release until a parent redeploy.
+  epoch manifest and rejects altered or non-issued results.
 - Added read-time citation-lineage revalidation for persisted recommendations
   and drafts before replay, revision, context/Asana handoff, or approval
   preparation. Legacy artifacts containing absent or untrusted citations are
   quarantined with `STALE_REVISION` instead of being returned by ID.
 - Extended that quarantine to proposal replay, approval, approval status,
-  execution status, and dashboard reads. A persisted proposal must still resolve
-  through its exact draft and current trusted recommendation to the same
-  deterministic action plan before it can be returned, approved, or queued.
+  and execution status. A persisted proposal must still resolve through its
+  exact draft and current trusted recommendation to the same deterministic
+  action plan before it can be returned, approved, or queued. Passive dashboard
+  counts omit lineage-stale historical proposals so quarantine cannot make the
+  healthy corpus unavailable; malformed indexes, missing indexed state, and
+  non-stale authority errors still fail closed.
+- Recalibrated the documented confidence heuristic so one model-selected,
+  source-owned cited fact with no missing facts reaches the unchanged `0.67`
+  action threshold. Zero evidence, missing facts, unsupported fact IDs, prompt
+  injection, and model degradation still abstain or fail closed.
+- Strengthened hosted acceptance to require an empty related-Asana result and
+  no Asana/SEC-4821 citation when the durable corpus contains none, while
+  proving the genuine communication citation is identical across API and MCP.
 - Replaced fixture-only hosted API and MCP defaults with the durable product
   composition while retaining the deterministic fixed-scope evaluator data.
 - Replaced the incompatible arbitrary-sequence retrieval delta with immutable
@@ -121,6 +130,8 @@ while retaining all cited facts.` before approve/receipt/reload; also added
   public worker uses the effect-disabled sink.
 - MCP has no approval or direct-effect tool. The browser local fallback cannot
   approve and is forbidden in strict hosted acceptance.
-- The parent workflow deployed and verified assessed release
-  `fbfc0babb6c8c358ff6c4c8cc81b3e66865aad42`. Newer worktree changes are not
-  represented by that public runtime until a parent redeploy and hosted rerun.
+- The parent workflow deployed and verified assessed runtime release
+  `16a36872f2ecaea82574d569fbbcf6bdc2553ba4`. Both stacks are
+  `UPDATE_COMPLETE`; the deterministic retrieval seed returned
+  `already_current`; dashboard metrics returned HTTP 200; and strict hosted
+  acceptance passed 19 runnable checks with 2 fixture-only skips and 0 failures.

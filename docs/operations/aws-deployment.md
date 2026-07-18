@@ -1,10 +1,12 @@
 # AWS deployment
 
-Status: the assessed `fbfc0babb6c8c358ff6c4c8cc81b3e66865aad42` runtime release is
+Status: the assessed `16a36872f2ecaea82574d569fbbcf6bdc2553ba4` runtime release is
 deployed. `ChiefProductStack` and `ChiefFoundationStack` are both
 `UPDATE_COMPLETE`; scoped deterministic non-PII evaluator data is seeded; and
 strict hosted acceptance passed 19 runnable checks with 2 fixture-only skips
-and 0 failures.
+and 0 failures. The verified run required dashboard HTTP 200, no fabricated
+Asana evidence, API/MCP retrieval parity, and the durable
+revision/approval/effect-disabled-receipt journey.
 
 ## Runtime shape
 

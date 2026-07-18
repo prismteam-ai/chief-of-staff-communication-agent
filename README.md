@@ -240,10 +240,10 @@ Expected parent deployment outputs:
 - MCP endpoint: `<ChiefFoundationStack.McpUrl>`
 - MCP health: `<ChiefFoundationStack.McpHealthUrl>`
 
-The assessed `fbfc0babb6c8c358ff6c4c8cc81b3e66865aad42` runtime release is live at
-the URLs below. Changes newer than that hash, including the citation-lineage fix
-described above, are local until the parent workflow redeploys and reruns hosted
-acceptance:
+The assessed `16a36872f2ecaea82574d569fbbcf6bdc2553ba4` runtime release is live at
+the URLs below. It includes durable citation-lineage verification, quarantine
+of stale proposal replay/effects, availability-safe passive dashboard counts,
+and the truthful single-citation hosted workflow:
 
 - UI: `https://d3hgq3e86d3knk.cloudfront.net`
 - API base: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com`
@@ -253,9 +253,11 @@ acceptance:
 
 Both CloudFormation stacks are `UPDATE_COMPLETE`. The strict hosted suite
 finished with **19 runnable checks passed, 2 fixture-only checks skipped, and 0
-failed**. The runnable selection contains 18 network/product checks plus one
-interception guard; hosted mode refuses to install the mocks used by the two
-local fixture-only scenarios.
+failed**. It proved HTTP 200 dashboard/API/MCP health, a genuine
+communication-backed citation with no fabricated Asana/SEC-4821 evidence,
+durable revision/approval/effect-disabled receipt reload, and API/MCP parity.
+Hosted mode refuses to install the mocks used by the two local fixture-only
+scenarios.
 
 ## Capability scope
 
