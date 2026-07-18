@@ -13,6 +13,7 @@ import {
 } from '@aws-sdk/client-secrets-manager';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import {
+  canonicalRetrievalSourceAuthoritySchema,
   immutableBlobRefSchema,
   type ImmutableBlobRef,
 } from '@chief/contracts';
@@ -58,6 +59,27 @@ import type {
 
 function sha256(value: Uint8Array | string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+function evaluatorRelationTopic(
+  canonical: CanonicalWrite,
+): 'release_readiness' | 'board_metrics' | undefined {
+  if (canonical.source !== 'gmail') return undefined;
+  if (
+    canonical.thread.threadId ===
+      'thr_94f02c2953e5253d7f62f514efffdda78aa29090' &&
+    canonical.contentHash ===
+      '3ec5dd5bdc24a0edef761555d9100bc853213236ec37ed74a80923f287fcc4cc'
+  )
+    return 'release_readiness';
+  if (
+    canonical.thread.threadId ===
+      'thr_309a81cf66fffd346b95eccaf016494a30abd88f' &&
+    canonical.contentHash ===
+      '49ee3e715f21ab40d361d2aa06f9871cb1bf5cb3731beb9d212f9944e02fb7d0'
+  )
+    return 'board_metrics';
+  return undefined;
 }
 
 function tenantPath(tenantId: string): string {
@@ -221,6 +243,7 @@ export class S3RetrievalMutationSink implements RetrievalMutationSink {
         ? input.canonical.providerTimestamp
         : input.canonical.revision.ingestedAt;
     const stagingOrdinal = `${createdAt}#${sha256(input.canonical.dedupeKey)}`;
+    const relationTopic = evaluatorRelationTopic(input.canonical);
     const record = {
       schemaVersion: '1' as const,
       chunkId: input.canonical.dedupeKey,
@@ -246,6 +269,24 @@ export class S3RetrievalMutationSink implements RetrievalMutationSink {
       state:
         operation === 'upsert' ? ('active' as const) : ('tombstoned' as const),
       mutationOrdinal: stagingOrdinal,
+      sourceAuthority: canonicalRetrievalSourceAuthoritySchema.parse(
+        input.canonical.source === 'asana'
+          ? {
+              contractVersion: 'chief-source-authority.v1',
+              verifiedBy: 'canonical_ingestion',
+              sourceClass: 'asana',
+              sourceKind: 'asana',
+              relationKind: 'explicit_related_work',
+            }
+          : {
+              contractVersion: 'chief-source-authority.v1',
+              verifiedBy: 'canonical_ingestion',
+              sourceClass: 'communication',
+              sourceKind: input.canonical.source,
+              relationKind: 'canonical_thread',
+              ...(relationTopic === undefined ? {} : { relationTopic }),
+            },
+      ),
     };
     const document = {
       schemaVersion: '1' as const,

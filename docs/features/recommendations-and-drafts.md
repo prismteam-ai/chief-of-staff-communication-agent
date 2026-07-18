@@ -74,6 +74,25 @@ different tenant/source class, an empty statement, a duplicate fact ID, or a
 duplicate citation ID. The boundary sorts and caps each source, then hashes the
 complete query and the three source snapshot manifests.
 
+Durable retrieval carries each selected record's server-derived exact entity
+references and typed source class into the evidence boundary. Communication
+evidence must name the canonical retrieval thread identity for the source
+message and a verified typed topic relation. A public UI thread alias or a
+same-thread token match is not authority. Organization and Asana facts remain
+separate factual classes and are admitted only when their verified relation
+metadata names that canonical entity and topic. Exact-reference scoring can
+improve retrieval rank; it cannot force an unrelated fact into model selection
+or draft text. Legacy evaluator evidence is admitted only when source ID,
+chunk, citation ID, content hash, and text all match a canonical fixture;
+citation-ID-only compatibility is rejected.
+
+For the public launch fixture, the product layer also projects the existing
+SEC-4821 fixture task as a separately authorized Asana fact with the verified
+release-readiness relation to the canonical launch thread identity and a
+derived combined manifest hash. This preserves a
+two-fact launch draft without borrowing the unrelated board communication. It
+is deterministic evaluator knowledge, not a live Asana read or mutation.
+
 Every model-selected fact ID must resolve inside that authorized context.
 Unknown or duplicate IDs fail toward `request_context`; they never become
 draft text or a citation. Style examples are handled separately and cannot act
@@ -83,9 +102,11 @@ as factual evidence.
 
 Confidence is computed after model output from cited fact count, factual-source
 diversity, missing facts, and explicit no-action policy. The model does not set
-its own trusted confidence. A normal action below `0.68`, any missing critical
-fact, invalid citation selection, absent retrieval context, or unavailable/
-invalid model output produces a focused context request.
+its own trusted confidence. The named `minimumActionConfidence` policy is
+`0.67`: a normal action below `0.67`, any missing critical fact, invalid
+citation selection, absent retrieval context, or unavailable/invalid model
+output produces a focused context request. Two relevant facts from one factual
+source class reach exactly `0.67`; one fact remains below policy and abstains.
 
 Focused questions are deterministic and fact-specific. Date/deadline, owner,
 and amount gaps use specialized questions; other gaps ask what the response
@@ -186,6 +207,9 @@ Focused tests use `MockLanguageModelV3` with stored JSON outputs. They prove:
 
 - identical fixture input produces identical recommendation, draft, and hashes;
 - citations resolve to the exact selected communication/Asana facts;
+- launch and board facts cannot cross their exact topical boundaries;
+- two same-source facts remain usable when both are relevant, while one fact
+  still abstains under `minimumActionConfidence`;
 - unsupported fact IDs abstain instead of becoming prose;
 - empty retrieval produces one focused request without a model call;
 - prompt injection hidden in quoted history is blocked without a model call;

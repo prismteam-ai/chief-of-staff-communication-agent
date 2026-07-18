@@ -324,6 +324,7 @@ export class ChiefFoundationStack extends cdk.Stack {
       logGroup,
       environment: {
         ...runtimeEnvironment,
+        NODE_ENV: 'production',
         NODE_OPTIONS: '--enable-source-maps',
         POWERTOOLS_SERVICE_NAME: serviceName,
         POWERTOOLS_METRICS_NAMESPACE: 'ChiefFoundation',

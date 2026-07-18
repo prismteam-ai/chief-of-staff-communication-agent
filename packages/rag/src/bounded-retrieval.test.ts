@@ -24,9 +24,11 @@ import {
   type AuthorizationHydration,
   type BoundedRetrievalError,
   type DeltaPage,
+  type ProjectionSourceAuthority,
   type RetrievalAuthorityReader,
   type SnapshotObjectReader,
 } from './bounded-retrieval.js';
+import { parseStagedMutationObject } from './durable-retrieval.js';
 import type { RetrievalIndex } from './index.js';
 
 const sha = (value: string): string =>
@@ -58,6 +60,7 @@ interface FixtureRecord {
   readonly contentHash: string;
   readonly state: 'active' | 'tombstoned';
   readonly mutationOrdinal: string;
+  readonly sourceAuthority: ProjectionSourceAuthority;
 }
 
 const records: readonly FixtureRecord[] = [
@@ -68,13 +71,23 @@ const records: readonly FixtureRecord[] = [
     sourceVersion: '3',
     text: 'Apollo launch budget approval and active Asana milestone',
     tokenCount: 8,
-    exactEntityRefs: ['asana-task-12001', 'thread-apollo'],
+    exactEntityRefs: [
+      'asana-task-12001',
+      'thr_94f02c2953e5253d7f62f514efffdda78aa29090',
+    ],
     citationLabel: 'Apollo evidence',
     contentHash: sha(
       'Apollo launch budget approval and active Asana milestone',
     ),
     state: 'active' as const,
     mutationOrdinal: '2026-07-17T10:00:00.000Z#apollo',
+    sourceAuthority: {
+      contractVersion: 'chief-source-authority.v1',
+      verifiedBy: 'canonical_ingestion',
+      sourceClass: 'asana',
+      sourceKind: 'asana',
+      relationKind: 'explicit_related_work',
+    } as const,
   },
   {
     schemaVersion: '1' as const,
@@ -88,6 +101,13 @@ const records: readonly FixtureRecord[] = [
     contentHash: sha('Quarterly hiring plan and recruiting update'),
     state: 'active' as const,
     mutationOrdinal: '2026-07-17T10:00:00.000Z#hiring',
+    sourceAuthority: {
+      contractVersion: 'chief-source-authority.v1',
+      verifiedBy: 'canonical_ingestion',
+      sourceClass: 'communication',
+      sourceKind: 'gmail',
+      relationKind: 'canonical_thread',
+    } as const,
   },
   {
     schemaVersion: '1' as const,
@@ -101,6 +121,13 @@ const records: readonly FixtureRecord[] = [
     contentHash: sha('Apollo confidential acquisition budget'),
     state: 'tombstoned' as const,
     mutationOrdinal: '2026-07-17T10:00:00.000Z#revoked',
+    sourceAuthority: {
+      contractVersion: 'chief-source-authority.v1',
+      verifiedBy: 'canonical_ingestion',
+      sourceClass: 'communication',
+      sourceKind: 'gmail',
+      relationKind: 'canonical_thread',
+    } as const,
   },
 ].sort((left, right) =>
   Buffer.compare(Buffer.from(left.chunkId), Buffer.from(right.chunkId)),
@@ -167,6 +194,10 @@ class FixtureAuthority implements RetrievalAuthorityReader {
   public hydration = new Map<string, AuthorizationHydration>();
   public head!: RetrievalSnapshotManifest;
 
+  public constructor(
+    private readonly fixtureRecords: readonly FixtureRecord[],
+  ) {}
+
   public getSnapshotHead(
     input: RetrievalScope,
   ): Promise<RetrievalSnapshotManifest | undefined> {
@@ -188,7 +219,7 @@ class FixtureAuthority implements RetrievalAuthorityReader {
     this.exactLookups += 1;
     const refs = new Set(input.exactEntityRefs);
     return Promise.resolve(
-      records
+      this.fixtureRecords
         .filter((record) => record.exactEntityRefs.some((ref) => refs.has(ref)))
         .map((record) => record.chunkId),
     );
@@ -221,9 +252,7 @@ function buildFixture(selectedRecords: readonly FixtureRecord[] = records): {
     `${selectedRecords.map((record) => JSON.stringify(record)).join('\n')}\n`,
   );
   const vectors = vectorBytes(
-    selectedRecords.map(
-      (record) => vectorById[record.chunkId] as readonly number[],
-    ),
+    selectedRecords.map((record) => vectorById[record.chunkId] ?? [1, 0]),
   );
   const projectionRef = blob(
     'chunk-projection.jsonl',
@@ -269,7 +298,7 @@ function buildFixture(selectedRecords: readonly FixtureRecord[] = records): {
     ...base,
     manifestHash: hashManifest(base as RetrievalSnapshotManifest),
   });
-  const authority = new FixtureAuthority();
+  const authority = new FixtureAuthority(selectedRecords);
   authority.head = manifest;
   for (const record of selectedRecords) {
     authority.hydration.set(record.chunkId, {
@@ -344,6 +373,100 @@ describe('bounded DynamoDB/S3 retrieval', () => {
     expect(
       typeof (fixture.index as unknown as Record<string, unknown>).publish,
     ).toBe('undefined');
+  });
+
+  it('preserves Asana authority when its provider object ID equals the public launch thread ref', async () => {
+    const launchThreadRef = 'thr_94f02c2953e5253d7f62f514efffdda78aa29090';
+    let stagedBytes: Uint8Array | undefined;
+    const ingestionModulePath = new URL(
+      '../../../apps/ingestion-worker/src/aws-composition.ts',
+      import.meta.url,
+    ).href;
+    const { S3RetrievalMutationSink } = (await import(ingestionModulePath)) as {
+      readonly S3RetrievalMutationSink: new (objects: {
+        putImmutableObject(input: {
+          readonly bytes: Uint8Array;
+          readonly mediaType: string;
+        }): Promise<ImmutableBlobRef>;
+        getImmutableObject(ref: ImmutableBlobRef): Promise<Uint8Array>;
+      }) => {
+        stage(input: unknown): Promise<{ readonly stagingOrdinal: string }>;
+      };
+    };
+    const sink = new S3RetrievalMutationSink({
+      putImmutableObject: (input) => {
+        stagedBytes = input.bytes;
+        return Promise.resolve(
+          blob('asana-thread-spoof-staged.json', input.bytes, input.mediaType),
+        );
+      },
+      getImmutableObject: () =>
+        stagedBytes === undefined
+          ? Promise.reject(new Error('staged object missing'))
+          : Promise.resolve(stagedBytes),
+    });
+    const manifest = await sink.stage({
+      workItem: {
+        tenantId,
+        accountId: 'account-a',
+        brandIds: ['brand-a'],
+        authorizationEpoch: 1,
+        scopeHash,
+      },
+      canonical: {
+        source: 'asana',
+        dedupeKey: 'source-asana-thread-ref-spoof',
+        contentHash: sha('asana-thread-ref-spoof-canonical'),
+        tenantId,
+        accountId: 'account-a',
+        objectKind: 'task',
+        providerObjectId: launchThreadRef,
+        providerVersion: '1',
+        providerTimestamp: now,
+        title: 'Operational sign-off before exposing the new version',
+        projectIds: [],
+        topicTerms: [],
+        deleted: false,
+      },
+    });
+    expect(stagedBytes).toBeDefined();
+    const durable = parseStagedMutationObject(
+      stagedBytes as Uint8Array,
+      manifest.stagingOrdinal,
+      32,
+    );
+    expect(durable.record.sourceAuthority).toEqual({
+      contractVersion: 'chief-source-authority.v1',
+      verifiedBy: 'canonical_ingestion',
+      sourceClass: 'asana',
+      sourceKind: 'asana',
+      relationKind: 'explicit_related_work',
+    });
+    const sourceAuthority = durable.record.sourceAuthority;
+    if (
+      sourceAuthority === undefined ||
+      sourceAuthority.sourceClass === 'unclassified'
+    )
+      throw new Error('canonical source authority missing');
+    const projected: FixtureRecord = {
+      ...durable.record,
+      sourceAuthority,
+    };
+    const fixture = buildFixture([projected]);
+    const result = await fixture.index.queryWithCitations(
+      query({
+        queryText: 'operational sign-off',
+        exactEntityRefs: [launchThreadRef],
+      }),
+    );
+    expect(result.evidence).toHaveLength(1);
+    expect(result.evidence[0]?.sourceClass).toBe('asana');
+    expect(result.evidence[0]?.sourceAuthority.sourceKind).toBe('asana');
+    expect(result.evidence[0]?.relation).toEqual({
+      verified: true,
+      kind: 'explicit_related_work',
+      exactEntityRefs: [launchThreadRef],
+    });
   });
 
   it('uses real tokenization, BM25 corpus statistics, and document-length normalization', () => {
@@ -431,6 +554,26 @@ describe('bounded DynamoDB/S3 retrieval', () => {
       expect.objectContaining({
         chunkId: 'chunk-apollo',
         text: 'Apollo launch budget approval and active Asana milestone',
+        exactEntityRefs: [
+          'asana-task-12001',
+          'thr_94f02c2953e5253d7f62f514efffdda78aa29090',
+        ],
+        sourceClass: 'asana',
+        sourceAuthority: {
+          contractVersion: 'chief-source-authority.v1',
+          verifiedBy: 'canonical_ingestion',
+          sourceClass: 'asana',
+          sourceKind: 'asana',
+          relationKind: 'explicit_related_work',
+        },
+        relation: {
+          verified: true,
+          kind: 'explicit_related_work',
+          exactEntityRefs: [
+            'asana-task-12001',
+            'thr_94f02c2953e5253d7f62f514efffdda78aa29090',
+          ],
+        },
       }),
     ]);
     expect(JSON.stringify(result)).not.toContain('revoked');
@@ -483,6 +626,13 @@ describe('bounded DynamoDB/S3 retrieval', () => {
       contentHash: sha('Apollo budget follow-up decision'),
       state: 'active',
       mutationOrdinal: 'delta:1',
+      sourceAuthority: {
+        contractVersion: 'chief-source-authority.v1',
+        verifiedBy: 'canonical_ingestion',
+        sourceClass: 'communication',
+        sourceKind: 'gmail',
+        relationKind: 'canonical_thread',
+      },
     };
     addDelta(fixture, {
       schemaVersion: '1',

@@ -56,6 +56,61 @@ export const connectorSelectionStateSchema = z.enum([
   'not_applicable',
 ]);
 
+export const canonicalIngestionSourceKindSchema = z.enum([
+  'gmail',
+  'microsoft_graph',
+  'imap',
+  'twilio_sms',
+  'twilio_whatsapp',
+  'x',
+  'linkedin_archive',
+  'asana',
+  'demo',
+]);
+
+const canonicalCommunicationSourceKindSchema = z.enum([
+  'gmail',
+  'microsoft_graph',
+  'imap',
+  'twilio_sms',
+  'twilio_whatsapp',
+  'x',
+  'linkedin_archive',
+  'demo',
+]);
+
+/**
+ * Server-owned source authority persisted with factual retrieval records.
+ * Provider object IDs and entity-reference syntax never participate in this
+ * classification; the canonical ingestion discriminant is the authority.
+ */
+export const canonicalRetrievalSourceAuthoritySchema = z.discriminatedUnion(
+  'sourceClass',
+  [
+    z
+      .object({
+        contractVersion: z.literal('chief-source-authority.v1'),
+        verifiedBy: z.literal('canonical_ingestion'),
+        sourceClass: z.literal('communication'),
+        sourceKind: canonicalCommunicationSourceKindSchema,
+        relationKind: z.literal('canonical_thread'),
+        relationTopic: z
+          .enum(['release_readiness', 'board_metrics'])
+          .optional(),
+      })
+      .strict(),
+    z
+      .object({
+        contractVersion: z.literal('chief-source-authority.v1'),
+        verifiedBy: z.literal('canonical_ingestion'),
+        sourceClass: z.literal('asana'),
+        sourceKind: z.literal('asana'),
+        relationKind: z.literal('explicit_related_work'),
+      })
+      .strict(),
+  ],
+);
+
 export const connectorCapabilitiesSchema = z
   .object({
     read: z.boolean(),
@@ -598,6 +653,12 @@ export type WorkObjectKind = z.infer<typeof workObjectKindSchema>;
 export type WorkObjectRef = z.infer<typeof workObjectRefSchema>;
 export type WorkObjectFact = z.infer<typeof workObjectFactSchema>;
 export type ConnectorRuntimeMode = z.infer<typeof connectorRuntimeModeSchema>;
+export type CanonicalIngestionSourceKind = z.infer<
+  typeof canonicalIngestionSourceKindSchema
+>;
+export type CanonicalRetrievalSourceAuthority = z.infer<
+  typeof canonicalRetrievalSourceAuthoritySchema
+>;
 export type ConnectorSelectionState = z.infer<
   typeof connectorSelectionStateSchema
 >;

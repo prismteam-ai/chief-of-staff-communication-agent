@@ -20,6 +20,7 @@ import {
   decodeBinary32Vectors,
   listBoundedStagedRetrieval,
   parseStagedMutationObject,
+  parseProjectionSourceAuthority,
   readProjectionRecords,
   sha256Bytes,
   type DurableRetrievalHeadStore,
@@ -283,6 +284,7 @@ function withoutSchemaVersion(
     contentHash: record.contentHash,
     state: record.state,
     mutationOrdinal: record.mutationOrdinal,
+    sourceAuthority: parseProjectionSourceAuthority(record.sourceAuthority),
   };
 }
 

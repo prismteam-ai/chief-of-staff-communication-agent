@@ -375,7 +375,7 @@ describe('deterministic evaluator retrieval seed', () => {
         'b591109c0ddfc4a602f56768cbbd7df2eb9606f7d45dc986cf5ca6f914dca4f1',
       authorizationEpoch: 1,
       manifestHash:
-        'b4755bc1055a520485299dabcbe7c40220802cf30fd11a72d9914d44258ae994',
+        'e0bf51facd2b5560d3b3a34f100da2e3963adff990f4fe4823d9c52508610d25',
       generation: 2,
       chunkCount: 2,
       sourceCount: 2,

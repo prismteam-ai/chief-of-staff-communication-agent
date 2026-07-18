@@ -106,7 +106,10 @@ type SynthesizedHandler = (
 
 const require = createRequire(import.meta.url);
 
-function apiGatewayEvent(rawPath: string): Record<string, unknown> {
+function apiGatewayEvent(
+  rawPath: string,
+  headers: Readonly<Record<string, string>> = {},
+): Record<string, unknown> {
   const routePrefix = rawPath.startsWith('/trpc/') ? '/trpc/' : '/mcp/';
   const routeKey =
     routePrefix === '/trpc/' ? 'ANY /trpc/{proxy+}' : 'ANY /mcp/{proxy+}';
@@ -116,7 +119,7 @@ function apiGatewayEvent(rawPath: string): Record<string, unknown> {
     routeKey,
     rawPath,
     rawQueryString: '',
-    headers: { accept: 'application/json' },
+    headers: { accept: 'application/json', ...headers },
     requestContext: {
       accountId: '417242953053',
       apiId: 'fixture-api',
@@ -260,6 +263,7 @@ describe('Chief foundation stack', () => {
           Variables: Match.objectLike({
             EXTERNAL_EFFECTS: 'disabled',
             MODEL_EFFECTS: 'disabled',
+            NODE_ENV: 'production',
             POWERTOOLS_METRICS_NAMESPACE: 'ChiefFoundation',
             PROVIDER_EFFECTS: 'disabled',
             PUBLIC_FIXTURE_MODE: 'enabled',
@@ -292,6 +296,7 @@ describe('Chief foundation stack', () => {
     template.hasResourceProperties('AWS::ApiGatewayV2::Stage', {
       AccessLogSettings: Match.objectLike({
         DestinationArn: Match.anyValue(),
+        Format: Match.stringLikeRegexp('\\$context\\.requestId'),
       }),
       DefaultRouteSettings: {
         ThrottlingBurstLimit: 40,
@@ -388,6 +393,7 @@ describe('Chief foundation stack', () => {
       const environment = function_.Properties?.Environment?.Variables ?? {};
       expect(environment).toMatchObject({
         FIXTURE_TENANT_ID: 'chief-evaluator-fixture',
+        NODE_ENV: 'production',
         PUBLIC_FIXTURE_MODE: 'enabled',
       });
       for (const forbiddenKey of [
@@ -561,6 +567,20 @@ describe('Chief foundation stack', () => {
           },
         },
       });
+
+      const smugglingResponse = await apiHandler.handler(
+        apiGatewayEvent('/trpc/system.health', {
+          'x-tenant-id': 'tenant-attacker-secret',
+        }),
+        lambdaContext('chief-api-test'),
+      );
+      expect(smugglingResponse.statusCode).toBeGreaterThanOrEqual(400);
+      expect(smugglingResponse.statusCode).toBeLessThan(500);
+      const publicError = smugglingResponse.body ?? '';
+      expect(publicError).toContain('The request is not permitted.');
+      expect(publicError).not.toMatch(
+        /(?:"path"|"stack"|TRPCError|node_modules|apps[\\/]api[\\/]src|tenant-attacker-secret|[A-Z]:\\)/u,
+      );
 
       const mcpHandler = require(bundles.get('chief-mcp') as string) as {
         handler: SynthesizedHandler;

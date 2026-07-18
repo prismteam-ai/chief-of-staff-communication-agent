@@ -72,9 +72,12 @@ The bounded reader derives exact-match eligibility, active/tombstoned state,
 citations, and canonical evidence text from the validated scoped snapshot while
 consistently reading and rechecking the independent authorization epoch before
 and after snapshot/query work. Once the epoch advances, old-epoch reads fail;
-only a freshly promoted snapshot for the new epoch becomes readable. The cited
-agent uses that evidence text and the actual promoted manifest hash as
-provenance; it does not synthesize either from fixture labels.
+only a freshly promoted snapshot for the new epoch becomes readable. Durable
+communication evidence retains that promoted manifest hash. For the fixed
+launch evaluator only, the product combines it with the explicitly related
+deterministic SEC-4821 Asana fixture citation under a versioned relation hash;
+it does not represent that combined hash as a raw retrieval manifest or a live
+Asana read.
 
 The focused compatibility suite runs the actual production staging writer into
 compaction, CAS promotion, persisted query-vector production, bounded
@@ -123,6 +126,12 @@ handoff, and poll approval status; the product API owns persisted-draft
 preparation and approval. MCP has no approve, send, create-task, or update-task
 tool. The retained legacy `submit_for_approval` name fails deterministically
 with `TOOL_UNAVAILABLE`; it is not an alternate approval route.
+
+Known MCP presentation limitation: `submit_for_approval` is still listed as a
+legacy compatibility name even though every call fails with
+`TOOL_UNAVAILABLE`. Removing that confusing legacy name belongs to the MCP
+surface and is outside this bounded remediation; no listed MCP tool can approve
+or execute a send.
 
 ## Evaluator walkthrough
 
@@ -194,11 +203,17 @@ Expected parent deployment outputs:
 - MCP endpoint: `<ChiefFoundationStack.McpUrl>`
 - MCP health: `<ChiefFoundationStack.McpHealthUrl>`
 
-This implementation lane did not deploy, seed AWS, or run the hosted suite.
-The parent workflow will deploy an exact reviewed snapshot, seed only the
-deterministic non-PII evaluator scope through the production
-register/enumerate/compact/promote path, and run the strict hosted acceptance
-command.
+The current public baseline is deployed at
+`https://d3hgq3e86d3knk.cloudfront.net`, with API/MCP at
+`https://prjip3os8i.execute-api.us-east-2.amazonaws.com`. Before this bounded
+remediation, the strict command reported 20/20 against that deployment, but two
+of those scenarios intercepted tRPC and therefore were not honest hosted
+evidence. This remediation is local-only by instruction: it has not been
+deployed, and its hosted acceptance must be rerun after an approved deployment.
+The corrected strict selection contains 19 hosted-safe runnable checks (18
+network/product checks plus one interception guard) and two explicitly skipped
+fixture-only scenarios. It actively fails any attempt to install those mocks
+when hosted URLs are configured.
 
 ## Capability scope
 
@@ -206,11 +221,14 @@ The repository includes modular Gmail, Microsoft Graph, IMAP/SMTP, Twilio
 SMS/WhatsApp, X, LinkedIn archive-import, and Asana contracts and adapters;
 canonical ingestion/linking; bounded RAG; style-aware cited agents; durable
 approval/outbox and execution guards; tRPC/browser clients; remote MCP; CDK;
-and responsive evaluator UI/E2E coverage. Public capability labels distinguish
-deterministic data, recorded evidence, and authorization-blocked providers. In
-the current deterministic hosted seed, those definitions accompany one fixture
-connector card; recorded and blocked have zero hosted evidence and do not
-produce connector cards.
+and responsive evaluator UI/E2E coverage. These code-level adapters are not a
+claim that the public runtime has authenticated or certified those providers.
+Public capability labels distinguish deterministic data, recorded evidence,
+and authorization-blocked providers. The current hosted seed contains two
+fixed-scope email communications and one fixture connector card; it has no
+completed Gmail operator consent, multichannel hosted inbox, live provider
+send, Twilio sender certification, or live Asana mutation evidence. Recorded
+and blocked modes have zero hosted evidence and do not produce connector cards.
 
 The private LinkedIn archive is not imported, exposed, or required by this
 public vertical. Live provider authentication and external-effect acceptance

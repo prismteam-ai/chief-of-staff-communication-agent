@@ -22,9 +22,11 @@ import {
   BoundedRetrievalError,
   decodeBinary32Vectors,
   hashManifest,
+  parseProjectionSourceAuthority,
   readProjectionRecords,
   tokenize,
   type MemoryProbe,
+  type ProjectionSourceAuthority,
   type SnapshotObjectReader,
 } from './bounded-retrieval.js';
 
@@ -58,6 +60,8 @@ export interface ProjectionRecordV1 {
   readonly contentHash: string;
   readonly state: 'active' | 'tombstoned';
   readonly mutationOrdinal: string;
+  /** Omitted only while reading a legacy pre-authority staged record. */
+  readonly sourceAuthority?: ProjectionSourceAuthority;
 }
 
 export interface StagedUpsertV1 {
@@ -349,6 +353,7 @@ export function parseProjectionRecordV1(value: unknown): ProjectionRecordV1 {
       'contentHash',
       'state',
       'mutationOrdinal',
+      ...(record.sourceAuthority === undefined ? [] : ['sourceAuthority']),
     ]) ||
     record.schemaVersion !== '1' ||
     !chunkIdSchema.safeParse(record.chunkId).success ||
@@ -385,6 +390,7 @@ export function parseProjectionRecordV1(value: unknown): ProjectionRecordV1 {
     contentHash: record.contentHash,
     state: record.state as 'active' | 'tombstoned',
     mutationOrdinal: record.mutationOrdinal,
+    sourceAuthority: parseProjectionSourceAuthority(record.sourceAuthority),
   });
 }
 

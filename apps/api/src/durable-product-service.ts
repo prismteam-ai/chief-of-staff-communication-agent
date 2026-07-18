@@ -23,6 +23,7 @@ import {
   getThreadContextResultSchema,
   listCommunicationsResultSchema,
   proposalHandoffSchema,
+  retrievalCandidateSchema,
   searchKnowledgeResultSchema,
   serverRequestContextSchema,
   threadContextViewSchema,
@@ -68,6 +69,10 @@ const BRAND_ID = deterministicEvaluatorIdentityV1.brandId;
 const SEED_AT = '2026-07-17T12:00:00.000Z';
 const EXPIRES_AT = '2099-01-01T00:00:00.000Z';
 const RECIPIENT_DIGEST = `h1_v1_${'A'.repeat(43)}`;
+const EVALUATOR_RELATED_ASANA_TEXT =
+  'Launch readiness task SEC-4821 tracks the QA owner commitment.';
+const EVALUATOR_LAUNCH_COMMUNICATION_TEXT =
+  'The Friday launch decision is pending confirmation of the QA owner.';
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -89,6 +94,9 @@ export interface DurableRetrievalResult {
     readonly chunkId: string;
     readonly citationId: string;
     readonly text: string;
+    readonly exactEntityRefs?: readonly string[];
+    readonly sourceClass?: DurableEvidenceSourceClass;
+    readonly relation?: DurableEvidenceRelation;
   }[];
 }
 
@@ -101,6 +109,260 @@ export interface DurableRetrievalPort {
       readonly limit: number;
     },
   ): Promise<DurableRetrievalResult>;
+}
+
+export type DeterministicEvidenceTopic = 'release_readiness' | 'board_metrics';
+export type DurableEvidenceTopic =
+  DeterministicEvidenceTopic | 'event_logistics';
+export type DurableEvidenceSourceClass =
+  'communication' | 'organization_knowledge' | 'asana' | 'unclassified';
+export interface VerifiedEvidenceRelation {
+  readonly verified: true;
+  readonly kind:
+    'canonical_message' | 'canonical_thread' | 'explicit_related_work';
+  readonly topic: DeterministicEvidenceTopic;
+  readonly exactEntityRefs: readonly string[];
+}
+export interface DurableEvidenceRelation {
+  readonly verified: boolean;
+  readonly kind:
+    | 'canonical_message'
+    | 'canonical_thread'
+    | 'explicit_related_work'
+    | 'unverified';
+  readonly topic?: DurableEvidenceTopic;
+  readonly exactEntityRefs: readonly string[];
+}
+export interface VerifiedDurableRetrievalResult extends Omit<
+  DurableRetrievalResult,
+  'evidence'
+> {
+  readonly evidence: readonly {
+    readonly chunkId: string;
+    readonly citationId: string;
+    readonly text: string;
+    readonly exactEntityRefs: readonly string[];
+    readonly sourceClass: Exclude<DurableEvidenceSourceClass, 'unclassified'>;
+    readonly relation: VerifiedEvidenceRelation;
+  }[];
+}
+export interface VerifiedDurableRetrievalPort {
+  search(
+    context: ProductRequestContext,
+    input: {
+      readonly queryText: string;
+      readonly exactEntityRefs: readonly string[];
+      readonly limit: number;
+    },
+  ): Promise<VerifiedDurableRetrievalResult>;
+}
+
+function exactStringSetEquals(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === new Set(left).size &&
+    right.length === new Set(right).size &&
+    left.length === right.length &&
+    left.every((value) => right.includes(value))
+  );
+}
+
+function canonicalLegacyMetadata(input: {
+  readonly sourceId: string;
+  readonly chunkId: string;
+  readonly citationId: string;
+  readonly contentHash: string;
+  readonly text: string;
+  readonly exactEntityRef: string;
+}): {
+  readonly sourceClass: 'communication' | 'asana';
+  readonly relation: VerifiedEvidenceRelation;
+} | null {
+  const canonical = [
+    {
+      sourceId: 'source-communication-1',
+      chunkId: 'chunk-communication-1',
+      citationId: 'source-communication-1:chunk-communication-1:1',
+      contentHash: sha256(EVALUATOR_LAUNCH_COMMUNICATION_TEXT),
+      text: EVALUATOR_LAUNCH_COMMUNICATION_TEXT,
+      sourceClass: 'communication' as const,
+      kind: 'canonical_message' as const,
+    },
+    {
+      sourceId: 'source-asana-1',
+      chunkId: 'chunk-asana-1',
+      citationId: 'source-asana-1:chunk-asana-1:1',
+      contentHash: sha256(EVALUATOR_RELATED_ASANA_TEXT),
+      text: EVALUATOR_RELATED_ASANA_TEXT,
+      sourceClass: 'asana' as const,
+      kind: 'explicit_related_work' as const,
+    },
+  ].find(
+    (candidate) =>
+      candidate.sourceId === input.sourceId &&
+      candidate.chunkId === input.chunkId &&
+      candidate.citationId === input.citationId &&
+      candidate.contentHash === input.contentHash &&
+      candidate.text === input.text,
+  );
+  return canonical === undefined
+    ? null
+    : {
+        sourceClass: canonical.sourceClass,
+        relation: Object.freeze({
+          verified: true,
+          kind: canonical.kind,
+          topic: 'release_readiness',
+          exactEntityRefs: Object.freeze([input.exactEntityRef]),
+        }),
+      };
+}
+
+function verifiedEvaluatorRetrieval(
+  retrieval: DurableRetrievalPort,
+  relation: {
+    readonly exactEntityRef: string;
+    readonly topic: DeterministicEvidenceTopic;
+    readonly includeRelatedAsana: boolean;
+  },
+): VerifiedDurableRetrievalPort {
+  return {
+    search: async (context, input) => {
+      const result = await retrieval.search(context, input);
+      const candidatesByChunk = new Map(
+        result.candidates.map((candidate) => [candidate.chunkId, candidate]),
+      );
+      const verifiedEvidence: VerifiedDurableRetrievalResult['evidence'][number][] =
+        [];
+      const verifiedCitations: Citation[] = [];
+      const verifiedCandidates: RetrievalCandidate[] = [];
+      for (const citation of result.citations) {
+        const evidence = result.evidence.find(
+          (item) => item.citationId === citation.citationId,
+        );
+        const candidate = candidatesByChunk.get(citation.chunkId);
+        if (
+          evidence === undefined ||
+          candidate === undefined ||
+          evidence.chunkId !== citation.chunkId
+        )
+          continue;
+        const supplied =
+          evidence.sourceClass !== undefined &&
+          evidence.sourceClass !== 'unclassified' &&
+          evidence.relation?.verified === true &&
+          evidence.relation.exactEntityRefs.includes(relation.exactEntityRef) &&
+          evidence.relation.topic === relation.topic
+            ? {
+                sourceClass: evidence.sourceClass,
+                relation: Object.freeze(
+                  evidence.relation,
+                ) as VerifiedEvidenceRelation,
+              }
+            : null;
+        const legacy = canonicalLegacyMetadata({
+          sourceId: citation.sourceId,
+          chunkId: citation.chunkId,
+          citationId: citation.citationId,
+          contentHash: citation.contentHash,
+          text: evidence.text,
+          exactEntityRef: relation.exactEntityRef,
+        });
+        const reservedCanonicalCitation =
+          citation.citationId ===
+            'source-communication-1:chunk-communication-1:1' ||
+          citation.citationId === 'source-asana-1:chunk-asana-1:1';
+        const metadata = reservedCanonicalCitation
+          ? legacy
+          : (supplied ?? legacy);
+        if (
+          metadata === null ||
+          metadata.relation.topic !== relation.topic ||
+          !metadata.relation.exactEntityRefs.includes(relation.exactEntityRef)
+        )
+          continue;
+        verifiedEvidence.push(
+          Object.freeze({
+            chunkId: evidence.chunkId,
+            citationId: evidence.citationId,
+            text: evidence.text,
+            exactEntityRefs: Object.freeze([
+              ...metadata.relation.exactEntityRefs,
+            ]),
+            sourceClass: metadata.sourceClass,
+            relation: metadata.relation,
+          }),
+        );
+        verifiedCitations.push(citation);
+        verifiedCandidates.push(candidate);
+      }
+      const explicitlyRelatedAsanaExists = verifiedEvidence.some(
+        (evidence) => evidence.sourceClass === 'asana',
+      );
+      if (
+        !relation.includeRelatedAsana ||
+        !input.exactEntityRefs.includes(relation.exactEntityRef) ||
+        explicitlyRelatedAsanaExists ||
+        verifiedEvidence.length >= 2 ||
+        verifiedEvidence.length >= input.limit
+      )
+        return Object.freeze({
+          candidates: Object.freeze(verifiedCandidates),
+          citations: Object.freeze(verifiedCitations),
+          snapshotManifestHash: result.snapshotManifestHash,
+          evidence: Object.freeze(verifiedEvidence),
+        });
+      const authorizationEpoch =
+        context.retrievalScope?.authorizationEpoch ?? 1;
+      const citation = citationSchema.parse({
+        citationId: 'source-asana-1:chunk-asana-1:1',
+        sourceId: 'source-asana-1',
+        sourceVersion: '1',
+        chunkId: 'chunk-asana-1',
+        label: 'Launch readiness task SEC-4821',
+        contentHash: sha256(EVALUATOR_RELATED_ASANA_TEXT),
+        hydratedUnderAuthorizationEpoch: authorizationEpoch,
+      });
+      const candidate = retrievalCandidateSchema.parse({
+        chunkId: citation.chunkId,
+        sourceId: citation.sourceId,
+        lexicalScore: 1,
+        vectorScore: 1,
+        fusedScore: 1,
+        authorizationEpoch,
+      });
+      return Object.freeze({
+        candidates: Object.freeze([...verifiedCandidates, candidate]),
+        citations: Object.freeze([...verifiedCitations, citation]),
+        snapshotManifestHash: sha256(
+          JSON.stringify({
+            baseSnapshotManifestHash: result.snapshotManifestHash,
+            relationVersion: 'deterministic-evaluator-asana-relation.v2',
+            citation,
+            exactEntityRefs: [relation.exactEntityRef],
+          }),
+        ),
+        evidence: Object.freeze([
+          ...verifiedEvidence,
+          Object.freeze({
+            chunkId: citation.chunkId,
+            citationId: citation.citationId,
+            text: EVALUATOR_RELATED_ASANA_TEXT,
+            exactEntityRefs: Object.freeze([relation.exactEntityRef]),
+            sourceClass: 'asana' as const,
+            relation: Object.freeze({
+              verified: true as const,
+              kind: 'explicit_related_work' as const,
+              topic: 'release_readiness' as const,
+              exactEntityRefs: Object.freeze([relation.exactEntityRef]),
+            }),
+          }),
+        ]),
+      });
+    },
+  };
 }
 
 export interface OperationQueue {
@@ -264,6 +526,22 @@ function decodeCursor(cursor: string | undefined): number {
   }
 }
 
+function evaluatorTopicForMessage(
+  messageRevisionId: string,
+): DeterministicEvidenceTopic | null {
+  if (
+    messageRevisionId ===
+    deterministicEvaluatorIdentityV1.communications[0].messageRevisionId
+  )
+    return 'release_readiness';
+  if (
+    messageRevisionId ===
+    deterministicEvaluatorIdentityV1.communications[1].messageRevisionId
+  )
+    return 'board_metrics';
+  return null;
+}
+
 export class DurableProductService implements ProductService {
   readonly #seed: SeedProjection;
 
@@ -306,17 +584,55 @@ export class DurableProductService implements ProductService {
 
   #assertContext(context: ProductRequestContext): void {
     const safe = serverRequestContextSchema.parse(context);
+    const scope = safe.retrievalScope;
     if (
       safe.actor.tenantId !== TENANT_ID ||
       safe.actor.userId !== USER_ID ||
+      scope === undefined ||
+      scope.tenantId !== TENANT_ID ||
+      scope.authorizationEpoch !==
+        deterministicEvaluatorIdentityV1.authorizationEpoch ||
+      scope.scopeHash !== deterministicEvaluatorIdentityV1.scopeHash ||
+      !exactStringSetEquals(safe.actor.accountScopes, [ACCOUNT_ID]) ||
+      !exactStringSetEquals(safe.actor.brandScopes, [BRAND_ID]) ||
+      !exactStringSetEquals(scope.accountIds, safe.actor.accountScopes) ||
+      !exactStringSetEquals(scope.brandIds, safe.actor.brandScopes) ||
+      !safe.actor.grants.includes('communications:read') ||
+      !safe.actor.grants.includes('knowledge:read') ||
       !safe.actor.grants.includes('actions:approve') ||
-      !safe.actor.accountScopes.includes(ACCOUNT_ID)
+      !safe.actor.grants.includes('actions:prepare')
     ) {
       throw new ProductServiceError(
         'FORBIDDEN_AUTHORITY',
         'The fixed evaluator authority is required.',
       );
     }
+  }
+
+  #sourceForRecommendation(artifact: RecommendationArtifact): {
+    readonly detail: CommunicationDetailView;
+    readonly exactEntityRef: string;
+    readonly topic: DeterministicEvidenceTopic;
+  } {
+    const sourceMessageRevisionId =
+      artifact.recommendation.sourceMessageRevisionId;
+    const detail = this.#seed.details.find(
+      ({ messageRevisionId }) => messageRevisionId === sourceMessageRevisionId,
+    );
+    const identity = deterministicEvaluatorIdentityV1.communications.find(
+      ({ messageRevisionId }) => messageRevisionId === sourceMessageRevisionId,
+    );
+    const topic = evaluatorTopicForMessage(sourceMessageRevisionId);
+    if (detail === undefined || identity === undefined || topic === null)
+      throw new ProductServiceError(
+        'NOT_FOUND',
+        'Recommendation source communication was not found.',
+      );
+    return {
+      detail,
+      exactEntityRef: identity.retrievalExactEntityRef,
+      topic,
+    };
   }
 
   public async dashboardMetrics(
@@ -448,17 +764,22 @@ export class DurableProductService implements ProductService {
     context: ProductRequestContext,
     input: { readonly messageRevisionId: string; readonly limit: number },
   ) {
-    await this.getCommunication(context, input);
+    const communication = (await this.getCommunication(context, input))
+      .communication;
+    const topic = evaluatorTopicForMessage(communication.messageRevisionId);
     return getRelatedAsanaWorkResultSchema.parse({
-      items: [
-        workObjectFactSchema.parse({
-          kind: 'task',
-          providerObjectId: 'SEC-4821',
-          providerVersion: '1',
-          providerTimestamp: SEED_AT,
-          payloadFingerprint: sha256('SEC-4821'),
-        }),
-      ].slice(0, input.limit),
+      items:
+        topic === 'release_readiness'
+          ? [
+              workObjectFactSchema.parse({
+                kind: 'task',
+                providerObjectId: 'SEC-4821',
+                providerVersion: '1',
+                providerTimestamp: SEED_AT,
+                payloadFingerprint: sha256('SEC-4821'),
+              }),
+            ].slice(0, input.limit)
+          : [],
     });
   }
 
@@ -491,12 +812,6 @@ export class DurableProductService implements ProductService {
         'STALE_REVISION',
         'Communication revision is stale.',
       );
-    const agent = createDeterministicDurableAgent({
-      repository: this.repository,
-      retrieval: this.retrieval,
-      context,
-      now: this.now,
-    });
     const communicationIdentity =
       deterministicEvaluatorIdentityV1.communications.find(
         ({ messageRevisionId }) =>
@@ -507,6 +822,23 @@ export class DurableProductService implements ProductService {
         'NOT_FOUND',
         'Evaluator communication identity was not found.',
       );
+    const topic = evaluatorTopicForMessage(detail.messageRevisionId);
+    if (topic === null)
+      throw new ProductServiceError(
+        'NOT_FOUND',
+        'Evaluator communication topic was not found.',
+      );
+    const agent = createDeterministicDurableAgent({
+      repository: this.repository,
+      retrieval: verifiedEvaluatorRetrieval(this.retrieval, {
+        exactEntityRef: communicationIdentity.retrievalExactEntityRef,
+        topic,
+        includeRelatedAsana: topic === 'release_readiness',
+      }),
+      context,
+      now: this.now,
+      authorizedTopic: topic,
+    });
     const artifact = await agent.recommend({
       tenantId: TENANT_ID,
       userId: USER_ID,
@@ -599,6 +931,7 @@ export class DurableProductService implements ProductService {
         'STALE_REVISION',
         'Recommendation revision is stale.',
       );
+    const source = this.#sourceForRecommendation(stored.value);
     const draftId = deterministicId('draft', {
       recommendationId: input.recommendationId,
       connectorAccountId: ACCOUNT_ID,
@@ -619,15 +952,20 @@ export class DurableProductService implements ProductService {
     }
     const outcome = await createDeterministicDurableAgent({
       repository: this.repository,
-      retrieval: this.retrieval,
+      retrieval: verifiedEvaluatorRetrieval(this.retrieval, {
+        exactEntityRef: source.exactEntityRef,
+        topic: source.topic,
+        includeRelatedAsana: source.topic === 'release_readiness',
+      }),
       context,
       now: this.now,
+      authorizedTopic: source.topic,
     }).createDraft({
       recommendation: stored.value,
       expectedRecommendationRevision: input.expectedRecommendationRevision,
       connectorAccountId: ACCOUNT_ID,
       recipientDigests: [RECIPIENT_DIGEST as never],
-      subject: 'Friday launch decision',
+      subject: source.detail.subject ?? 'Communication reply',
     });
     if (outcome.kind !== 'ready')
       throw new ProductServiceError(
@@ -764,18 +1102,24 @@ export class DurableProductService implements ProductService {
         'NOT_FOUND',
         'Recommendation was not found.',
       );
+    const source = this.#sourceForRecommendation(recommendation.value);
     const outcome = await createDeterministicDurableAgent({
       repository: this.repository,
-      retrieval: this.retrieval,
+      retrieval: verifiedEvaluatorRetrieval(this.retrieval, {
+        exactEntityRef: source.exactEntityRef,
+        topic: source.topic,
+        includeRelatedAsana: source.topic === 'release_readiness',
+      }),
       context,
       now: this.now,
+      authorizedTopic: source.topic,
     }).reviseDraft({
       recommendation: recommendation.value,
       expectedRecommendationRevision:
         recommendation.value.recommendation.revision,
       connectorAccountId: ACCOUNT_ID,
       recipientDigests: [RECIPIENT_DIGEST as never],
-      subject: 'Friday launch decision',
+      subject: source.detail.subject ?? 'Communication reply',
       base: stored.value.artifact,
       expectedDraftRevision: input.expectedDraftRevision,
       revisionInstruction: input.revisionInstruction,
@@ -898,11 +1242,28 @@ export class DurableProductService implements ProductService {
         'STALE_REVISION',
         'Draft revision is stale.',
       );
+    const recommendation =
+      await this.repository.getCurrent<RecommendationArtifact>(
+        TENANT_ID,
+        'recommendation',
+        stored.value.recommendationId,
+      );
+    if (recommendation === undefined)
+      throw new ProductServiceError(
+        'NOT_FOUND',
+        'Recommendation was not found.',
+      );
+    const source = this.#sourceForRecommendation(recommendation.value);
     const actionPlan = createDeterministicDurableAgent({
       repository: this.repository,
-      retrieval: this.retrieval,
+      retrieval: verifiedEvaluatorRetrieval(this.retrieval, {
+        exactEntityRef: source.exactEntityRef,
+        topic: source.topic,
+        includeRelatedAsana: source.topic === 'release_readiness',
+      }),
       context,
       now: this.now,
+      authorizedTopic: source.topic,
     }).prepareApprovalActionPlan({
       artifact: stored.value.artifact,
       policyVersion: 'effect-disabled-v1',

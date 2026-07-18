@@ -63,6 +63,79 @@ async function preparePendingApproval(dependencies: ApiDependencies) {
   return { context, recommendation, draft, proposal };
 }
 
+function topicalBoundaryRetrieval(
+  records: readonly {
+    readonly key: string;
+    readonly text: string;
+    readonly exactEntityRef: string;
+    readonly sourceKind?: 'communication' | 'asana' | 'organization';
+    readonly topic: 'release_readiness' | 'board_metrics' | 'event_logistics';
+    readonly sourceId?: string;
+  }[],
+): DurableRetrievalPort {
+  return {
+    search: (_context, input) => {
+      const selected = records.slice(0, input.limit);
+      const citations = selected.map(
+        ({ key, sourceKind, sourceId: suppliedSourceId }, index) => {
+          const sourceId =
+            suppliedSourceId ??
+            `source-${sourceKind ?? 'communication'}-${key}`;
+          return citationSchema.parse({
+            citationId: `${sourceId}:chunk-${key}:1`,
+            sourceId,
+            sourceVersion: '1',
+            chunkId: `chunk-${key}`,
+            label: `${key} communication evidence`,
+            contentHash: String(index + 1).repeat(64),
+            hydratedUnderAuthorizationEpoch: 1,
+          });
+        },
+      );
+      return Promise.resolve({
+        candidates: selected.map(
+          ({ key, sourceKind, sourceId: suppliedSourceId }, index) => {
+            const sourceId =
+              suppliedSourceId ??
+              `source-${sourceKind ?? 'communication'}-${key}`;
+            return retrievalCandidateSchema.parse({
+              chunkId: `chunk-${key}`,
+              sourceId,
+              lexicalScore: 1 - index * 0.1,
+              vectorScore: 0.9 - index * 0.1,
+              fusedScore: 0.95 - index * 0.1,
+              authorizationEpoch: 1,
+            });
+          },
+        ),
+        citations,
+        snapshotManifestHash: 'e'.repeat(64),
+        evidence: selected.map(
+          ({ key, text, exactEntityRef, sourceKind, topic }, index) => ({
+            chunkId: `chunk-${key}`,
+            citationId: citations[index]?.citationId as string,
+            text,
+            exactEntityRefs: [exactEntityRef],
+            sourceClass:
+              sourceKind === 'organization'
+                ? ('organization_knowledge' as const)
+                : (sourceKind ?? 'communication'),
+            relation: {
+              verified: true as const,
+              kind:
+                sourceKind === 'asana'
+                  ? ('explicit_related_work' as const)
+                  : ('canonical_message' as const),
+              topic,
+              exactEntityRefs: [exactEntityRef],
+            },
+          }),
+        ),
+      });
+    },
+  };
+}
+
 describe('durable hosted product vertical', () => {
   it('creates a cited draft from two production-shaped same-source facts', async () => {
     const chunkIds = [
@@ -102,6 +175,20 @@ describe('durable hosted product vertical', () => {
               index === 0
                 ? 'The Friday launch is ready once the QA owner confirms.'
                 : 'The QA owner commitment is due before the Friday launch.',
+            exactEntityRefs: [
+              deterministicEvaluatorIdentityV1.communications[0]
+                .retrievalExactEntityRef,
+            ],
+            sourceClass: 'communication' as const,
+            relation: {
+              verified: true as const,
+              kind: 'canonical_thread' as const,
+              topic: 'release_readiness' as const,
+              exactEntityRefs: [
+                deterministicEvaluatorIdentityV1.communications[0]
+                  .retrievalExactEntityRef,
+              ],
+            },
           })),
         }),
     };
@@ -131,6 +218,180 @@ describe('durable hosted product vertical', () => {
         draft: { citations },
       },
     });
+  });
+
+  it('keeps launch and board drafts inside their exact topical communication boundary', async () => {
+    const launchRef =
+      deterministicEvaluatorIdentityV1.communications[0]
+        .retrievalExactEntityRef;
+    const boardRef =
+      deterministicEvaluatorIdentityV1.communications[1]
+        .retrievalExactEntityRef;
+    const retrieval = topicalBoundaryRetrieval([
+      {
+        key: 'launch-ready',
+        text: 'Production cutover requires validation ownership.',
+        exactEntityRef: launchRef,
+        topic: 'release_readiness',
+        sourceId: 'source-asana-word-but-typed-communication',
+      },
+      {
+        key: 'launch-party',
+        text: 'The launch party catering owner has confirmed.',
+        exactEntityRef: launchRef,
+        topic: 'event_logistics',
+      },
+      {
+        key: 'launch-parking',
+        text: 'Parking for launch guests is ready.',
+        exactEntityRef: launchRef,
+        topic: 'event_logistics',
+      },
+      {
+        key: 'launch-banquet',
+        text: 'The launch banquet coordinator has confirmed.',
+        exactEntityRef: launchRef,
+        topic: 'event_logistics',
+      },
+      {
+        key: 'launch-unrelated-task',
+        text: 'Unrelated Asana launch task also mentions the QA owner.',
+        exactEntityRef: boardRef,
+        sourceKind: 'asana',
+        topic: 'release_readiness',
+      },
+      {
+        key: 'board-pipeline',
+        text: 'Directors approved the sales outlook for the quarterly governance pack.',
+        exactEntityRef: boardRef,
+        topic: 'board_metrics',
+      },
+      {
+        key: 'board-note',
+        text: 'The board note must use the approved pipeline total.',
+        exactEntityRef: boardRef,
+        topic: 'board_metrics',
+      },
+    ]);
+    const context = createDurableRequestContext();
+
+    for (const scenario of [
+      {
+        messageRevisionId: 'message-revision-1-1',
+        included: /Production cutover|SEC-4821/iu,
+        excluded: /board|pipeline numbers|Unrelated Asana/iu,
+        requiredText: 'Production cutover requires validation ownership.',
+        confidence: 0.72,
+        citationSources: [
+          'source-asana-word-but-typed-communication',
+          'source-asana-1',
+        ],
+      },
+      {
+        messageRevisionId: 'message-revision-2-1',
+        included: /Directors|governance|board|pipeline/iu,
+        excluded: /Friday launch|QA owner|SEC-4821/iu,
+        requiredText:
+          'Directors approved the sales outlook for the quarterly governance pack.',
+        confidence: 0.67,
+        citationSources: [
+          'source-communication-board-note',
+          'source-communication-board-pipeline',
+        ],
+      },
+    ] as const) {
+      const service = new DurableProductService(
+        new MemoryDurableProductRepository(),
+        retrieval,
+        'https://chief.example.test',
+      );
+      const recommendation = await service.recommendAction(context, {
+        messageRevisionId: messageRevisionIdSchema.parse(
+          scenario.messageRevisionId,
+        ),
+        expectedMessageRevision: 1,
+      });
+      expect(recommendation.recommendation).toMatchObject({
+        actionType: 'reply',
+        confidence: scenario.confidence,
+        status: 'current',
+      });
+      expect(recommendation.recommendation.citations).toHaveLength(2);
+      expect(
+        recommendation.recommendation.citations.map(({ sourceId }) => sourceId),
+      ).toEqual(scenario.citationSources);
+
+      const draft = await service.createDraft(context, {
+        recommendationId: recommendation.recommendation.recommendationId,
+        expectedRecommendationRevision: 1,
+      });
+      expect(draft.result.draft.body).toMatch(scenario.included);
+      expect(draft.result.draft.body).toContain(scenario.requiredText);
+      if (scenario.messageRevisionId === 'message-revision-1-1')
+        expect(draft.result.draft.body).toContain('SEC-4821');
+      expect(draft.result.draft.body).not.toMatch(scenario.excluded);
+      expect(draft.result.draft.citations).toHaveLength(2);
+      expect(draft.result.draft.subject).toBe(
+        scenario.messageRevisionId === 'message-revision-1-1'
+          ? 'Re: Friday launch decision'
+          : 'Re: Board update numbers',
+      );
+      const revised = await service.reviseDraft(context, {
+        draftRevisionId: draft.result.draft.draftRevisionId,
+        expectedDraftRevision: 1,
+        revisionInstruction: 'Make this concise.',
+      });
+      expect(revised.result.draft.subject).toBe(draft.result.draft.subject);
+      expect(revised.result.draft.body).not.toMatch(scenario.excluded);
+      const related = await service.getRelatedAsanaWork(context, {
+        messageRevisionId: messageRevisionIdSchema.parse(
+          scenario.messageRevisionId,
+        ),
+        limit: 10,
+      });
+      expect(
+        related.items.map(({ providerObjectId }) => providerObjectId),
+      ).toEqual(
+        scenario.messageRevisionId === 'message-revision-1-1'
+          ? ['SEC-4821']
+          : [],
+      );
+    }
+  });
+
+  it('abstains when only one exact topically relevant fact remains', async () => {
+    const boardRef =
+      deterministicEvaluatorIdentityV1.communications[1]
+        .retrievalExactEntityRef;
+    const service = new DurableProductService(
+      new MemoryDurableProductRepository(),
+      topicalBoundaryRetrieval([
+        {
+          key: 'board-only',
+          text: 'The approved pipeline total belongs in the board update.',
+          exactEntityRef: boardRef,
+          topic: 'board_metrics',
+        },
+      ]),
+      'https://chief.example.test',
+    );
+
+    const result = await service.recommendAction(
+      createDurableRequestContext(),
+      {
+        messageRevisionId: messageRevisionIdSchema.parse(
+          'message-revision-2-1',
+        ),
+        expectedMessageRevision: 1,
+      },
+    );
+
+    expect(result.recommendation).toMatchObject({
+      actionType: 'request_context',
+      confidence: 0.55,
+      status: 'needs_context',
+    });
+    expect(result.recommendation.citations).toHaveLength(1);
   });
 
   it('maps each public thread alias to its canonical exact retrieval entity and preserves tenant isolation', async () => {
@@ -183,6 +444,216 @@ describe('durable hosted product vertical', () => {
     await expect(
       isolated.listCommunications(foreignContext, { limit: 10 }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN_AUTHORITY' });
+  });
+
+  it('rejects account, brand, read-grant, and actor/scope authority smuggling before retrieval', async () => {
+    const context = createDurableRequestContext();
+    const service = new DurableProductService(
+      new MemoryDurableProductRepository(),
+      { search: () => Promise.reject(new Error('MUST_NOT_QUERY')) },
+      'https://chief.example.test',
+    );
+    const cases = [
+      {
+        ...context,
+        actor: { ...context.actor, accountScopes: [] },
+      },
+      {
+        ...context,
+        actor: {
+          ...context.actor,
+          accountScopes: [...context.actor.accountScopes, 'account-rogue'],
+        },
+      },
+      {
+        ...context,
+        actor: { ...context.actor, brandScopes: [] },
+      },
+      {
+        ...context,
+        retrievalScope: { ...context.retrievalScope, accountIds: [] },
+      },
+      {
+        ...context,
+        retrievalScope: {
+          ...context.retrievalScope,
+          brandIds: [
+            ...(context.retrievalScope?.brandIds ?? []),
+            'brand-rogue',
+          ],
+        },
+      },
+      {
+        ...context,
+        actor: {
+          ...context.actor,
+          grants: context.actor.grants.filter(
+            (grant) => grant !== 'communications:read',
+          ),
+        },
+      },
+      {
+        ...context,
+        actor: {
+          ...context.actor,
+          grants: context.actor.grants.filter(
+            (grant) => grant !== 'knowledge:read',
+          ),
+        },
+      },
+    ].map((candidate) => serverRequestContextSchema.parse(candidate));
+
+    for (const smuggled of cases)
+      await expect(
+        service.listCommunications(smuggled, { limit: 10 }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN_AUTHORITY' });
+  });
+
+  it('does not let a fixed citation ID with mismatched source content suppress canonical related work', async () => {
+    const launchRef =
+      deterministicEvaluatorIdentityV1.communications[0]
+        .retrievalExactEntityRef;
+    const legitimate = topicalBoundaryRetrieval([
+      {
+        key: 'launch-ready',
+        text: 'Release greenlight depends on the test lead.',
+        exactEntityRef: launchRef,
+        topic: 'release_readiness',
+      },
+    ]);
+    const spoofed: DurableRetrievalPort = {
+      search: async (context, input) => {
+        const result = await legitimate.search(context, input);
+        const spoofCitation = citationSchema.parse({
+          citationId: 'source-asana-1:chunk-asana-1:1',
+          sourceId: 'source-asana-1',
+          sourceVersion: '1',
+          chunkId: 'chunk-asana-1',
+          label: 'Spoofed fixed citation',
+          contentHash: '9'.repeat(64),
+          hydratedUnderAuthorizationEpoch: 1,
+        });
+        return {
+          ...result,
+          candidates: [
+            ...result.candidates,
+            retrievalCandidateSchema.parse({
+              chunkId: spoofCitation.chunkId,
+              sourceId: spoofCitation.sourceId,
+              lexicalScore: 1,
+              vectorScore: 1,
+              fusedScore: 1,
+              authorizationEpoch: 1,
+            }),
+          ],
+          citations: [...result.citations, spoofCitation],
+          evidence: [
+            ...result.evidence,
+            {
+              chunkId: spoofCitation.chunkId,
+              citationId: spoofCitation.citationId,
+              text: 'Release greenlight depends on the test lead, but this is forged.',
+              exactEntityRefs: [launchRef],
+              sourceClass: 'asana' as const,
+              relation: {
+                verified: true as const,
+                kind: 'explicit_related_work' as const,
+                topic: 'release_readiness' as const,
+                exactEntityRefs: [launchRef],
+              },
+            },
+          ],
+        };
+      },
+    };
+    const service = new DurableProductService(
+      new MemoryDurableProductRepository(),
+      spoofed,
+      'https://chief.example.test',
+    );
+    const result = await service.recommendAction(
+      createDurableRequestContext(),
+      {
+        messageRevisionId: messageRevisionIdSchema.parse(
+          'message-revision-1-1',
+        ),
+        expectedMessageRevision: 1,
+      },
+    );
+    expect(result.recommendation.citations).toHaveLength(2);
+    expect(result.recommendation.citations.at(-1)).toMatchObject({
+      citationId: 'source-asana-1:chunk-asana-1:1',
+      contentHash:
+        'a1c0ea6ff7436f8a17de74e2803aa8f318b5d42b3b6594dfcaeac4489ca08f81',
+    });
+  });
+
+  it('does not treat an ingestion-proven Asana object using the launch thread ref as communication evidence', async () => {
+    const launchRef =
+      deterministicEvaluatorIdentityV1.communications[0]
+        .retrievalExactEntityRef;
+    const asanaCitation = citationSchema.parse({
+      citationId: 'canonical-asana-spoof:chunk-asana-spoof:1',
+      sourceId: 'canonical-asana-spoof',
+      sourceVersion: '1',
+      chunkId: 'chunk-asana-spoof',
+      label: 'Canonical Asana evidence',
+      contentHash: '8'.repeat(64),
+      hydratedUnderAuthorizationEpoch: 1,
+    });
+    const retrieval: DurableRetrievalPort = {
+      search: () =>
+        Promise.resolve({
+          candidates: [
+            retrievalCandidateSchema.parse({
+              chunkId: asanaCitation.chunkId,
+              sourceId: asanaCitation.sourceId,
+              lexicalScore: 1,
+              vectorScore: 1,
+              fusedScore: 1,
+              authorizationEpoch: 1,
+            }),
+          ],
+          citations: [asanaCitation],
+          snapshotManifestHash: '7'.repeat(64),
+          evidence: [
+            {
+              chunkId: asanaCitation.chunkId,
+              citationId: asanaCitation.citationId,
+              text: 'Operational sign-off before exposing the new version.',
+              exactEntityRefs: [launchRef],
+              sourceClass: 'asana' as const,
+              relation: {
+                verified: true as const,
+                kind: 'explicit_related_work' as const,
+                exactEntityRefs: [launchRef],
+              },
+            },
+          ],
+        }),
+    };
+    const service = new DurableProductService(
+      new MemoryDurableProductRepository(),
+      retrieval,
+      'https://chief.example.test',
+    );
+    const result = await service.recommendAction(
+      createDurableRequestContext(),
+      {
+        messageRevisionId: messageRevisionIdSchema.parse(
+          'message-revision-1-1',
+        ),
+        expectedMessageRevision: 1,
+      },
+    );
+    expect(result.recommendation).toMatchObject({
+      actionType: 'request_context',
+      status: 'needs_context',
+    });
+    expect(result.recommendation.citations).toHaveLength(1);
+    expect(result.recommendation.citations[0]?.citationId).toBe(
+      'source-asana-1:chunk-asana-1:1',
+    );
   });
 
   it('persists cited draft, exact approval, outbox receipt, and reload state', async () => {

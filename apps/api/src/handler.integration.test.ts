@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEventV2, Context } from 'aws-lambda';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   productHealthResponseSchema,
@@ -139,5 +139,27 @@ describe('API Gateway tRPC Lambda integration', () => {
     );
 
     expect(response.statusCode).toBe(404);
+  });
+
+  it('never includes an unknown caller-controlled procedure path in server diagnostics', async () => {
+    const attackerPath = `secret-token-${'a'.repeat(80)}`;
+    const stdout = vi.spyOn(process.stdout, 'write');
+    const stderr = vi.spyOn(process.stderr, 'write');
+    try {
+      const response = await handler(eventFor(attackerPath), lambdaContext);
+      expect(response.statusCode).toBe(404);
+
+      const diagnostics = JSON.stringify([
+        ...stdout.mock.calls,
+        ...stderr.mock.calls,
+      ]);
+      expect(diagnostics).not.toContain(attackerPath);
+      expect(diagnostics).toContain('unknown_procedure');
+      expect(diagnostics).toMatch(/[a-f0-9]{64}/u);
+      expect(diagnostics.length).toBeLessThan(8_192);
+    } finally {
+      stdout.mockRestore();
+      stderr.mockRestore();
+    }
   });
 });

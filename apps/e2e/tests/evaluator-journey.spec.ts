@@ -6,7 +6,13 @@ import {
   expectNoHorizontalOverflow,
 } from './test-support.js';
 
-const hostedProjectionResponses: Readonly<Record<string, unknown>> = {
+const hostedBaseUrlsConfigured = [
+  process.env.CHIEF_BASE_URL,
+  process.env.CHIEF_API_BASE_URL,
+  process.env.CHIEF_MCP_BASE_URL,
+].some((value) => value !== undefined && value.trim().length > 0);
+
+const fixtureProjectionResponses: Readonly<Record<string, unknown>> = {
   'system.health': {
     service: 'chief-api',
     status: 'ok',
@@ -91,7 +97,11 @@ const hostedProjectionResponses: Readonly<Record<string, unknown>> = {
   },
 };
 
-async function mockDurableHostedProjection(page: Page): Promise<void> {
+async function mockFixtureProjection(page: Page): Promise<void> {
+  if (hostedBaseUrlsConfigured)
+    throw new Error(
+      'FIXTURE_ROUTE_INTERCEPTION_FORBIDDEN_WHEN_HOSTED_URLS_ARE_CONFIGURED',
+    );
   await page.route('**/trpc/**', async (route) => {
     const url = new URL(route.request().url());
     const marker = '/trpc/';
@@ -100,7 +110,7 @@ async function mockDurableHostedProjection(page: Page): Promise<void> {
     );
     const procedures = procedurePath.split(',');
     const results = procedures.map((procedure) => {
-      const value = hostedProjectionResponses[procedure];
+      const value = fixtureProjectionResponses[procedure];
       if (value === undefined) {
         throw new Error(`Unexpected mocked tRPC procedure: ${procedure}`);
       }
@@ -130,10 +140,14 @@ async function expectModeSpecificReadOnlyBody(page: Page): Promise<void> {
 }
 
 test.describe('signed-out evaluator journey', () => {
-  test('renders the exact hosted projection counts without implying an effect', async ({
+  test('renders fixture projection counts without implying hosted evidence', async ({
     page,
   }) => {
-    await mockDurableHostedProjection(page);
+    test.skip(
+      hostedBaseUrlsConfigured,
+      'Fixture route interception is excluded from hosted acceptance.',
+    );
+    await mockFixtureProjection(page);
     await page.goto('/overview');
 
     await expect(
@@ -235,7 +249,11 @@ test.describe('signed-out evaluator journey', () => {
   test('loads and reloads an exact durable approval URL read-only', async ({
     page,
   }) => {
-    await mockDurableHostedProjection(page);
+    test.skip(
+      hostedBaseUrlsConfigured,
+      'Fixture route interception is excluded from hosted acceptance.',
+    );
+    await mockFixtureProjection(page);
     await page.goto('/approvals/proposal-route-approved');
 
     await expect(
@@ -266,6 +284,18 @@ test.describe('signed-out evaluator journey', () => {
       '/approvals/proposal-route-approved',
     );
     await expectNoCredentialLeakage(page);
+  });
+
+  test('forbids fixture route interception whenever hosted URLs are configured', async ({
+    page,
+  }) => {
+    test.skip(
+      !hostedBaseUrlsConfigured,
+      'The guard is exercised by the strict hosted configuration.',
+    );
+    await expect(mockFixtureProjection(page)).rejects.toThrow(
+      'FIXTURE_ROUTE_INTERCEPTION_FORBIDDEN_WHEN_HOSTED_URLS_ARE_CONFIGURED',
+    );
   });
 
   test('filters the unified inbox and opens complete thread context', async ({

@@ -6,6 +6,10 @@ import {
   sourceIdSchema,
 } from '@chief/contracts/ids';
 import {
+  canonicalRetrievalSourceAuthoritySchema,
+  type CanonicalRetrievalSourceAuthority,
+} from '@chief/contracts/connectors';
+import {
   retrievalDeltaManifestSchema,
   retrievalQuerySchema,
   retrievalScopeSchema,
@@ -153,6 +157,48 @@ export interface ProjectionRecord {
   readonly contentHash: string;
   readonly state: 'active' | 'tombstoned';
   readonly mutationOrdinal: string;
+  readonly sourceAuthority: ProjectionSourceAuthority;
+}
+
+export type ProjectionSourceAuthority =
+  | CanonicalRetrievalSourceAuthority
+  | Readonly<{
+      contractVersion: 'legacy-unverified';
+      verifiedBy: 'none';
+      sourceClass: 'unclassified';
+      sourceKind: 'unknown';
+      relationKind: 'unverified';
+    }>;
+
+const legacyUnverifiedSourceAuthority: ProjectionSourceAuthority =
+  Object.freeze({
+    contractVersion: 'legacy-unverified',
+    verifiedBy: 'none',
+    sourceClass: 'unclassified',
+    sourceKind: 'unknown',
+    relationKind: 'unverified',
+  });
+
+export function parseProjectionSourceAuthority(
+  value: unknown,
+): ProjectionSourceAuthority {
+  if (value === undefined) return legacyUnverifiedSourceAuthority;
+  if (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 5 &&
+    (value as Record<string, unknown>).contractVersion ===
+      'legacy-unverified' &&
+    (value as Record<string, unknown>).verifiedBy === 'none' &&
+    (value as Record<string, unknown>).sourceClass === 'unclassified' &&
+    (value as Record<string, unknown>).sourceKind === 'unknown' &&
+    (value as Record<string, unknown>).relationKind === 'unverified'
+  )
+    return legacyUnverifiedSourceAuthority;
+  const parsed = canonicalRetrievalSourceAuthoritySchema.safeParse(value);
+  if (!parsed.success) fail('CORRUPT_SNAPSHOT');
+  return Object.freeze(parsed.data);
 }
 
 interface IndexedRecord extends ProjectionRecord {
@@ -189,6 +235,67 @@ export interface RetrievedEvidence {
   readonly chunkId: string;
   readonly citationId: string;
   readonly text: string;
+  /**
+   * Server-derived entity relations carried from the authorized projection.
+   * Consumers use these to distinguish a topically similar fact from evidence
+   * that is explicitly linked to the requested thread/message/work object.
+   */
+  readonly exactEntityRefs: readonly string[];
+  /** Typed, projection-derived source class; unknown shapes remain unusable. */
+  readonly sourceClass: 'communication' | 'asana' | 'unclassified';
+  readonly sourceAuthority: ProjectionSourceAuthority;
+  /** Exact relation metadata verified from the authorized projection record. */
+  readonly relation: {
+    readonly verified: boolean;
+    readonly kind: 'canonical_thread' | 'explicit_related_work' | 'unverified';
+    readonly topic?: 'release_readiness' | 'board_metrics';
+    readonly exactEntityRefs: readonly string[];
+  };
+}
+
+function projectionSourceRelation(
+  record: ProjectionRecord,
+): Pick<RetrievedEvidence, 'sourceAuthority' | 'sourceClass' | 'relation'> {
+  const authority = record.sourceAuthority;
+  if (
+    authority.verifiedBy === 'canonical_ingestion' &&
+    authority.sourceClass === 'communication' &&
+    authority.relationKind === 'canonical_thread' &&
+    authority.relationTopic !== undefined
+  )
+    return {
+      sourceAuthority: authority,
+      sourceClass: 'communication',
+      relation: Object.freeze({
+        verified: true,
+        kind: 'canonical_thread',
+        topic: authority.relationTopic,
+        exactEntityRefs: Object.freeze([...record.exactEntityRefs]),
+      }),
+    };
+  if (
+    authority.verifiedBy === 'canonical_ingestion' &&
+    authority.sourceClass === 'asana' &&
+    authority.relationKind === 'explicit_related_work'
+  )
+    return {
+      sourceAuthority: authority,
+      sourceClass: 'asana',
+      relation: Object.freeze({
+        verified: true,
+        kind: 'explicit_related_work',
+        exactEntityRefs: Object.freeze([...record.exactEntityRefs]),
+      }),
+    };
+  return {
+    sourceAuthority: legacyUnverifiedSourceAuthority,
+    sourceClass: 'unclassified',
+    relation: Object.freeze({
+      verified: false,
+      kind: 'unverified',
+      exactEntityRefs: Object.freeze([]),
+    }),
+  };
 }
 
 export interface InProcessQueryVector {
@@ -306,6 +413,7 @@ function parseProjectionLine(line: string): ProjectionRecord {
     'contentHash',
     'state',
     'mutationOrdinal',
+    ...(value.sourceAuthority === undefined ? [] : ['sourceAuthority']),
   ].sort();
   if (
     keys.join('\u0000') !== expected.join('\u0000') ||
@@ -341,6 +449,7 @@ function parseProjectionLine(line: string): ProjectionRecord {
     contentHash: value.contentHash,
     state: value.state as 'active' | 'tombstoned',
     mutationOrdinal: value.mutationOrdinal,
+    sourceAuthority: parseProjectionSourceAuthority(value.sourceAuthority),
   });
 }
 
@@ -479,6 +588,7 @@ function parseDelta(bytes: Uint8Array): readonly DeltaDocument[] {
         contentHash: sha256(encoder.encode('')),
         state: 'tombstoned',
         mutationOrdinal: `delta:${String(value.sequence)}`,
+        sourceAuthority: legacyUnverifiedSourceAuthority,
       }),
     });
   });
@@ -931,6 +1041,8 @@ export class BoundedDynamoS3RetrievalIndex implements RetrievalIndex {
         chunkId: record.chunkId,
         citationId: (citations[index] as Citation).citationId,
         text: record.text,
+        exactEntityRefs: Object.freeze([...record.exactEntityRefs]),
+        ...projectionSourceRelation(record),
       }),
     );
     await this.#assertEpoch(input.scope, manifest.authorizationEpoch);
