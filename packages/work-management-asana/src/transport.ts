@@ -172,11 +172,8 @@ function requestHeaders(request: AsanaRequest, token: string): Headers {
     accept: 'application/json',
     authorization: `Bearer ${token}`,
   });
-  for (const [name, value] of Object.entries(request.headers ?? {})) {
-    if (name.toLowerCase() !== 'if-unmodified-since' || /[\r\n]/u.test(value)) {
-      throw new AsanaTransportError('ASANA_TRANSPORT_REQUEST_INVALID');
-    }
-    if (value.length > 0) headers.set('if-unmodified-since', value);
+  if (Object.keys(request.headers ?? {}).length > 0) {
+    throw new AsanaTransportError('ASANA_TRANSPORT_REQUEST_INVALID');
   }
   if (request.operationId !== undefined) {
     headers.set('x-client-request-id', stableOperationId(request.operationId));

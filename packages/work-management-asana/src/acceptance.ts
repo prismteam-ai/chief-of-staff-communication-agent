@@ -136,11 +136,15 @@ export interface AsanaAcceptanceReport {
     readonly authorizationIdHash: string;
     readonly markerHash: string;
     readonly taskGid: string;
-    readonly createOperationIdHash: string;
-    readonly updateOperationIdHash: string;
-    readonly createOutcome: 'accepted';
-    readonly updateOutcome: 'accepted';
-    readonly reconciledReadCount: 2;
+    readonly recoveryState:
+      'created_then_updated' | 'resumed_pending_create' | 'already_completed';
+    readonly createDispatchCount: 0 | 1;
+    readonly updateDispatchCount: 0 | 1;
+    readonly createOutcome: 'accepted' | 'previously_accepted';
+    readonly updateOutcome: 'accepted' | 'previously_accepted';
+    readonly verifiedReadCount: 1 | 2;
+    readonly createOperationIdHash?: string;
+    readonly updateOperationIdHash?: string;
   };
 }
 
@@ -235,13 +239,33 @@ function providerGid(value: unknown): string {
 }
 
 function offset(response: AsanaResponse): string | undefined {
-  if (response.body === null || typeof response.body !== 'object')
-    return undefined;
-  const page = (response.body as { readonly next_page?: unknown }).next_page;
-  if (page === null || typeof page !== 'object') return undefined;
-  const value = (page as { readonly offset?: unknown }).offset;
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string' || value.length === 0) {
+  if (
+    response.body === null ||
+    typeof response.body !== 'object' ||
+    Array.isArray(response.body) ||
+    !Object.hasOwn(response.body, 'next_page')
+  ) {
+    throw new AsanaAcceptanceError('ASANA_ACCEPTANCE_RESPONSE_INVALID');
+  }
+  const page = (response.body as { readonly next_page: unknown }).next_page;
+  if (page === null) return undefined;
+  if (
+    typeof page !== 'object' ||
+    Array.isArray(page) ||
+    !Object.hasOwn(page, 'offset')
+  ) {
+    throw new AsanaAcceptanceError('ASANA_ACCEPTANCE_RESPONSE_INVALID');
+  }
+  const value = (page as { readonly offset: unknown }).offset;
+  if (
+    typeof value !== 'string' ||
+    value.length < 1 ||
+    value.length > 1_024 ||
+    [...value].some((character) => {
+      const code = character.charCodeAt(0);
+      return code < 33 || code > 126;
+    })
+  ) {
     throw new AsanaAcceptanceError('ASANA_ACCEPTANCE_RESPONSE_INVALID');
   }
   return value;
@@ -354,6 +378,49 @@ function nestedGids(value: unknown): readonly string[] {
     }
     return providerGid((item as { readonly gid?: unknown }).gid);
   });
+}
+
+function controlledTaskModifiedAt(
+  record: Record<string, unknown>,
+  expected: {
+    readonly taskGid: string;
+    readonly name: string;
+    readonly workspaceGid: string;
+    readonly projectGid: string;
+  },
+): string {
+  const workspace = record.workspace;
+  const memberships = record.memberships;
+  if (
+    requireGid(record) !== expected.taskGid ||
+    record.name !== expected.name ||
+    typeof record.modified_at !== 'string' ||
+    workspace === null ||
+    typeof workspace !== 'object' ||
+    Array.isArray(workspace) ||
+    providerGid((workspace as { readonly gid?: unknown }).gid) !==
+      expected.workspaceGid ||
+    !Array.isArray(memberships) ||
+    !memberships.some((membership) => {
+      if (
+        membership === null ||
+        typeof membership !== 'object' ||
+        Array.isArray(membership)
+      ) {
+        return false;
+      }
+      const project = (membership as { readonly project?: unknown }).project;
+      return (
+        project !== null &&
+        typeof project === 'object' &&
+        !Array.isArray(project) &&
+        (project as { readonly gid?: unknown }).gid === expected.projectGid
+      );
+    })
+  ) {
+    throw new AsanaAcceptanceError('ASANA_ACCEPTANCE_RESPONSE_INVALID');
+  }
+  return record.modified_at;
 }
 
 function validateBounds(input: AsanaAcceptanceInput): {
@@ -544,7 +611,6 @@ function artifact(
 }
 
 async function controlledMutation(input: {
-  readonly connector: AsanaWorkManagementConnector;
   readonly transport: AsanaTransport;
   readonly account: ConnectorAccount;
   readonly snapshot: ReturnType<typeof liveSnapshot>;
@@ -554,13 +620,27 @@ async function controlledMutation(input: {
   readonly signal: AbortSignal;
 }): Promise<NonNullable<AsanaAcceptanceReport['mutation']>> {
   const marker = input.authorization.assessmentMarker;
-  if (input.existingTasks.some((task) => task.name === undefined)) {
+  const createName = `[Chief assessment ${marker}] controlled task`;
+  const updateName = `[Chief assessment ${marker}] controlled task verified`;
+  if (
+    input.existingTasks.some(
+      (task) => task.name === undefined || task.name.trim().length === 0,
+    )
+  ) {
     throw new AsanaAcceptanceError('ASANA_ACCEPTANCE_RESPONSE_INVALID');
   }
   const matching = input.existingTasks.filter(
     (task) => task.name?.includes(marker) === true,
   );
-  if (matching.length > 0) {
+  if (matching.length > 1) {
+    throw new AsanaAcceptanceError('ASANA_ACCEPTANCE_DUPLICATE_MARKER');
+  }
+  const existingMatch = matching[0];
+  if (
+    existingMatch !== undefined &&
+    existingMatch.name !== createName &&
+    existingMatch.name !== updateName
+  ) {
     throw new AsanaAcceptanceError('ASANA_ACCEPTANCE_DUPLICATE_MARKER');
   }
   const payloads = new Map<string, AsanaEffectPayload>();
@@ -592,101 +672,125 @@ async function controlledMutation(input: {
   });
   const ref = accountRef(input.account);
   const persistence = new AcceptancePersistence();
-  const createName = `[Chief assessment ${marker}] controlled task`;
-  const createPayload: AsanaEffectPayload = {
-    kind: 'create_task',
-    workspaceGid: input.authorization.workspaceGid,
-    projectGid: input.authorization.projectGid,
-    fields: { name: createName },
+  const readControlledTask = async (taskGid: string, name: string) => {
+    const record = singleRecord(
+      await input.transport.request({
+        method: 'GET',
+        path: `/tasks/${encodeURIComponent(taskGid)}`,
+        query: {
+          opt_fields:
+            'gid,name,modified_at,workspace.gid,memberships.project.gid',
+        },
+        account: ref,
+        signal: input.signal,
+      }),
+    );
+    const modifiedAt = controlledTaskModifiedAt(record, {
+      taskGid,
+      name,
+      workspaceGid: input.authorization.workspaceGid,
+      projectGid: input.authorization.projectGid,
+    });
+    await connector.fetchObject(input.account, {
+      kind: 'task',
+      providerObjectId: taskGid,
+    });
+    return modifiedAt;
   };
-  const createArtifact = artifact(
-    createPayload,
-    ref,
-    input.snapshot,
-    marker,
-    'create',
-    input.now,
-  );
-  payloads.set(createArtifact.operationId, createPayload);
-  const exactAuthority = {
-    assertCurrent: (candidate: EffectExecutionArtifact) => {
-      if (stableHash(candidate) !== stableHash(createArtifact)) {
-        throw new AsanaAcceptanceError(
-          'ASANA_ACCEPTANCE_AUTHORIZATION_MISMATCH',
-        );
-      }
-      return Promise.resolve();
-    },
-  };
-  let created = await dispatchWorkManagementEffect(
-    connector,
-    persistence,
-    exactAuthority,
-    ref,
-    createArtifact,
-    input.snapshot,
-  );
-  if (created.status === 'reconciliation_required') {
-    created = await reconcileWorkManagementEffect(
+
+  let taskGid: string;
+  let createArtifact: EffectExecutionArtifact | undefined;
+  if (existingMatch === undefined) {
+    const createPayload: AsanaEffectPayload = {
+      kind: 'create_task',
+      workspaceGid: input.authorization.workspaceGid,
+      projectGid: input.authorization.projectGid,
+      fields: { name: createName },
+    };
+    createArtifact = artifact(
+      createPayload,
+      ref,
+      input.snapshot,
+      marker,
+      'create',
+      input.now,
+    );
+    payloads.set(createArtifact.operationId, createPayload);
+    const exactAuthority = {
+      assertCurrent: (candidate: EffectExecutionArtifact) => {
+        if (stableHash(candidate) !== stableHash(createArtifact)) {
+          throw new AsanaAcceptanceError(
+            'ASANA_ACCEPTANCE_AUTHORIZATION_MISMATCH',
+          );
+        }
+        return Promise.resolve();
+      },
+    };
+    let created = await dispatchWorkManagementEffect(
       connector,
       persistence,
-      {
-        assertReadableForReconciliation: (
-          candidateAccount,
-          candidateArtifact,
-        ) => {
-          if (
-            stableHash(candidateAccount) !== stableHash(ref) ||
-            stableHash(candidateArtifact) !== stableHash(createArtifact)
-          ) {
-            throw new AsanaAcceptanceError(
-              'ASANA_ACCEPTANCE_AUTHORIZATION_MISMATCH',
-            );
-          }
-          return Promise.resolve();
-        },
-      },
+      exactAuthority,
       ref,
       createArtifact,
       input.snapshot,
     );
+    if (created.status === 'reconciliation_required') {
+      created = await reconcileWorkManagementEffect(
+        connector,
+        persistence,
+        {
+          assertReadableForReconciliation: (
+            candidateAccount,
+            candidateArtifact,
+          ) => {
+            if (
+              stableHash(candidateAccount) !== stableHash(ref) ||
+              stableHash(candidateArtifact) !== stableHash(createArtifact)
+            ) {
+              throw new AsanaAcceptanceError(
+                'ASANA_ACCEPTANCE_AUTHORIZATION_MISMATCH',
+              );
+            }
+            return Promise.resolve();
+          },
+        },
+        ref,
+        createArtifact,
+        input.snapshot,
+      );
+    }
+    if (
+      created.status !== 'settled' ||
+      created.providerResult.outcome !== 'accepted'
+    ) {
+      throw new AsanaAcceptanceError('ASANA_ACCEPTANCE_MUTATION_REJECTED');
+    }
+    taskGid = providerGid(created.providerResult.providerCorrelation);
+  } else {
+    taskGid = existingMatch.gid;
   }
-  if (
-    created.status !== 'settled' ||
-    created.providerResult.outcome !== 'accepted'
-  ) {
-    throw new AsanaAcceptanceError('ASANA_ACCEPTANCE_MUTATION_REJECTED');
+
+  const currentName = existingMatch?.name ?? createName;
+  const currentModifiedAt = await readControlledTask(taskGid, currentName);
+  if (currentName === updateName) {
+    return {
+      authorizationIdHash: stableHash(input.authorization.authorizationId),
+      markerHash: stableHash(marker),
+      taskGid,
+      recoveryState: 'already_completed',
+      createDispatchCount: 0,
+      updateDispatchCount: 0,
+      createOutcome: 'previously_accepted',
+      updateOutcome: 'previously_accepted',
+      verifiedReadCount: 1,
+    };
   }
-  const taskGid = providerGid(created.providerResult.providerCorrelation);
-  const createdRead = singleRecord(
-    await input.transport.request({
-      method: 'GET',
-      path: `/tasks/${encodeURIComponent(taskGid)}`,
-      query: {
-        opt_fields:
-          'gid,name,modified_at,workspace.gid,memberships.project.gid',
-      },
-      account: ref,
-      signal: input.signal,
-    }),
-  );
-  if (
-    requireGid(createdRead) !== taskGid ||
-    typeof createdRead.modified_at !== 'string' ||
-    createdRead.name !== createName
-  ) {
-    throw new AsanaAcceptanceError('ASANA_ACCEPTANCE_RESPONSE_INVALID');
-  }
-  await connector.fetchObject(input.account, {
-    kind: 'task',
-    providerObjectId: taskGid,
-  });
-  const updateName = `[Chief assessment ${marker}] controlled task verified`;
+
   const updatePayload: AsanaEffectPayload = {
     kind: 'update_task',
     taskGid,
     fields: { name: updateName },
-    precondition: { modifiedAt: createdRead.modified_at },
+    precondition: { modifiedAt: currentModifiedAt },
   };
   const updateArtifact = artifact(
     updatePayload,
@@ -746,34 +850,25 @@ async function controlledMutation(input: {
   ) {
     throw new AsanaAcceptanceError('ASANA_ACCEPTANCE_MUTATION_REJECTED');
   }
-  const updatedRead = singleRecord(
-    await input.transport.request({
-      method: 'GET',
-      path: `/tasks/${encodeURIComponent(taskGid)}`,
-      query: {
-        opt_fields:
-          'gid,name,modified_at,workspace.gid,memberships.project.gid',
-      },
-      account: ref,
-      signal: input.signal,
-    }),
-  );
-  if (requireGid(updatedRead) !== taskGid || updatedRead.name !== updateName) {
-    throw new AsanaAcceptanceError('ASANA_ACCEPTANCE_RESPONSE_INVALID');
-  }
-  await connector.fetchObject(input.account, {
-    kind: 'task',
-    providerObjectId: taskGid,
-  });
+  await readControlledTask(taskGid, updateName);
   return {
     authorizationIdHash: stableHash(input.authorization.authorizationId),
     markerHash: stableHash(marker),
     taskGid,
-    createOperationIdHash: stableHash(createArtifact.operationId),
-    updateOperationIdHash: stableHash(updateArtifact.operationId),
-    createOutcome: 'accepted',
+    recoveryState:
+      existingMatch === undefined
+        ? 'created_then_updated'
+        : 'resumed_pending_create',
+    createDispatchCount: existingMatch === undefined ? 1 : 0,
+    updateDispatchCount: 1,
+    createOutcome:
+      existingMatch === undefined ? 'accepted' : 'previously_accepted',
     updateOutcome: 'accepted',
-    reconciledReadCount: 2,
+    verifiedReadCount: 2,
+    ...(createArtifact === undefined
+      ? {}
+      : { createOperationIdHash: stableHash(createArtifact.operationId) }),
+    updateOperationIdHash: stableHash(updateArtifact.operationId),
   };
 }
 
@@ -919,7 +1014,6 @@ async function runWithinDeadline(
       );
     }
     mutation = await controlledMutation({
-      connector,
       transport: input.transport,
       account,
       snapshot,

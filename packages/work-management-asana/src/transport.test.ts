@@ -146,6 +146,30 @@ describe('AsanaRestTransport', () => {
     expect(calls).toBe(0);
   });
 
+  it('rejects unsupported caller-supplied headers before fetch', async () => {
+    let calls = 0;
+    const transport = new AsanaRestTransport({
+      credentials: credentials(),
+      fetch: () => {
+        calls += 1;
+        return Promise.resolve(jsonResponse({ data: {} }));
+      },
+    });
+    await expect(
+      transport.request(
+        request({
+          method: 'PUT',
+          path: '/tasks/9001',
+          headers: {
+            'if-unmodified-since': '2026-07-18T12:00:00.000Z',
+          },
+          body: { data: { name: 'approved-name' } },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'ASANA_TRANSPORT_REQUEST_INVALID' });
+    expect(calls).toBe(0);
+  });
+
   it('rejects a punctuation-bearing PAT in original query input before URL serialization', async () => {
     const secret = "synthetic'pat-value";
     let calls = 0;

@@ -36,6 +36,9 @@ constructor or command-line option. It:
   cancels an active body reader immediately even if the stream never yields;
 - makes exactly one fetch attempt, including for `429`, timeout, transport
   failure, and `5xx`;
+- rejects caller-supplied HTTP headers; mutations send only the documented
+  JSON `data` body plus transport-owned authentication, content, and
+  correlation headers;
 - retains only status, a grammar/length-validated provider request ID, and a
   bounded integer `Retry-After` value from response headers.
 
@@ -88,11 +91,16 @@ execute(accountRef, immutable EffectExecutionArtifact)
 The injected payload store resolves the already-rendered operation. The
 connector recomputes its fingerprint and requires exact equality with
 `renderedPayloadFingerprint`. Create requires the configured workspace and an
-explicit allowlisted project. Update and comment refetch the task and compare
-`modified_at` immediately before writing. A stale precondition performs no
-mutation. Update acceptance also requires the returned task GID to equal the
-approved target GID; a mismatched 2xx response freezes as unknown through the
-guarded connector-core path.
+explicit allowlisted project. Update and comment refetch the exact task,
+workspace, project scope, and `modified_at` immediately before writing. A stale
+precondition performs no mutation. The Asana task-update contract does not
+document conditional request headers, so the connector does not send
+`If-Unmodified-Since` and does not claim provider-atomic compare-and-swap. A
+narrow race remains between the immediate preflight and mutation. The immutable
+approved artifact bounds what may be written, update acceptance requires the
+returned task GID to equal the approved target GID, the controlled acceptance
+flow performs an immediate post-read, and ambiguous outcomes freeze for
+read-only reconciliation instead of ordinary retry.
 
 The connector-core path persists client correlation before dispatch and the
 returned task/story GID before `provider_accepted`. Results are fail closed:
@@ -135,17 +143,29 @@ provider I/O:
 - a separate local authorization JSON record binding that scope and marker,
   exactly `create_task` plus `update_task`, and a future expiry.
 
-Before create, the CLI requires complete bounded project-task enumeration and
-requires a valid name on every enumerated task; a missing name makes marker
-absence unprovable and fails before write. It rejects any name containing the
-marker, dispatches one clearly named task create through
-`dispatchWorkManagementEffect`, reads the returned task through the connector,
-then dispatches one `modified_at`-precondition-bound name update through a
-second immutable artifact and reads it again. Both read-backs require the exact
-authorized name. Ambiguous acceptance enters connector-core reconciliation and
-is never resent; a proven single match may settle it, while incomplete or
-multiple matches remain frozen. No delete operation exists. A rerun with the
-same marker fails before write.
+Before any controlled write, the CLI requires complete bounded project-task
+enumeration and a valid name on every enumerated task; a missing name makes
+marker state unprovable and fails before write. Marker handling is exact and
+fail closed:
+
+- zero marker-bearing tasks dispatches one clearly named create through
+  `dispatchWorkManagementEffect`, proves the returned task identity and scope,
+  then dispatches one `modified_at`-precondition-bound update through a second
+  immutable artifact;
+- exactly one task with the exact pending create name is directly read to prove
+  its GID, name, workspace, project, and current `modified_at`; the CLI issues
+  zero creates and resumes only the authorized update;
+- exactly one task with the exact verified final name is directly proved and
+  reported as already completed with zero mutations;
+- multiple matches, incomplete enumeration, missing names, or any other
+  marker-bearing name fail before mutation.
+
+The update path performs another exact scoped `modified_at` GET immediately
+before its PUT and a direct exact-name/scope post-read after accepted or
+reconciled acceptance. Ambiguous acceptance enters connector-core
+reconciliation and is never resent; a proven single match may settle it, while
+unresolved acceptance remains frozen. No delete operation exists, and no path
+creates a second task for a marker.
 
 Create the local authorization record outside terminal history in an
 operator-controlled editor. Use this exact placeholder-only schema:
@@ -213,13 +233,14 @@ then pass one exact workspace GID without a project GID for bounded project
 IDs. Choice evidence contains IDs only, never names.
 
 The second read-only run is stateless: no token, raw body, name, or opaque
-pagination cursor is persisted. Controlled rerun safety comes from complete
-bounded marker enumeration, not from an unsupported idempotency claim.
+pagination cursor is persisted. Controlled rerun safety and partial-create
+recovery come from complete bounded marker enumeration plus exact direct task
+proof, not from an unsupported idempotency or provider-atomic CAS claim.
 
 ## Networkless verification
 
-No live acceptance has been run or claimed by this document. On Node
-`22.18.0`, run:
+The commands in this section are networkless and do not make provider calls.
+On Node `22.18.0`, run:
 
 ```powershell
 $env:PATH = 'E:\nvm\v22.18.0;' + $env:PATH
@@ -236,5 +257,7 @@ rate-limit, immutable effect, stale precondition, ambiguous acceptance, and
 unknown-freeze cases. Transport/acceptance adversarial tests cover host and
 redirect rejection, token redaction, request/response/deadline/content-type
 bounds, no retry, malformed dotenv, duplicate markers, incomplete absence
-proof, bounded reconciliation, authorization binding, and actual export
-resolution rejection.
+proof, zero-create partial recovery, exact completed/ambiguous marker handling,
+immediate preflight and post-read ordering, unsupported-header rejection,
+bounded reconciliation, authorization binding, and actual export-resolution
+rejection.

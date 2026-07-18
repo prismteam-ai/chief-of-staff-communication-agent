@@ -80,10 +80,17 @@ class AcceptanceFixtureTransport implements AsanaTransport {
   public workspaceGids = [WORKSPACE];
   public tasks: Array<{ gid: string; name: string; modifiedAt: string }> = [];
   public nextTaskOffset: string | undefined;
+  public omitTaskNextPage = false;
+  public taskNextPageOverride: unknown;
   public ambiguousCreate: 'none' | 'accepted_on_reconcile' | 'unknown' = 'none';
   public reconciliations = 0;
   public createdReadNameOverride: string | undefined;
   public updatedReadNameOverride: string | undefined;
+  public taskReadGidOverride: string | undefined;
+  public taskWorkspaceGid = WORKSPACE;
+  public taskProjectGid = PROJECT;
+  public failUpdateTransport = false;
+  public mutateBeforeUpdateFailure = false;
   public omitTaskNames = false;
 
   public request(request: AsanaRequest): Promise<AsanaResponse> {
@@ -104,6 +111,12 @@ class AcceptanceFixtureTransport implements AsanaTransport {
       );
     }
     if (request.path === `/projects/${PROJECT}/tasks`) {
+      const nextPage =
+        this.taskNextPageOverride === undefined
+          ? this.nextTaskOffset === undefined
+            ? null
+            : { offset: this.nextTaskOffset }
+          : this.taskNextPageOverride;
       return Promise.resolve(
         response(200, {
           data: this.tasks.map((task) => ({
@@ -111,10 +124,7 @@ class AcceptanceFixtureTransport implements AsanaTransport {
             ...(this.omitTaskNames ? {} : { name: task.name }),
             modified_at: task.modifiedAt,
           })),
-          next_page:
-            this.nextTaskOffset === undefined
-              ? null
-              : { offset: this.nextTaskOffset },
+          ...(this.omitTaskNextPage ? {} : { next_page: nextPage }),
         }),
       );
     }
@@ -131,7 +141,14 @@ class AcceptanceFixtureTransport implements AsanaTransport {
         ? (this.updatedReadNameOverride ?? task.name)
         : (this.createdReadNameOverride ?? task.name);
       return Promise.resolve(
-        response(200, taskBody(task.gid, observedName, task.modifiedAt)),
+        response(200, {
+          data: {
+            ...taskBody(task.gid, observedName, task.modifiedAt).data,
+            gid: this.taskReadGidOverride ?? task.gid,
+            workspace: { gid: this.taskWorkspaceGid },
+            memberships: [{ project: { gid: this.taskProjectGid } }],
+          },
+        }),
       );
     }
     if (request.path === '/tasks' && request.method === 'POST') {
@@ -142,14 +159,22 @@ class AcceptanceFixtureTransport implements AsanaTransport {
       }
       return Promise.resolve(response(201, { data: { gid: '9001' } }));
     }
-    if (request.path === '/tasks/9001' && request.method === 'PUT') {
+    if (request.path.startsWith('/tasks/') && request.method === 'PUT') {
+      const taskGid = request.path.slice('/tasks/'.length);
       const body = request.body as { data: { name: string } };
-      this.tasks[0] = {
-        gid: '9001',
-        name: body.data.name,
-        modifiedAt: '2026-07-18T12:01:00.000Z',
-      };
-      return Promise.resolve(response(200, { data: { gid: '9001' } }));
+      const taskIndex = this.tasks.findIndex(({ gid }) => gid === taskGid);
+      if (taskIndex < 0) return Promise.resolve(response(404, { errors: [] }));
+      if (!this.failUpdateTransport || this.mutateBeforeUpdateFailure) {
+        this.tasks[taskIndex] = {
+          gid: taskGid,
+          name: body.data.name,
+          modifiedAt: '2026-07-18T12:01:00.000Z',
+        };
+      }
+      if (this.failUpdateTransport) {
+        return Promise.reject(new Error('synthetic update transport failure'));
+      }
+      return Promise.resolve(response(200, { data: { gid: taskGid } }));
     }
     return Promise.resolve(response(404, { errors: [] }));
   }
@@ -438,6 +463,73 @@ describe('Asana live acceptance', () => {
     expect(nameless.requests.filter(({ method }) => method === 'POST')).toEqual(
       [],
     );
+
+    const blankName = new AcceptanceFixtureTransport();
+    blankName.tasks = [{ gid: '4003', name: '   ', modifiedAt: NOW }];
+    await expect(
+      runAsanaAcceptance({
+        transport: blankName,
+        transportEvidence: [],
+        workspaceGid: WORKSPACE,
+        projectGid: PROJECT,
+        mutationAuthorization: authorization(),
+        now: () => NOW,
+      }),
+    ).rejects.toThrow('ASANA_ACCEPTANCE_RESPONSE_INVALID');
+    expect(
+      blankName.requests.filter(({ method }) =>
+        ['POST', 'PUT'].includes(method),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('fails before mutation on absent or malformed project-task pagination metadata', async () => {
+    const malformedCases: ReadonlyArray<{
+      readonly configure: (transport: AcceptanceFixtureTransport) => void;
+    }> = [
+      {
+        configure: (transport) => {
+          transport.omitTaskNextPage = true;
+        },
+      },
+      ...[
+        false,
+        1,
+        'offset',
+        [],
+        {},
+        { offset: '' },
+        { offset: '   ' },
+        { offset: 'next\npage' },
+        {
+          offset: 'x'.repeat(1_025),
+        },
+      ].map((nextPage) => ({
+        configure: (transport: AcceptanceFixtureTransport) => {
+          transport.taskNextPageOverride = nextPage;
+        },
+      })),
+    ];
+
+    for (const { configure } of malformedCases) {
+      const transport = new AcceptanceFixtureTransport();
+      configure(transport);
+      await expect(
+        runAsanaAcceptance({
+          transport,
+          transportEvidence: [],
+          workspaceGid: WORKSPACE,
+          projectGid: PROJECT,
+          mutationAuthorization: authorization(),
+          now: () => NOW,
+        }),
+      ).rejects.toThrow('ASANA_ACCEPTANCE_RESPONSE_INVALID');
+      expect(
+        transport.requests.filter(({ method }) =>
+          ['POST', 'PUT'].includes(method),
+        ),
+      ).toHaveLength(0);
+    }
   });
 
   it('rejects unsafe injected request metadata before evidence emission', async () => {
@@ -472,9 +564,12 @@ describe('Asana live acceptance', () => {
     });
     expect(report.mutation).toMatchObject({
       taskGid: '9001',
+      recoveryState: 'created_then_updated',
+      createDispatchCount: 1,
+      updateDispatchCount: 1,
       createOutcome: 'accepted',
       updateOutcome: 'accepted',
-      reconciledReadCount: 2,
+      verifiedReadCount: 2,
     });
     expect(
       transport.requests.filter(
@@ -485,8 +580,214 @@ describe('Asana live acceptance', () => {
       ({ method, path }) => method === 'PUT' && path === '/tasks/9001',
     );
     expect(update?.operationId).toMatch(/^asana-assessment-update-/u);
-    expect(update?.headers).toEqual({ 'if-unmodified-since': NOW });
+    expect(update?.headers).toBeUndefined();
+    const updateIndex = transport.requests.indexOf(update!);
+    expect(transport.requests[updateIndex - 1]).toMatchObject({
+      method: 'GET',
+      path: '/tasks/9001',
+      query: {
+        opt_fields: 'gid,modified_at,workspace.gid,memberships.project.gid',
+      },
+    });
+    expect(
+      transport.requests
+        .slice(updateIndex + 1)
+        .filter(
+          ({ method, path }) => method === 'GET' && path === '/tasks/9001',
+        ),
+    ).toHaveLength(2);
     expect(JSON.stringify(report)).not.toContain(MARKER);
+  });
+
+  it('recovers one exact pending create with zero creates and exact identity/scope binding', async () => {
+    const transport = new AcceptanceFixtureTransport();
+    transport.tasks = [
+      {
+        gid: '7001',
+        name: `[Chief assessment ${MARKER}] controlled task`,
+        modifiedAt: NOW,
+      },
+    ];
+    const report = await runAsanaAcceptance({
+      transport,
+      transportEvidence: [],
+      workspaceGid: WORKSPACE,
+      projectGid: PROJECT,
+      mutationAuthorization: authorization(),
+      now: () => NOW,
+    });
+    expect(report.mutation).toMatchObject({
+      taskGid: '7001',
+      recoveryState: 'resumed_pending_create',
+      createDispatchCount: 0,
+      updateDispatchCount: 1,
+      createOutcome: 'previously_accepted',
+      updateOutcome: 'accepted',
+      verifiedReadCount: 2,
+    });
+    expect(
+      transport.requests.filter(
+        ({ method, path }) => method === 'POST' && path === '/tasks',
+      ),
+    ).toHaveLength(0);
+    const updateIndex = transport.requests.findIndex(
+      ({ method, path }) => method === 'PUT' && path === '/tasks/7001',
+    );
+    expect(updateIndex).toBeGreaterThan(0);
+    expect(transport.requests[updateIndex]).not.toHaveProperty('headers');
+    expect(transport.requests[updateIndex - 1]).toMatchObject({
+      method: 'GET',
+      path: '/tasks/7001',
+    });
+  });
+
+  it('reports one exact completed marker without any mutation', async () => {
+    const transport = new AcceptanceFixtureTransport();
+    transport.tasks = [
+      {
+        gid: '7002',
+        name: `[Chief assessment ${MARKER}] controlled task verified`,
+        modifiedAt: NOW,
+      },
+    ];
+    const report = await runAsanaAcceptance({
+      transport,
+      transportEvidence: [],
+      workspaceGid: WORKSPACE,
+      projectGid: PROJECT,
+      mutationAuthorization: authorization(),
+      now: () => NOW,
+    });
+    expect(report.mutation).toMatchObject({
+      taskGid: '7002',
+      recoveryState: 'already_completed',
+      createDispatchCount: 0,
+      updateDispatchCount: 0,
+      createOutcome: 'previously_accepted',
+      updateOutcome: 'previously_accepted',
+      verifiedReadCount: 1,
+    });
+    expect(
+      transport.requests.filter(({ method }) =>
+        ['POST', 'PUT'].includes(method),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('fails recovery closed on mismatched identity, scope, or marker state', async () => {
+    const pendingName = `[Chief assessment ${MARKER}] controlled task`;
+    for (const configure of [
+      (transport: AcceptanceFixtureTransport) => {
+        transport.taskReadGidOverride = '7999';
+      },
+      (transport: AcceptanceFixtureTransport) => {
+        transport.taskWorkspaceGid = '9998';
+      },
+      (transport: AcceptanceFixtureTransport) => {
+        transport.taskProjectGid = '9997';
+      },
+      (transport: AcceptanceFixtureTransport) => {
+        transport.createdReadNameOverride = 'different exact name';
+      },
+    ]) {
+      const transport = new AcceptanceFixtureTransport();
+      transport.tasks = [{ gid: '7003', name: pendingName, modifiedAt: NOW }];
+      configure(transport);
+      await expect(
+        runAsanaAcceptance({
+          transport,
+          transportEvidence: [],
+          workspaceGid: WORKSPACE,
+          projectGid: PROJECT,
+          mutationAuthorization: authorization(),
+          now: () => NOW,
+        }),
+      ).rejects.toThrow();
+      expect(
+        transport.requests.filter(({ method }) =>
+          ['POST', 'PUT'].includes(method),
+        ),
+      ).toHaveLength(0);
+    }
+
+    const ambiguous = new AcceptanceFixtureTransport();
+    ambiguous.tasks = [
+      { gid: '7004', name: pendingName, modifiedAt: NOW },
+      {
+        gid: '7005',
+        name: `[Chief assessment ${MARKER}] controlled task verified`,
+        modifiedAt: NOW,
+      },
+    ];
+    await expect(
+      runAsanaAcceptance({
+        transport: ambiguous,
+        transportEvidence: [],
+        workspaceGid: WORKSPACE,
+        projectGid: PROJECT,
+        mutationAuthorization: authorization(),
+        now: () => NOW,
+      }),
+    ).rejects.toThrow('ASANA_ACCEPTANCE_DUPLICATE_MARKER');
+    expect(
+      ambiguous.requests.filter(({ method }) =>
+        ['POST', 'PUT'].includes(method),
+      ),
+    ).toHaveLength(0);
+
+    const otherMarkerState = new AcceptanceFixtureTransport();
+    otherMarkerState.tasks = [
+      { gid: '7006', name: `unexpected ${MARKER} state`, modifiedAt: NOW },
+    ];
+    await expect(
+      runAsanaAcceptance({
+        transport: otherMarkerState,
+        transportEvidence: [],
+        workspaceGid: WORKSPACE,
+        projectGid: PROJECT,
+        mutationAuthorization: authorization(),
+        now: () => NOW,
+      }),
+    ).rejects.toThrow('ASANA_ACCEPTANCE_DUPLICATE_MARKER');
+    expect(
+      otherMarkerState.requests.filter(({ method }) =>
+        ['POST', 'PUT'].includes(method),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('fails recovered update transport and unknown acceptance closed without creating', async () => {
+    for (const mutateBeforeUpdateFailure of [false, true]) {
+      const transport = new AcceptanceFixtureTransport();
+      transport.tasks = [
+        {
+          gid: '7007',
+          name: `[Chief assessment ${MARKER}] controlled task`,
+          modifiedAt: NOW,
+        },
+      ];
+      transport.failUpdateTransport = true;
+      transport.mutateBeforeUpdateFailure = mutateBeforeUpdateFailure;
+      await expect(
+        runAsanaAcceptance({
+          transport,
+          transportEvidence: [],
+          workspaceGid: WORKSPACE,
+          projectGid: PROJECT,
+          mutationAuthorization: authorization(),
+          now: () => NOW,
+        }),
+      ).rejects.toThrow('ASANA_ACCEPTANCE_MUTATION_REJECTED');
+      expect(
+        transport.requests.filter(
+          ({ method, path }) => method === 'POST' && path === '/tasks',
+        ),
+      ).toHaveLength(0);
+      expect(
+        transport.requests.filter(({ method }) => method === 'PUT'),
+      ).toHaveLength(1);
+      expect(transport.reconciliations).toBe(1);
+    }
   });
 
   it('fails closed when either post-effect read-back differs from the exact approved name', async () => {

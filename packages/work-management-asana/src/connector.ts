@@ -747,12 +747,10 @@ export class AsanaWorkManagementConnector {
         },
       };
     }
-    const headers = { 'if-unmodified-since': payload.precondition.modifiedAt };
     return payload.kind === 'update_task'
       ? {
           method: 'PUT',
           path: `/tasks/${encodeURIComponent(payload.taskGid)}`,
-          headers,
           account,
           operationId: artifact.stableIdempotencyKey,
           body: { data: mappedFields(payload) },
@@ -760,7 +758,6 @@ export class AsanaWorkManagementConnector {
       : {
           method: 'POST',
           path: `/tasks/${encodeURIComponent(payload.taskGid)}/stories`,
-          headers,
           account,
           operationId: artifact.stableIdempotencyKey,
           body: { data: mappedFields(payload) },

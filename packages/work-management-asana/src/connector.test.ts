@@ -627,14 +627,23 @@ describe('Asana WorkManagementConnector', () => {
         outcome: 'accepted',
         providerCorrelation: testCase.expectedGid,
       });
-      expect(
-        transport.requests.some(
-          (request) =>
-            request.method === testCase.expectedMethod &&
-            request.path === testCase.expectedPath &&
-            request.operationId === artifact.stableIdempotencyKey,
-        ),
-      ).toBe(true);
+      const mutationIndex = transport.requests.findIndex(
+        (request) =>
+          request.method === testCase.expectedMethod &&
+          request.path === testCase.expectedPath &&
+          request.operationId === artifact.stableIdempotencyKey,
+      );
+      expect(mutationIndex).toBeGreaterThanOrEqual(0);
+      expect(transport.requests[mutationIndex]).not.toHaveProperty('headers');
+      if (testCase.payload.kind !== 'create_task') {
+        expect(transport.requests[mutationIndex - 1]).toMatchObject({
+          method: 'GET',
+          path: '/tasks/task-a',
+          query: {
+            opt_fields: 'gid,modified_at,workspace.gid,memberships.project.gid',
+          },
+        });
+      }
     }
 
     const mismatched = new AsanaWorkManagementConnector(
