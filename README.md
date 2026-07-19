@@ -95,7 +95,7 @@ active, stable-epoch manifest inspection and an exact digest of the issued
 source/chunk/version/epoch/evidence rows. A copied hash, altered row, altered
 result object, or head change fails closed with `STALE_REVISION`; there is no
 fixture-identity or app-tier-classification fallback. This citation-proof wiring
-is deployed in commit `57660f3f22d2cc2c93ebe4f9659ebacf8ad1f867` listed
+is deployed in commit `b390b6bf685db80f6aaa3b9fa0d66a7175de5abc` listed
 below.
 
 The focused compatibility suite runs the actual production staging writer into
@@ -242,7 +242,7 @@ Expected parent deployment outputs:
 - MCP health: `<ChiefFoundationStack.McpHealthUrl>`
 
 The final deployed commit is
-`57660f3f22d2cc2c93ebe4f9659ebacf8ad1f867`. Its runtime is live at the URLs
+`b390b6bf685db80f6aaa3b9fa0d66a7175de5abc`. Its runtime is live at the URLs
 below and includes durable citation-lineage verification, quarantine of stale
 proposal replay/effects, availability-safe passive dashboard counts, and the
 truthful single-citation hosted workflow:

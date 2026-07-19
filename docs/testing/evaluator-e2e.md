@@ -80,7 +80,7 @@ both origins (or one shared API/MCP origin) and must finish with no skipped
 health assertion.
 
 The final deployed commit
-`57660f3f22d2cc2c93ebe4f9659ebacf8ad1f867` uses
+`b390b6bf685db80f6aaa3b9fa0d66a7175de5abc` uses
 `https://d3hgq3e86d3knk.cloudfront.net` for the UI and
 `https://prjip3os8i.execute-api.us-east-2.amazonaws.com` for API/MCP. Its strict
 hosted run passed all 19 runnable checks, skipped 2 explicitly fixture-only

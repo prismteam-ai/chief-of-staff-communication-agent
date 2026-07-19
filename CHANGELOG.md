@@ -131,7 +131,7 @@ while retaining all cited facts.` before approve/receipt/reload; also added
 - MCP has no approval or direct-effect tool. The browser local fallback cannot
   approve and is forbidden in strict hosted acceptance.
 - The parent workflow deployed and verified commit
-  `57660f3f22d2cc2c93ebe4f9659ebacf8ad1f867`. Both stacks are
+  `b390b6bf685db80f6aaa3b9fa0d66a7175de5abc`. Both stacks are
   `UPDATE_COMPLETE`; the deterministic retrieval seed returned
   `already_current`; dashboard metrics returned HTTP 200; and strict hosted
   acceptance passed 19 runnable checks with 2 fixture-only skips and 0 failures.
