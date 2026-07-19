@@ -41,12 +41,32 @@ const secretPatterns: ReadonlyArray<readonly [string, RegExp]> = [
   ],
 ];
 
+interface InspectedValue {
+  readonly source: string;
+  readonly value: string;
+}
+
+function credentialLeakLocations(
+  values: readonly InspectedValue[],
+): readonly string[] {
+  const locations: string[] = [];
+  for (const { source, value } of values) {
+    for (const [label, pattern] of secretPatterns) {
+      if (pattern.test(value)) locations.push(`${label} in ${source}`);
+    }
+  }
+  return locations;
+}
+
 export async function expectNoCredentialLeakage(page: Page): Promise<void> {
   const markup = await page.content();
-  const storageDump = await page.evaluate<string>(
-    'JSON.stringify({ localStorage: Object.values(localStorage), sessionStorage: Object.values(sessionStorage) })',
+  const storageValues = await page.evaluate<{
+    readonly localStorage: readonly string[];
+    readonly sessionStorage: readonly string[];
+  }>(
+    '({ localStorage: Object.values(localStorage), sessionStorage: Object.values(sessionStorage) })',
   );
-  const cookieDump = JSON.stringify(await page.context().cookies());
+  const cookies = await page.context().cookies();
   const navigableUrls: string[] = [];
   const links = page.locator('a[href]');
   for (let index = 0; index < (await links.count()); index += 1) {
@@ -67,18 +87,46 @@ export async function expectNoCredentialLeakage(page: Page): Promise<void> {
       (await resource.getAttribute('href'));
     if (url !== null) resourceUrls.push(url);
   }
-  const inspected = [
-    page.url(),
-    markup,
-    storageDump,
-    cookieDump,
-    ...navigableUrls,
-    ...resourceUrls,
-  ].join('\n');
 
-  for (const [label, pattern] of secretPatterns) {
-    expect(inspected, `${label} must not be exposed`).not.toMatch(pattern);
+  const inspected: InspectedValue[] = [
+    { source: 'page URL', value: page.url() },
+    { source: 'document markup', value: markup },
+    ...storageValues.localStorage.map((value, index) => ({
+      source: `localStorage value ${index + 1}`,
+      value,
+    })),
+    ...storageValues.sessionStorage.map((value, index) => ({
+      source: `sessionStorage value ${index + 1}`,
+      value,
+    })),
+    ...navigableUrls.map((value, index) => ({
+      source: `navigable URL ${index + 1}`,
+      value,
+    })),
+    ...resourceUrls.map((value, index) => ({
+      source: `resource URL ${index + 1}`,
+      value,
+    })),
+  ];
+  const violations = [...credentialLeakLocations(inspected)];
+
+  // Cookie values are intentionally never inspected by a matcher or included
+  // in diagnostics. The browser session token belongs in the HttpOnly jar; the
+  // observable security contract here is its metadata, not its opaque value.
+  for (const cookie of cookies) {
+    if (cookie.name !== '__Host-chief_session') continue;
+    if (!cookie.httpOnly) violations.push('session cookie is not HttpOnly');
+    if (!cookie.secure) violations.push('session cookie is not Secure');
+    if (cookie.sameSite !== 'Strict') {
+      violations.push('session cookie SameSite policy is not Strict');
+    }
+    if (cookie.path !== '/') violations.push('session cookie path is not root');
   }
+
+  expect(
+    violations,
+    'credential leakage locations (secret values redacted)',
+  ).toEqual([]);
 }
 
 export async function expectBasicAccessibility(page: Page): Promise<void> {

@@ -279,6 +279,54 @@ test.describe('authenticated evaluator journey', () => {
       page.getByText(/prepared outbox · effect disabled/i),
     ).toBeVisible();
     await expect(page.getByText(/demonstration only/i)).toHaveCount(3);
+
+    const adversarialSessionToken = [
+      `eyJ${'a'.repeat(12)}`,
+      'a'.repeat(16),
+      'b'.repeat(16),
+    ].join('.');
+    await page.context().addCookies([
+      {
+        name: 'adversarial_session',
+        value: adversarialSessionToken,
+        url: page.url(),
+      },
+    ]);
+    await page.evaluate((token) => {
+      const browser = globalThis as unknown as {
+        readonly document: {
+          readonly body: {
+            readonly dataset: Record<string, string | undefined>;
+          };
+        };
+      };
+      browser.document.body.dataset.adversarialCredential = `Bearer ${token}`;
+    }, adversarialSessionToken);
+    let redactedFailure = '';
+    try {
+      await expectNoCredentialLeakage(page);
+    } catch (error) {
+      redactedFailure = error instanceof Error ? error.message : String(error);
+    }
+    expect(redactedFailure.length).toBeGreaterThan(0);
+    expect(redactedFailure).toContain(
+      'authorization credential in document markup',
+    );
+    expect(
+      redactedFailure.includes(adversarialSessionToken),
+      'credential diagnostics must redact secret values',
+    ).toBe(false);
+    await page.evaluate(() => {
+      const browser = globalThis as unknown as {
+        readonly document: {
+          readonly body: {
+            readonly dataset: Record<string, string | undefined>;
+          };
+        };
+      };
+      delete browser.document.body.dataset.adversarialCredential;
+    });
+    await page.context().clearCookies({ name: 'adversarial_session' });
     await expectNoCredentialLeakage(page);
   });
 
