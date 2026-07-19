@@ -243,7 +243,7 @@ Expected parent deployment outputs:
 - MCP health: `<ChiefFoundationStack.McpHealthUrl>`
 
 The final deployed commit is
-`644aa2f52258841426d9fb36c2b969d6724d00d5`. Its runtime is live at the URLs
+`f5caa2cfa178961df6d8b68d54e7de7b64d37b83`. Its runtime is live at the URLs
 below and includes durable citation-lineage verification, quarantine of stale
 proposal replay/effects, availability-safe passive dashboard counts, and the
 truthful single-citation hosted workflow:

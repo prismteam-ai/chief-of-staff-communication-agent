@@ -74,6 +74,10 @@ while retaining all cited facts.` before approve/receipt/reload; also added
 
 ### Changed
 
+- Propagated authorized fused retrieval scores into cited evidence and made
+  confidence/abstention respond deterministically to relevance. Low-relevance
+  evidence now requests context while strong exact topical evidence increases
+  confidence; the deployed authenticated suite remains 19/19 runnable checks.
 - Relabeled every realistic-looking work item in the browser-only fallback as
   the synthetic `DEMO-4821` fixture. The deployed CloudFront bundle contains
   neither `SEC-4821` nor an `Asana ·` citation label; strict authenticated
@@ -147,7 +151,7 @@ while retaining all cited facts.` before approve/receipt/reload; also added
 - MCP has no approval or direct-effect tool. The browser local fallback cannot
   approve and is forbidden in strict hosted acceptance.
 - The parent workflow deployed and verified commit
-  `644aa2f52258841426d9fb36c2b969d6724d00d5`. Both stacks are
+  `f5caa2cfa178961df6d8b68d54e7de7b64d37b83`. Both stacks are
   `UPDATE_COMPLETE`; the deterministic retrieval seed returned
   `already_current`; dashboard metrics returned HTTP 200; and strict hosted
   acceptance passed 19 runnable checks with 2 fixture-only skips and 0 failures.
