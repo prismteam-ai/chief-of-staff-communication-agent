@@ -95,7 +95,7 @@ active, stable-epoch manifest inspection and an exact digest of the issued
 source/chunk/version/epoch/evidence rows. A copied hash, altered row, altered
 result object, or head change fails closed with `STALE_REVISION`; there is no
 fixture-identity or app-tier-classification fallback. This citation-proof wiring
-is deployed in commit `b390b6bf685db80f6aaa3b9fa0d66a7175de5abc` listed
+is deployed in commit `f5caa2cfa178961df6d8b68d54e7de7b64d37b83` listed
 below.
 
 The focused compatibility suite runs the actual production staging writer into
@@ -254,9 +254,16 @@ truthful single-citation hosted workflow:
 - MCP endpoint: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com/mcp`
 - MCP health: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com/mcp/health`
 
-Both CloudFormation stacks are `UPDATE_COMPLETE`. The strict hosted suite
-finished with **19 runnable checks passed, 2 fixture-only checks skipped, and 0
-failed**. It proved HTTP 200 dashboard/API/MCP health, a genuine
+The deployed evaluator is authenticated. An unauthenticated visitor is
+redirected to the Cognito Hosted UI login at
+`https://d3hgq3e86d3knk.cloudfront.net/auth/login`, and the browser session is
+a revocable server-side cookie session. Data endpoints return HTTP 401 without
+that session. Evaluator credentials are delivered with the submission and are
+never committed to this repository.
+
+Both CloudFormation stacks are `UPDATE_COMPLETE`. The strict authenticated
+hosted suite finished with **19 runnable checks passed, 2 fixture-only checks
+skipped, and 0 failed**. It proved HTTP 200 dashboard/API/MCP health, a genuine
 communication-backed citation with no fabricated Asana/SEC-4821 evidence,
 durable revision/approval/effect-disabled receipt reload, and API/MCP parity.
 Hosted mode refuses to install the mocks used by the two local fixture-only

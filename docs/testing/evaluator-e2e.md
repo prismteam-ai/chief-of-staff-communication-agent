@@ -1,12 +1,12 @@
 # Evaluator browser and hosted acceptance
 
-The Playwright suite proves the signed-out evaluator fixture journey and can run
+The Playwright suite proves the evaluator fixture journey and can run
 unchanged against the local Vite application or the deployed CloudFront URL.
 It never needs a provider credential and never performs an external effect.
 
 ## Coverage
 
-- signed-out executive overview, volume/status/SLA metrics, and channel mix;
+- executive overview, volume/status/SLA metrics, and channel mix;
 - exact `live`, `recorded`, `fixture`, `sandbox`, `degraded`, and `blocked`
   capability labels, including negatives against relabeling non-live evidence;
 - status-filtered inbox, deep-linked thread chronology, participants,
@@ -80,14 +80,20 @@ both origins (or one shared API/MCP origin) and must finish with no skipped
 health assertion.
 
 The final deployed commit
-`b390b6bf685db80f6aaa3b9fa0d66a7175de5abc` uses
+`f5caa2cfa178961df6d8b68d54e7de7b64d37b83` uses
 `https://d3hgq3e86d3knk.cloudfront.net` for the UI and
-`https://prjip3os8i.execute-api.us-east-2.amazonaws.com` for API/MCP. Its strict
-hosted run passed all 19 runnable checks, skipped 2 explicitly fixture-only
-mock-dependent scenarios, and had 0 failures. Neither health assertion was
-skipped. The run required dashboard HTTP 200, one genuine communication-backed
-citation, empty related-Asana results, no Asana/SEC-4821 citation, and equal API
-and MCP retrieval content before completing the durable approval journey.
+`https://prjip3os8i.execute-api.us-east-2.amazonaws.com` for API/MCP. The
+deployed evaluator is authenticated: an unauthenticated visitor is redirected
+to the Cognito Hosted UI login at
+`https://d3hgq3e86d3knk.cloudfront.net/auth/login`, browser sessions are
+cookie-based, and data endpoints return HTTP 401 without a session. Evaluator
+credentials are delivered with the submission and are never committed. The
+strict authenticated hosted run passed all 19 runnable checks, skipped 2
+explicitly fixture-only mock-dependent scenarios, and had 0 failures. Neither
+health assertion was skipped. The run required dashboard HTTP 200, one genuine
+communication-backed citation, empty related-Asana results, no Asana/SEC-4821
+citation, and equal API and MCP retrieval content before completing the durable
+approval journey.
 
 Artifacts for failures (trace, screenshot, and video) stay under
 `apps/e2e/node_modules/.cache/playwright-results`; they are ignored workspace

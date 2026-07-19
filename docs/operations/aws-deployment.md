@@ -441,8 +441,10 @@ $Product.Stacks[0].Outputs | Where-Object OutputKey -notmatch 'Secret' |
 ```
 
 Use the `WebUrl`, `ApiHealthUrl`, `McpHealthUrl`, `CloudFrontApiUrl`, and
-`CloudFrontMcpUrl` outputs for smoke tests. A clean signed-out browser must load
-the web URL and survive direct deep-link refresh. API and MCP health must return
+`CloudFrontMcpUrl` outputs for smoke tests. A clean browser with no session must
+be redirected to the Cognito Hosted UI login at `/auth/login`, and data
+endpoints must return HTTP 401 without authentication; an authenticated
+evaluator session must load the web URL and survive direct deep-link refresh. API and MCP health must return
 HTTP 200. The CloudFront response must include the committed CSP,
 `X-Content-Type-Options`, frame denial, referrer policy, HSTS, and permissions
 policy. A direct UI route such as `/inbox/thread-q3-launch` must serve the SPA,
@@ -501,7 +503,7 @@ Also verify:
 - the public UI shows seven source-owned synthetic connector cards (six fixture
   mode and one manual/recorded LinkedIn archive card), reports zero hosted
   blocked evidence without rendering unavailable cards, and never claims
-  signed-out OAuth/account setup;
+  public OAuth/account setup;
 - the evaluator identity marker, approval/execution state, and current retrieval
   head are durable and contain only approved deterministic non-PII data; inbox
   rows and connector cards are regenerated from the source-owned V2 corpus;

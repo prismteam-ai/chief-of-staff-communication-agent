@@ -2,7 +2,7 @@
 
 ## Outcome
 
-The Chief web application is a complete, signed-out evaluator journey over a
+The Chief web application is a complete, authenticated evaluator journey over a
 deterministic multichannel projection: 1,120 synthetic primary messages in 160
 threads across seven account-scoped source-owned connectors and two brands.
 Six connectors use fixture mode; LinkedIn archive is manual/recorded evidence.
@@ -41,7 +41,7 @@ action. No direct `fetch`, persistence shape, tenant selector, or untyped
 response is introduced in the web application.
 
 All communication, recommendation, approval, execution, Asana, metric, and
-connector records currently shown in the signed-out experience are
+connector records currently shown in the evaluator experience are
 deterministic fixtures. A healthy hosted API never relabels them as live.
 Likewise, recorded evidence is not described as a current live connection, and
 blocked connectors do not expose functional setup buttons. SMS evidence is
