@@ -85,6 +85,7 @@ const handler = createApiHandler({
 
 const enforcedHandler = createApiHandler({
   productService: createFixtureProductService(),
+  requestContext: createFixtureRequestContext(),
 });
 
 afterEach(() => {
@@ -139,6 +140,7 @@ describe('API Gateway tRPC Lambda integration', () => {
   it('returns forbidden for inactive server membership or grants', async () => {
     const inactiveAuthorityHandler = createApiHandler({
       productService: createFixtureProductService(),
+      requestContext: createFixtureRequestContext(),
       requestAuthorityResolver: {
         resolve: () =>
           Promise.reject(

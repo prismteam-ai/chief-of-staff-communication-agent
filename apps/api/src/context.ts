@@ -45,7 +45,7 @@ const forbiddenAuthorityHeaders = new Set([
 export interface ApiDependencies {
   readonly productService: ProductService;
   /** Legacy product-service input. Ignored unless authMode is explicitly local-test. */
-  readonly requestContext?: ProductRequestContext;
+  readonly requestContext: ProductRequestContext;
   readonly requestAuthorityResolver?: RequestAuthorityResolver;
   readonly authMode?: RequestAuthMode;
 }
@@ -79,15 +79,12 @@ export function createContext(
     throw new Error('LOCAL_TEST_AUTH_FORBIDDEN_IN_PRODUCTION');
   if (
     authMode === 'local-test' &&
-    (dependencies.requestContext === undefined ||
-      dependencies.requestAuthorityResolver !== undefined)
+    dependencies.requestAuthorityResolver !== undefined
   )
     throw new Error('INVALID_LOCAL_TEST_AUTH_CONFIGURATION');
   const requestAuthorityResolver =
     authMode === 'local-test'
-      ? createLocalTestRequestAuthorityResolver(
-          dependencies.requestContext as ProductRequestContext,
-        )
+      ? createLocalTestRequestAuthorityResolver(dependencies.requestContext)
       : (dependencies.requestAuthorityResolver ??
         createDenyAllRequestAuthorityResolver());
   const authorityInput = requestAuthorityInput(event);
