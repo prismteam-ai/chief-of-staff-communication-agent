@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added redacted live Asana acceptance evidence for one controlled create,
+  preconditioned update, direct verification, and immediate idempotent replay;
+  this remains separate from the effect-disabled public evaluator.
 - Added the versioned `chief-retrieval.v1` durable staging, snapshot, head, and
   query-vector contract shared by production ingestion and bounded retrieval.
 - Added deterministic, bounded compaction with duplicate replay handling,

@@ -281,6 +281,11 @@ claim completed Gmail operator consent, live provider send, Twilio sender
 certification, or live Asana mutation evidence. Blocked mode has zero hosted
 evidence and does not produce a connector card.
 
+Separate from that effect-disabled runtime, the production Asana connector has
+one bounded, explicitly authorized live create/update/reconcile proof plus an
+immediate zero-dispatch replay. See
+[controlled Asana live acceptance](docs/evidence/asana-controlled-live-acceptance-20260719.md).
+
 The private LinkedIn archive is not imported, exposed, or required by this
 public vertical. Live provider authentication and external-effect acceptance
 remain separate operator-controlled workflows.
