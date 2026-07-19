@@ -70,9 +70,9 @@ beforeEach(() => {
   ]) {
     procedure.mockReset();
   }
-  browserApiMock.systemHealth.mockRejectedValue(
-    new Error('hosted API unavailable'),
-  );
+  const networkError = new Error('BROWSER_API_NETWORK_ERROR');
+  networkError.name = 'BrowserApiNetworkError';
+  browserApiMock.systemHealth.mockRejectedValue(networkError);
   createBrowserApiMock.mockClear();
   createApiClientMock.mockReset();
   createApiClientMock.mockReturnValue(apiClientMock);
@@ -396,6 +396,47 @@ describe('executive evaluator application', () => {
     expect(createBrowserApiMock).toHaveBeenCalledWith(window.location.origin);
   });
 
+  it('shows secure sign-in for 401 and never substitutes fixture data', async () => {
+    const unauthorized = new Error('BROWSER_AUTHENTICATION_REQUIRED');
+    unauthorized.name = 'BrowserAuthenticationRequiredError';
+    browserApiMock.systemHealth.mockRejectedValue(unauthorized);
+
+    renderRoute('/inbox/thread-q3-launch');
+
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to Chief' }),
+    ).toBeTruthy();
+    expect(screen.queryByText('Local fallback fixture.')).toBeNull();
+    expect(screen.queryByText('Taylor Reed')).toBeNull();
+    expect(
+      screen
+        .getByRole('link', { name: 'Sign in securely' })
+        .getAttribute('href'),
+    ).toBe('/auth/login?returnTo=%2Finbox%2Fthread-q3-launch');
+  });
+
+  it('posts same-origin logout and returns to the sign-in state', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    arrangeHostedProjection();
+    renderRoute('/overview');
+
+    await screen.findByText('Durable hosted evaluator data.');
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to Chief' }),
+    ).toBeTruthy();
+    expect(fetchSpy).toHaveBeenCalledWith('/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { accept: 'application/json' },
+    });
+    fetchSpy.mockRestore();
+  });
+
   it('renders typed durable hosted projections when the product API is available', async () => {
     arrangeHostedProjection();
     renderRoute('/overview');
@@ -636,7 +677,9 @@ describe('executive evaluator application', () => {
     expect(apiClientMock.execution.status.query).toHaveBeenCalledWith({
       proposalId: 'proposal-route-1',
     });
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /approve|send|dispatch/i }),
+    ).toBeNull();
   });
 
   it('renders the approved proposal only with its durable effect-disabled receipt', async () => {
@@ -675,7 +718,9 @@ describe('executive evaluator application', () => {
     expect(screen.getByTestId('execution-receipt').textContent).toContain(
       'Durable effect-disabled receipt',
     );
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /approve|send|dispatch/i }),
+    ).toBeNull();
   });
 
   it('shows bounded loading, not-found, and safe error proposal states', async () => {
@@ -686,7 +731,7 @@ describe('executive evaluator application', () => {
       () => new Promise(() => undefined),
     );
     renderRoute('/approvals/proposal-loading');
-    expect(screen.getByTestId('approval-route-loading')).toBeTruthy();
+    expect(await screen.findByTestId('approval-route-loading')).toBeTruthy();
 
     cleanup();
     apiClientMock.approvals.status.query.mockRejectedValue(
@@ -1069,10 +1114,10 @@ describe('executive evaluator application', () => {
     expect(screen.queryByTestId('execution-receipt')).toBeNull();
   });
 
-  it('provides visible, safe Cursor MCP instructions', () => {
+  it('provides visible, safe Cursor MCP instructions', async () => {
     renderRoute('/evidence');
 
-    const instructions = screen.getByTestId('mcp-instructions');
+    const instructions = await screen.findByTestId('mcp-instructions');
     expect(instructions.textContent).toContain('https://<hosted-api>/mcp');
     expect(instructions.textContent).toContain(
       'Approval stays in the product.',

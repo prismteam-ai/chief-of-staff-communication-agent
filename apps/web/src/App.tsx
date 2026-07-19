@@ -24,6 +24,7 @@ import {
   Link2,
   ListChecks,
   LockKeyhole,
+  LogOut,
   MessageSquareText,
   Paperclip,
   PencilLine,
@@ -92,10 +93,18 @@ import {
   type CommunicationStatus,
   type ConnectorFixture,
 } from './data.js';
+import {
+  browserLoginHref,
+  isAuthenticationRequired,
+  isBrowserNetworkFailure,
+  resolveBrowserApiBaseUrl,
+  revokeBrowserSession,
+} from './auth.js';
 
 type ApiState =
   | { readonly kind: 'checking' }
   | { readonly kind: 'ready'; readonly health: ProductHealthResponse }
+  | { readonly kind: 'unauthenticated' }
   | { readonly kind: 'unavailable' };
 
 type InboxFilter = 'all' | CommunicationStatus;
@@ -292,11 +301,17 @@ function AppShell({
   apiState,
   source,
   pendingApprovalCount,
+  loggingOut,
+  logoutError,
+  onLogout,
   children,
 }: {
   readonly apiState: ApiState;
   readonly source: ProjectionSource;
   readonly pendingApprovalCount: number;
+  readonly loggingOut: boolean;
+  readonly logoutError?: string;
+  readonly onLogout: () => void;
   readonly children: React.ReactNode;
 }) {
   const location = useLocation();
@@ -357,8 +372,8 @@ function AppShell({
             <strong>Safe evaluator</strong>
           </div>
           <p>
-            Signed out · deterministic non-PII seed · durable records · external
-            effects disabled.
+            Authenticated evaluator · deterministic non-PII seed · durable
+            records · external effects disabled.
           </p>
           <ModeChip mode="fixture" testId="capability-mode-session" />
         </section>
@@ -372,6 +387,20 @@ function AppShell({
             <Code2 aria-hidden="true" size={16} />
             Connect Cursor / MCP
           </Link>
+          <button
+            className="sidebar-logout"
+            type="button"
+            onClick={onLogout}
+            disabled={loggingOut}
+          >
+            <LogOut aria-hidden="true" size={16} />
+            {loggingOut ? 'Signing out…' : 'Sign out'}
+          </button>
+          {logoutError === undefined ? null : (
+            <small className="sidebar-logout-error" role="alert">
+              {logoutError}
+            </small>
+          )}
         </div>
       </aside>
 
@@ -407,6 +436,72 @@ function AppShell({
           {children}
         </main>
       </div>
+    </div>
+  );
+}
+
+function BrowserAccessState({
+  kind,
+  onRetry,
+}: {
+  readonly kind: 'checking' | 'unauthenticated' | 'unavailable';
+  readonly onRetry: () => void;
+}) {
+  const location = useLocation();
+  const loginHref = browserLoginHref(location.pathname);
+  return (
+    <div className="auth-shell">
+      <main className="auth-card" aria-live="polite">
+        <span className="auth-mark" aria-hidden="true">
+          C
+        </span>
+        {kind === 'checking' ? (
+          <>
+            <RefreshCcw
+              className="auth-state-icon auth-state-icon--spin"
+              aria-hidden="true"
+            />
+            <p className="eyebrow">Secure evaluator</p>
+            <h1>Checking your Chief session</h1>
+            <p>Verifying access to the bounded assessment workspace.</p>
+          </>
+        ) : kind === 'unauthenticated' ? (
+          <>
+            <LockKeyhole className="auth-state-icon" aria-hidden="true" />
+            <p className="eyebrow">Access required</p>
+            <h1>Sign in to Chief</h1>
+            <p>
+              Use the evaluator account to open the durable, non-PII assessment
+              workspace. Authentication stays in the hosted identity service.
+            </p>
+            <a
+              className="button button--primary auth-primary-action"
+              href={loginHref}
+            >
+              Sign in securely
+              <ArrowRight aria-hidden="true" size={18} />
+            </a>
+          </>
+        ) : (
+          <>
+            <CloudCog className="auth-state-icon" aria-hidden="true" />
+            <p className="eyebrow">Service unavailable</p>
+            <h1>Chief could not verify access</h1>
+            <p>
+              The secure product endpoint did not respond correctly. No local
+              fixture has been substituted for the hosted evaluator.
+            </p>
+            <button
+              className="button button--primary auth-primary-action"
+              type="button"
+              onClick={onRetry}
+            >
+              <RefreshCcw aria-hidden="true" size={18} />
+              Try again
+            </button>
+          </>
+        )}
+      </main>
     </div>
   );
 }
@@ -3145,16 +3240,21 @@ function NotFoundPage() {
 
 export function App() {
   const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
-  const apiBaseUrl =
-    configuredApiBaseUrl.length > 0
-      ? configuredApiBaseUrl
-      : window.location.origin;
+  const production = import.meta.env.PROD;
+  const apiBaseUrl = resolveBrowserApiBaseUrl({
+    productOrigin: window.location.origin,
+    configuredDevelopmentBaseUrl: configuredApiBaseUrl,
+    production,
+  });
   const api = useMemo(() => createBrowserApi(apiBaseUrl), [apiBaseUrl]);
   const apiClient = useMemo(
     () => createApiClient({ baseUrl: apiBaseUrl }),
     [apiBaseUrl],
   );
   const [apiState, setApiState] = useState<ApiState>({ kind: 'checking' });
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string>();
   const [projection, setProjection] = useState<ProductProjection>({
     source: 'checking',
     communications: [],
@@ -3184,8 +3284,28 @@ export function App() {
             connectors: connectorResult.map(hostedConnectorToView),
           });
         }
-      } catch {
+      } catch (error) {
         if (active) {
+          if (isAuthenticationRequired(error)) {
+            setApiState({ kind: 'unauthenticated' });
+            setProjection({
+              source: 'checking',
+              communications: [],
+              hostedCommunications: [],
+              connectors: [],
+            });
+            return;
+          }
+          if (production || !isBrowserNetworkFailure(error)) {
+            setApiState({ kind: 'unavailable' });
+            setProjection({
+              source: 'checking',
+              communications: [],
+              hostedCommunications: [],
+              connectors: [],
+            });
+            return;
+          }
           setApiState({ kind: 'unavailable' });
           setProjection({
             source: 'local_fallback',
@@ -3200,13 +3320,44 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [api]);
+  }, [api, bootstrapAttempt, production]);
+
+  const retryBootstrap = () => {
+    setApiState({ kind: 'checking' });
+    setBootstrapAttempt((attempt) => attempt + 1);
+  };
+
+  const logout = async () => {
+    setLoggingOut(true);
+    setLogoutError(undefined);
+    try {
+      await revokeBrowserSession();
+      setProjection({
+        source: 'checking',
+        communications: [],
+        hostedCommunications: [],
+        connectors: [],
+      });
+      setApiState({ kind: 'unauthenticated' });
+    } catch {
+      setLogoutError('Sign out failed. Please try again.');
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
+  if (apiState.kind !== 'ready' && projection.source === 'checking') {
+    return <BrowserAccessState kind={apiState.kind} onRetry={retryBootstrap} />;
+  }
 
   return (
     <AppShell
       apiState={apiState}
       source={projection.source}
       pendingApprovalCount={projection.metrics?.pendingApprovalCount ?? 0}
+      loggingOut={loggingOut}
+      logoutError={logoutError}
+      onLogout={() => void logout()}
     >
       <Routes>
         <Route path="/" element={<Navigate replace to="/overview" />} />
