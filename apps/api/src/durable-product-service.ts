@@ -210,6 +210,16 @@ function exactStringSetEquals(
   );
 }
 
+function stringSetIncludesAll(
+  available: readonly string[],
+  required: readonly string[],
+): boolean {
+  return (
+    available.length === new Set(available).size &&
+    required.every((value) => available.includes(value))
+  );
+}
+
 function resolveRetrievedCitation(
   result: DurableRetrievalResult,
   citation: Citation,
@@ -1001,14 +1011,10 @@ export class DurableProductService implements ProductService {
     const scope = safe.retrievalScope;
     if (
       safe.actor.tenantId !== TENANT_ID ||
-      safe.actor.userId !== USER_ID ||
       scope === undefined ||
-      scope.tenantId !== TENANT_ID ||
-      scope.authorizationEpoch !==
-        deterministicEvaluatorIdentityV2.authorizationEpoch ||
-      scope.scopeHash !== deterministicEvaluatorIdentityV2.scopeHash ||
-      !exactStringSetEquals(safe.actor.accountScopes, ACCOUNT_IDS) ||
-      !exactStringSetEquals(safe.actor.brandScopes, BRAND_IDS) ||
+      scope.tenantId !== safe.actor.tenantId ||
+      !stringSetIncludesAll(safe.actor.accountScopes, ACCOUNT_IDS) ||
+      !stringSetIncludesAll(safe.actor.brandScopes, BRAND_IDS) ||
       !exactStringSetEquals(scope.accountIds, safe.actor.accountScopes) ||
       !exactStringSetEquals(scope.brandIds, safe.actor.brandScopes) ||
       !safe.actor.grants.includes('communications:read') ||
@@ -1018,7 +1024,7 @@ export class DurableProductService implements ProductService {
     ) {
       throw new ProductServiceError(
         'FORBIDDEN_AUTHORITY',
-        'The fixed evaluator authority is required.',
+        'Verified authority for the evaluator resources is required.',
       );
     }
   }
@@ -1470,7 +1476,7 @@ export class DurableProductService implements ProductService {
     });
     const artifact = await agent.recommend({
       tenantId: TENANT_ID,
-      userId: USER_ID,
+      userId: context.actor.userId,
       brandId: BRAND_ID,
       sourceMessageRevisionId: detail.messageRevisionId,
       sourceMessageRevision: detail.revision,
@@ -1479,18 +1485,21 @@ export class DurableProductService implements ProductService {
       authoredText: detail.authoredText,
       scopeHash: context.retrievalScope?.scopeHash ?? sha256('missing-scope'),
       exactEntityRefs: [communicationIdentity.retrievalExactEntityRef],
-      styleExamples: [
-        {
-          exampleId: 'approved-style-example-1',
-          tenantId: TENANT_ID,
-          userId: USER_ID,
-          brandId: BRAND_ID,
-          channel: 'email',
-          body: 'Hi,\n\nThanks for the note. I will confirm today.\n\nThanks,',
-          approvedAt: SEED_AT,
-          approved: true,
-        },
-      ],
+      styleExamples:
+        context.actor.userId === USER_ID
+          ? [
+              {
+                exampleId: 'approved-style-example-1',
+                tenantId: TENANT_ID,
+                userId: USER_ID,
+                brandId: BRAND_ID,
+                channel: 'email',
+                body: 'Hi,\n\nThanks for the note. I will confirm today.\n\nThanks,',
+                approvedAt: SEED_AT,
+                approved: true,
+              },
+            ]
+          : [],
     });
     const recommendation = artifact.recommendation;
     const existing = await this.repository.getCurrent<RecommendationArtifact>(

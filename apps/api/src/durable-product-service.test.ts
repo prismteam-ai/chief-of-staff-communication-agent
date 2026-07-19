@@ -846,6 +846,16 @@ describe('durable hosted product vertical', () => {
       },
       {
         ...context,
+        actor: { ...context.actor, accountScopes: [] },
+        retrievalScope: { ...context.retrievalScope, accountIds: [] },
+      },
+      {
+        ...context,
+        actor: { ...context.actor, brandScopes: [] },
+        retrievalScope: { ...context.retrievalScope, brandIds: [] },
+      },
+      {
+        ...context,
         retrievalScope: { ...context.retrievalScope, accountIds: [] },
       },
       {
@@ -882,6 +892,102 @@ describe('durable hosted product vertical', () => {
       await expect(
         service.listCommunications(smuggled, { limit: 10 }),
       ).rejects.toMatchObject({ code: 'FORBIDDEN_AUTHORITY' });
+  });
+
+  it('carries request-derived member identity and scope versioning through approval', async () => {
+    const context = createDurableRequestContext();
+    const accountScopes = [...context.actor.accountScopes];
+    const brandScopes = [...context.actor.brandScopes];
+    const requestDerived = serverRequestContextSchema.parse({
+      actor: {
+        ...context.actor,
+        userId: 'user_request_derived',
+        accountScopes,
+        brandScopes,
+        membershipVersion: context.actor.membershipVersion + 1,
+        verifiedClaimsHash: 'b'.repeat(64),
+        verifiedAt: '2026-07-19T10:30:00.000Z',
+      },
+      retrievalScope: {
+        ...context.retrievalScope,
+        accountIds: accountScopes,
+        brandIds: brandScopes,
+        authorizationEpoch:
+          (context.retrievalScope?.authorizationEpoch ?? 1) + 1,
+        scopeHash: 'c'.repeat(64),
+      },
+    });
+    const repository = new MemoryDurableProductRepository();
+    const launchIdentity = deterministicEvaluatorIdentityV1.communications[0];
+    const service = new DurableProductService(
+      repository,
+      topicalBoundaryRetrieval([
+        {
+          key: 'request-derived-launch',
+          text: 'The Friday launch is ready after QA owner confirmation.',
+          exactEntityRef: launchIdentity.retrievalExactEntityRef,
+          topic: 'release_readiness',
+        },
+      ]),
+      'https://chief.example.test',
+    );
+    const recommendation = await service.recommendAction(requestDerived, {
+      messageRevisionId: launchIdentity.messageRevisionId,
+      expectedMessageRevision: 1,
+    });
+    const dynamicArtifact = await repository.getCurrent<RecommendationArtifact>(
+      deterministicEvaluatorIdentityV2.tenantId,
+      'recommendation',
+      recommendation.recommendation.recommendationId,
+    );
+    expect(dynamicArtifact?.value.styleProfile).toMatchObject({
+      userId: requestDerived.actor.userId,
+      exampleCount: 0,
+      exampleIds: [],
+    });
+    expect(
+      recommendation.recommendation.citations.every(
+        ({ hydratedUnderAuthorizationEpoch }) =>
+          hydratedUnderAuthorizationEpoch ===
+          requestDerived.retrievalScope?.authorizationEpoch,
+      ),
+    ).toBe(true);
+    const evaluatorRecommendation = await service.recommendAction(context, {
+      messageRevisionId: launchIdentity.messageRevisionId,
+      expectedMessageRevision: 1,
+    });
+    expect(evaluatorRecommendation.recommendation.recommendationId).not.toBe(
+      recommendation.recommendation.recommendationId,
+    );
+    const evaluatorArtifact =
+      await repository.getCurrent<RecommendationArtifact>(
+        deterministicEvaluatorIdentityV2.tenantId,
+        'recommendation',
+        evaluatorRecommendation.recommendation.recommendationId,
+      );
+    expect(evaluatorArtifact?.value.styleProfile).toMatchObject({
+      userId: context.actor.userId,
+      exampleCount: 1,
+      exampleIds: ['approved-style-example-1'],
+    });
+    const draft = await service.createDraft(requestDerived, {
+      recommendationId: recommendation.recommendation.recommendationId,
+      expectedRecommendationRevision: 1,
+    });
+    const proposal = await service.prepareDraftApproval(requestDerived, {
+      draftRevisionId: draft.result.draft.draftRevisionId,
+      expectedDraftRevision: draft.result.draft.revision,
+    });
+    await expect(
+      service.approveProposal(requestDerived, {
+        proposalId: proposal.proposalId,
+        expectedProposalUpdatedAt: proposal.updatedAt,
+      }),
+    ).resolves.toMatchObject({
+      proposalId: proposal.proposalId,
+      status: 'approved',
+      externalEffect: false,
+    });
   });
 
   it('never exposes a citation whose source and chunk are absent from the retrieval result', async () => {
