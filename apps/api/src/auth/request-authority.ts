@@ -15,6 +15,7 @@ export type RequestAuthMode = 'enforced' | 'local-test';
 
 export interface RequestAuthorityInput {
   readonly headers: Readonly<Record<string, string | undefined>>;
+  readonly cookies?: readonly string[];
   readonly method?: string;
 }
 
@@ -143,16 +144,24 @@ function bearerToken(
   return match[1] as string;
 }
 
-function browserSessionToken(
-  headers: Readonly<Record<string, string | undefined>>,
-): string {
-  const cookie = singleHeader(headers, 'cookie');
-  if (cookie === undefined)
-    throw new RequestAuthorityError('unauthorized', 'authentication_required');
-  if (cookie.length > 4_096)
+function browserSessionToken(request: RequestAuthorityInput): string {
+  const cookieHeaders = Object.entries(request.headers).filter(
+    ([name]) => name.toLocaleLowerCase('en-US') === 'cookie',
+  );
+  const gatewayCookies = request.cookies ?? [];
+  if (
+    cookieHeaders.length > 1 ||
+    (cookieHeaders.length === 1 && gatewayCookies.length > 0) ||
+    (cookieHeaders[0]?.[1]?.length ?? 0) > 4_096 ||
+    gatewayCookies.length > 64 ||
+    gatewayCookies.reduce((length, cookie) => length + cookie.length, 0) > 4_096
+  )
     throw new RequestAuthorityError('unauthorized', 'invalid_session');
-  const values = cookie
-    .split(';')
+  const cookieParts =
+    cookieHeaders.length === 1
+      ? (cookieHeaders[0]?.[1] ?? '').split(';')
+      : gatewayCookies.flatMap((cookie) => cookie.split(';'));
+  const values = cookieParts
     .map((part) => part.trim())
     .flatMap((part) => {
       const separator = part.indexOf('=');
@@ -322,7 +331,7 @@ export function createBrowserSessionRequestAuthorityResolver(input: {
         throw new RequestAuthorityError('unauthorized', 'invalid_session');
       assertBrowserCsrf(request, expectedOrigin.origin);
       const identity = await input.sessions.readSession(
-        browserSessionTokenHash(browserSessionToken(request.headers)),
+        browserSessionTokenHash(browserSessionToken(request)),
       );
       if (
         identity === undefined ||
@@ -379,5 +388,9 @@ export function createDenyAllRequestAuthorityResolver(): RequestAuthorityResolve
 export function requestAuthorityInput(
   event: APIGatewayProxyEventV2,
 ): RequestAuthorityInput {
-  return { headers: event.headers, method: event.requestContext.http.method };
+  return {
+    headers: event.headers,
+    method: event.requestContext.http.method,
+    ...(event.cookies === undefined ? {} : { cookies: event.cookies }),
+  };
 }

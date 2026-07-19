@@ -8,6 +8,7 @@ import {
   createBrowserSessionRequestAuthorityResolver,
   createCognitoSessionTokenVerifier,
   createRequestAuthorityResolver,
+  requestAuthorityInput,
   type AuthorityMembershipResolution,
   type RequestAuthorityError,
   type VerifiedSessionIdentity,
@@ -250,6 +251,64 @@ describe('browser session request authority', () => {
       requestContext: { actor: { tenantId: 'tenant-server' } },
     });
     expect(JSON.stringify(result)).not.toContain(sessionToken);
+  });
+
+  it('resolves API Gateway v2 cookies and preserves them at the event boundary', async () => {
+    const readSession = vi.fn(() => Promise.resolve(verifiedIdentity));
+    const resolver = createBrowserSessionRequestAuthorityResolver({
+      sessions: { readSession },
+      memberships: { resolveMembership: () => Promise.resolve(membership()) },
+      expectedOrigin: 'https://chief.example.test',
+      expectedIssuer: issuer,
+      expectedClientId: clientId,
+      now: () => new Date(nowSeconds * 1_000),
+    });
+    const event = {
+      headers: {},
+      cookies: ['theme=dark', `${browserCookieForTest}=${sessionToken}`],
+      requestContext: { http: { method: 'GET' } },
+    } as Parameters<typeof requestAuthorityInput>[0];
+
+    await expect(
+      resolver.resolve(requestAuthorityInput(event)),
+    ).resolves.toMatchObject({
+      mode: 'verified-session',
+    });
+    expect(readSession).toHaveBeenCalledWith(sessionHash);
+  });
+
+  it.each([
+    [
+      'mixed header and gateway cookie carriers',
+      {
+        headers: { cookie: `${browserCookieForTest}=${sessionToken}` },
+        cookies: [`${browserCookieForTest}=${sessionToken}`],
+      },
+    ],
+    [
+      'duplicate gateway session cookies',
+      {
+        headers: {},
+        cookies: [
+          `${browserCookieForTest}=${sessionToken}`,
+          `${browserCookieForTest}=${sessionToken}`,
+        ],
+      },
+    ],
+  ])('rejects %s', async (_label, request) => {
+    const resolver = createBrowserSessionRequestAuthorityResolver({
+      sessions: { readSession: () => Promise.resolve(verifiedIdentity) },
+      memberships: { resolveMembership: () => Promise.resolve(membership()) },
+      expectedOrigin: 'https://chief.example.test',
+      expectedIssuer: issuer,
+      expectedClientId: clientId,
+    });
+
+    await expect(
+      resolver.resolve({ method: 'GET', ...request }),
+    ).rejects.toMatchObject(
+      expectAuthorityError('unauthorized', 'invalid_session'),
+    );
   });
 
   it.each([
