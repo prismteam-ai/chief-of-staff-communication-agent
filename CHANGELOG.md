@@ -71,6 +71,11 @@ while retaining all cited facts.` before approve/receipt/reload; also added
 
 ### Changed
 
+- Relabeled every realistic-looking work item in the browser-only fallback as
+  the synthetic `DEMO-4821` fixture. The deployed CloudFront bundle contains
+  neither `SEC-4821` nor an `Asana ·` citation label; strict authenticated
+  hosted acceptance remains 19 passed, 2 intentional fixture-only skips, and
+  0 failed.
 - Removed app-tier synthesis of the SEC-4821 Asana citation and synthetic
   retrieval-manifest hash. Public knowledge and agent citations now fail closed
   unless one unique retrieved candidate/evidence tuple matches the citation's
@@ -139,7 +144,7 @@ while retaining all cited facts.` before approve/receipt/reload; also added
 - MCP has no approval or direct-effect tool. The browser local fallback cannot
   approve and is forbidden in strict hosted acceptance.
 - The parent workflow deployed and verified commit
-  `fcfe207e68f1504cda508fc7c6df184a88299b47`. Both stacks are
+  `644aa2f52258841426d9fb36c2b969d6724d00d5`. Both stacks are
   `UPDATE_COMPLETE`; the deterministic retrieval seed returned
   `already_current`; dashboard metrics returned HTTP 200; and strict hosted
   acceptance passed 19 runnable checks with 2 fixture-only skips and 0 failures.

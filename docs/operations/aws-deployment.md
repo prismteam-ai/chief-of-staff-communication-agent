@@ -1,6 +1,6 @@
 # AWS deployment
 
-Status: commit `b390b6bf685db80f6aaa3b9fa0d66a7175de5abc` is deployed.
+Status: commit `644aa2f52258841426d9fb36c2b969d6724d00d5` is deployed.
 `ChiefProductStack` and `ChiefFoundationStack` are both `UPDATE_COMPLETE`;
 scoped deterministic non-PII evaluator data is seeded; and strict hosted
 acceptance passed 19 runnable checks with 2 fixture-only skips and 0 failures.
@@ -522,7 +522,7 @@ Hosted provider, Asana, model, and authenticated MCP acceptance remain separate
 deployment-dependent checks. A successful deterministic evaluator test is not
 evidence of a live provider effect.
 
-For final deployed commit `b390b6bf685db80f6aaa3b9fa0d66a7175de5abc`,
+For final deployed commit `644aa2f52258841426d9fb36c2b969d6724d00d5`,
 the parent workflow reseeded the synthetic scope through the production
 register/enumerate/compact/promote path and completed strict hosted acceptance
 with 19 runnable checks passed, 2 fixture-only checks skipped, and 0 failures.

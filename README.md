@@ -167,8 +167,9 @@ it cannot approve, send, create a task, or update a task.
 
 ## Evaluator walkthrough
 
-1. Open `/overview`; confirm the signed-out, deterministic, non-PII and
-   effect-disabled labels and inspect SLA/channel metrics.
+1. Sign in with the evaluator credentials, open `/overview`, and confirm the
+   deterministic, non-PII and effect-disabled labels before inspecting
+   SLA/channel metrics.
 2. Open `/connections`; inspect the seven source-owned synthetic connector cards
    and the capability-mode definitions. Six cards use fixture mode; LinkedIn
    archive is honestly manual/recorded evidence. Blocked shows zero evidence,
@@ -242,7 +243,7 @@ Expected parent deployment outputs:
 - MCP health: `<ChiefFoundationStack.McpHealthUrl>`
 
 The final deployed commit is
-`b390b6bf685db80f6aaa3b9fa0d66a7175de5abc`. Its runtime is live at the URLs
+`644aa2f52258841426d9fb36c2b969d6724d00d5`. Its runtime is live at the URLs
 below and includes durable citation-lineage verification, quarantine of stale
 proposal replay/effects, availability-safe passive dashboard counts, and the
 truthful single-citation hosted workflow:
@@ -259,7 +260,9 @@ failed**. It proved HTTP 200 dashboard/API/MCP health, a genuine
 communication-backed citation with no fabricated Asana/SEC-4821 evidence,
 durable revision/approval/effect-disabled receipt reload, and API/MCP parity.
 Hosted mode refuses to install the mocks used by the two local fixture-only
-scenarios.
+scenarios. The shipped local fallback labels its work item as the synthetic
+`DEMO-4821` fixture and contains neither the old `SEC-4821` identifier nor an
+`Asana ·` citation label.
 
 ## Capability scope
 
