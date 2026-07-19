@@ -33,6 +33,7 @@ const RECIPIENT = `h1_v1_${'A'.repeat(43)}` as KeyedDigestValue;
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
 const HASH_C = 'c'.repeat(64);
+const HASH_D = 'd'.repeat(64);
 
 const clock: AgentClock = {
   now: () => new Date('2026-07-17T10:00:00.000Z'),
@@ -83,6 +84,7 @@ function fact(input: {
   kind: EvidenceFact['sourceKind'];
   statement: string;
   hash: string;
+  relevanceScore?: number;
 }): EvidenceFact {
   return {
     factId: input.id,
@@ -91,6 +93,9 @@ function fact(input: {
     statement: input.statement,
     citation: citation(input.id, input.hash),
     sourceTimestamp: '2026-07-17T09:00:00.000Z',
+    ...(input.relevanceScore === undefined
+      ? {}
+      : { relevanceScore: input.relevanceScore }),
   };
 }
 
@@ -367,6 +372,40 @@ describe('Chief communication application agent', () => {
     expect(result.recommendation.missingFacts).toEqual([]);
     expect(result.contextRequest).toBeUndefined();
     expect(model.model.doGenerateCalls).toHaveLength(1);
+  });
+
+  it('uses authorized retrieval relevance when deciding whether to request context', async () => {
+    const lowRelevanceFact = fact({
+      id: 'fact-low-relevance',
+      kind: 'communication',
+      statement: 'A weakly related communication mentions delivery.',
+      hash: HASH_D,
+      relevanceScore: 0.25,
+    });
+    const model = gateway([
+      {
+        actionType: 'reply',
+        urgency: 'high',
+        selectedFactIds: [lowRelevanceFact.factId],
+        missingFacts: [],
+      },
+    ]);
+    const agent = new ChiefCommunicationAgent({
+      gateway: model.gateway,
+      retriever: retriever({
+        communication: [lowRelevanceFact],
+        organization_knowledge: [],
+        asana: [],
+      }),
+      recommendationHeads,
+      clock,
+    });
+
+    const result = await agent.recommend(recommendationRequest());
+
+    expect(result.recommendation.confidence).toBe(0.62);
+    expect(result.recommendation.actionType).toBe('request_context');
+    expect(result.recommendation.status).toBe('needs_context');
   });
 
   it('requests context when one cited fact still has a missing fact', async () => {

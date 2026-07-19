@@ -178,11 +178,22 @@ function confidenceFor(
 ): number {
   if (actionType === 'ignore_system' || actionType === 'no_action') return 0.9;
   const diversity = new Set(facts.map(({ sourceKind }) => sourceKind)).size;
+  const relevanceScores = facts.flatMap(({ relevanceScore }) =>
+    relevanceScore === undefined ? [] : [relevanceScore],
+  );
+  const relevanceAdjustment =
+    relevanceScores.length === 0
+      ? 0
+      : (relevanceScores.reduce((total, score) => total + score, 0) /
+          relevanceScores.length -
+          0.5) *
+        0.2;
   const value =
     0.5 +
     Math.min(0.32, facts.length * 0.12) +
     Math.min(0.15, diversity * 0.05) -
-    Math.min(0.5, missingFacts.length * 0.2);
+    Math.min(0.5, missingFacts.length * 0.2) +
+    relevanceAdjustment;
   return Math.max(0, Math.min(0.99, Number(value.toFixed(2))));
 }
 

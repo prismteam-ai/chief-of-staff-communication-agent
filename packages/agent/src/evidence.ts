@@ -32,6 +32,8 @@ export interface EvidenceFact {
   readonly statement: string;
   readonly citation: Citation;
   readonly sourceTimestamp: string;
+  /** Authorized retrieval fusion score; omitted only by non-retrieval fixtures. */
+  readonly relevanceScore?: number;
 }
 
 export interface EvidenceSourceResult {
@@ -83,9 +85,22 @@ export class BoundedRetrievalEvidenceSource implements EvidenceSource {
       sourceKind: this.kind,
       retrieval,
     });
+    const relevanceByChunk = new Map(
+      retrieval.candidates.map((candidate) => [
+        candidate.chunkId,
+        candidate.fusedScore,
+      ]),
+    );
     return Object.freeze({
       snapshotManifestHash: retrieval.snapshotManifestHash,
-      facts: Object.freeze([...facts]),
+      facts: Object.freeze(
+        facts.map((fact) => {
+          const relevanceScore = relevanceByChunk.get(fact.citation.chunkId);
+          return relevanceScore === undefined
+            ? fact
+            : Object.freeze({ ...fact, relevanceScore });
+        }),
+      ),
     });
   }
 }
@@ -179,7 +194,11 @@ export class CitedContextRetriever {
         if (
           !fact.factId.trim() ||
           !fact.statement.trim() ||
-          fact.statement.length > 16_000
+          fact.statement.length > 16_000 ||
+          (fact.relevanceScore !== undefined &&
+            (!Number.isFinite(fact.relevanceScore) ||
+              fact.relevanceScore < 0 ||
+              fact.relevanceScore > 1))
         )
           throw new EvidenceBoundaryError('INVALID_EVIDENCE');
         const parsedCitation = citationSchema.safeParse(fact.citation);

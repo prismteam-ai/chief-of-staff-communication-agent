@@ -744,10 +744,17 @@ describe('production writer to bounded reader compatibility', () => {
       (
         0.5 +
         Math.min(0.32, factIds.length * 0.12) +
-        Math.min(0.15, 1 * 0.05)
+        Math.min(0.15, 1 * 0.05) +
+        (retrieval.candidates.reduce(
+          (total, candidate) => total + candidate.fusedScore,
+          0,
+        ) /
+          retrieval.candidates.length -
+          0.5) *
+          0.2
       ).toFixed(2),
     );
-    expect(formulaBackedConfidence).toBe(0.87);
+    expect(formulaBackedConfidence).toBe(0.94);
     expect(recommendation.recommendation).toMatchObject({
       status: 'current',
       actionType: 'reply',

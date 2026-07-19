@@ -568,7 +568,7 @@ describe('durable hosted product vertical', () => {
 
     expect(recommendation.recommendation).toMatchObject({
       actionType: 'reply',
-      confidence: 0.79,
+      confidence: 0.87,
       status: 'current',
     });
     await expect(
@@ -651,7 +651,7 @@ describe('durable hosted product vertical', () => {
         included: /Production cutover|SEC-4821/iu,
         excluded: /board|pipeline numbers|Unrelated Asana/iu,
         requiredText: 'Production cutover requires validation ownership.',
-        confidence: 0.84,
+        confidence: 0.92,
         citationSources: [
           'source-asana-word-but-typed-communication',
           'source-asana-launch-work',
@@ -663,7 +663,7 @@ describe('durable hosted product vertical', () => {
         excluded: /Friday launch|QA owner|SEC-4821/iu,
         requiredText:
           'Directors approved the sales outlook for the quarterly governance pack.',
-        confidence: 0.79,
+        confidence: 0.75,
         citationSources: [
           'source-communication-board-note',
           'source-communication-board-pipeline',
@@ -754,7 +754,7 @@ describe('durable hosted product vertical', () => {
 
     expect(result.recommendation).toMatchObject({
       actionType: 'reply',
-      confidence: 0.67,
+      confidence: 0.76,
       status: 'current',
     });
     expect(result.recommendation.citations).toHaveLength(1);

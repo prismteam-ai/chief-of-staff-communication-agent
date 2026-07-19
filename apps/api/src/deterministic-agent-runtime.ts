@@ -192,11 +192,16 @@ class RetrievalEvidenceSource implements EvidenceSource {
     const evidenceByCitation = new Map(
       result.evidence.map((item) => [item.citationId, item]),
     );
+    const candidateByChunk = new Map(
+      result.candidates.map((candidate) => [candidate.chunkId, candidate]),
+    );
     const facts: EvidenceFact[] = [];
     for (const citation of result.citations) {
       const evidence = evidenceByCitation.get(citation.citationId);
+      const candidate = candidateByChunk.get(citation.chunkId);
       if (
         evidence === undefined ||
+        candidate === undefined ||
         evidence.chunkId !== citation.chunkId ||
         evidence.sourceClass !== this.kind ||
         evidence.relation.verified !== true
@@ -216,6 +221,7 @@ class RetrievalEvidenceSource implements EvidenceSource {
         statement: evidence.text,
         citation,
         sourceTimestamp: '2026-07-17T12:00:00.000Z',
+        relevanceScore: candidate.fusedScore,
       });
     }
     return {
