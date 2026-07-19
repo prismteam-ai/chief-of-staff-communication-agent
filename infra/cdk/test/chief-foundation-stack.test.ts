@@ -218,6 +218,7 @@ describe('Chief foundation stack', () => {
         DefaultRootObject: 'index.html',
         CacheBehaviors: Match.arrayWith([
           Match.objectLike({ PathPattern: '/trpc/*' }),
+          Match.objectLike({ PathPattern: '/auth/*' }),
           Match.objectLike({ PathPattern: '/mcp' }),
           Match.objectLike({ PathPattern: '/mcp/*' }),
         ]),
@@ -283,6 +284,11 @@ describe('Chief foundation stack', () => {
         IdToken: 'minutes',
         RefreshToken: 'minutes',
       },
+    });
+    template.resourceCountIs('AWS::Cognito::UserPoolDomain', 1);
+    template.hasResourceProperties('AWS::Cognito::UserPoolDomain', {
+      Domain: 'chief-communications-417242953053-us-east-2',
+      ManagedLoginVersion: 1,
     });
     const userPoolClients = Object.values(
       template.findResources('AWS::Cognito::UserPoolClient'),
@@ -361,6 +367,9 @@ describe('Chief foundation stack', () => {
       handler({ request: { method: 'GET', uri: '/mcp/not-found' } }).uri,
     ).toBe('/mcp/not-found');
     expect(
+      handler({ request: { method: 'GET', uri: '/auth/login' } }).uri,
+    ).toBe('/auth/login');
+    expect(
       handler({ request: { method: 'GET', uri: '/assets/missing.js' } }).uri,
     ).toBe('/assets/missing.js');
     expect(
@@ -394,7 +403,12 @@ describe('Chief foundation stack', () => {
         (resource as { Properties: { RouteKey: string } }).Properties.RouteKey,
     );
     expect(routes.sort()).toEqual(
-      ['ANY /mcp', 'ANY /mcp/{proxy+}', 'ANY /trpc/{proxy+}'].sort(),
+      [
+        'ANY /auth/{proxy+}',
+        'ANY /mcp',
+        'ANY /mcp/{proxy+}',
+        'ANY /trpc/{proxy+}',
+      ].sort(),
     );
 
     const outputs = template.toJSON().Outputs as Record<
@@ -405,8 +419,10 @@ describe('Chief foundation stack', () => {
       expect.arrayContaining([
         'ApiHealthUrl',
         'ApiUrl',
+        'BrowserLoginUrl',
         'CloudFrontApiUrl',
         'CloudFrontMcpUrl',
+        'CognitoDomain',
         'CognitoIssuer',
         'CognitoUserPoolClientId',
         'CognitoUserPoolId',
@@ -458,6 +474,9 @@ describe('Chief foundation stack', () => {
     }
 
     const apiEnvironment = apiFunction?.Properties?.Environment?.Variables;
+    expect(apiEnvironment?.AUTH_SESSION_TTL_SECONDS).toBe('900');
+    expect(apiEnvironment?.AUTH_STATE_TTL_SECONDS).toBe('300');
+    expect(apiEnvironment?.COGNITO_DOMAIN).toBeDefined();
     expect(apiEnvironment?.COGNITO_ISSUER).toBeDefined();
     expect(apiEnvironment?.COGNITO_USER_POOL_CLIENT_ID).toBeDefined();
     expect(apiEnvironment?.COGNITO_USER_POOL_ID).toBeDefined();

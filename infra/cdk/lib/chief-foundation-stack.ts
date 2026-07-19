@@ -24,7 +24,8 @@ const SPA_REWRITE_FUNCTION_CODE = `function handler(event) {
   var request = event.request;
   var uri = request.uri;
   var isApiPath = uri === '/trpc' || uri.indexOf('/trpc/') === 0 ||
-    uri === '/mcp' || uri.indexOf('/mcp/') === 0;
+    uri === '/mcp' || uri.indexOf('/mcp/') === 0 ||
+    uri === '/auth' || uri.indexOf('/auth/') === 0;
   if (isApiPath || (request.method !== 'GET' && request.method !== 'HEAD')) {
     return request;
   }
@@ -88,6 +89,12 @@ export class ChiefFoundationStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
     const cognitoIssuer = `https://cognito-idp.${this.region}.${this.urlSuffix}/${userPool.userPoolId}`;
+    const userPoolDomain = userPool.addDomain('HostedUiDomain', {
+      cognitoDomain: {
+        domainPrefix: `${PROJECT_NAME}-${this.account}-${this.region}`,
+      },
+      managedLoginVersion: cognito.ManagedLoginVersion.CLASSIC_HOSTED_UI,
+    });
     const fixtureEnvironment = {
       EXTERNAL_EFFECTS: 'disabled',
       FIXTURE_TENANT_ID,
@@ -104,6 +111,9 @@ export class ChiefFoundationStack extends cdk.Stack {
       apiLogGroup,
       {
         ...fixtureEnvironment,
+        AUTH_SESSION_TTL_SECONDS: '900',
+        AUTH_STATE_TTL_SECONDS: '300',
+        COGNITO_DOMAIN: userPoolDomain.baseUrl(),
         COGNITO_ISSUER: cognitoIssuer,
         COGNITO_USER_POOL_ID: userPool.userPoolId,
         CONNECTOR_RUNTIME_TABLE_NAME: runtime.connectorRuntimeTableName,
@@ -151,6 +161,14 @@ export class ChiefFoundationStack extends cdk.Stack {
       methods: [apigwv2.HttpMethod.ANY],
       integration: new integrations.HttpLambdaIntegration(
         'ApiIntegration',
+        apiFunction,
+      ),
+    });
+    httpApi.addRoutes({
+      path: '/auth/{proxy+}',
+      methods: [apigwv2.HttpMethod.ANY],
+      integration: new integrations.HttpLambdaIntegration(
+        'BrowserAuthIntegration',
         apiFunction,
       ),
     });
@@ -283,6 +301,7 @@ export class ChiefFoundationStack extends cdk.Stack {
       viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
     };
     distribution.addBehavior('/trpc/*', apiOrigin, apiBehavior);
+    distribution.addBehavior('/auth/*', apiOrigin, apiBehavior);
     distribution.addBehavior('/mcp', apiOrigin, apiBehavior);
     distribution.addBehavior('/mcp/*', apiOrigin, apiBehavior);
     const webUrl = `https://${distribution.distributionDomainName}`;
@@ -349,6 +368,12 @@ export class ChiefFoundationStack extends cdk.Stack {
     });
     new cdk.CfnOutput(this, 'CognitoIssuer', {
       value: cognitoIssuer,
+    });
+    new cdk.CfnOutput(this, 'CognitoDomain', {
+      value: userPoolDomain.baseUrl(),
+    });
+    new cdk.CfnOutput(this, 'BrowserLoginUrl', {
+      value: `${webUrl}/auth/login`,
     });
   }
 
