@@ -3264,57 +3264,75 @@ export function App() {
   useEffect(() => {
     let active = true;
     const load = async () => {
-      try {
-        const [health, metrics, communicationResult, connectorResult] =
-          await Promise.all([
-            api.systemHealth(),
-            api.dashboardMetrics('7d'),
-            api.listCommunications({ limit: 100 }),
-            api.getConnectorStatus(),
-          ]);
-        if (active) {
-          setApiState({ kind: 'ready', health });
-          setProjection({
-            source: 'hosted_durable',
-            metrics,
-            communications: communicationResult.items.map(
-              hostedCommunicationToView,
-            ),
-            hostedCommunications: communicationResult.items,
-            connectors: connectorResult.map(hostedConnectorToView),
-          });
-        }
-      } catch (error) {
-        if (active) {
-          if (isAuthenticationRequired(error)) {
-            setApiState({ kind: 'unauthenticated' });
-            setProjection({
-              source: 'checking',
-              communications: [],
-              hostedCommunications: [],
-              connectors: [],
-            });
-            return;
-          }
-          if (production || !isBrowserNetworkFailure(error)) {
-            setApiState({ kind: 'unavailable' });
-            setProjection({
-              source: 'checking',
-              communications: [],
-              hostedCommunications: [],
-              connectors: [],
-            });
-            return;
-          }
-          setApiState({ kind: 'unavailable' });
-          setProjection({
-            source: 'local_fallback',
-            communications,
-            hostedCommunications: [],
-            connectors,
-          });
-        }
+      const [health, metrics, communicationResult, connectorResult] =
+        await Promise.allSettled([
+          api.systemHealth(),
+          api.dashboardMetrics('7d'),
+          api.listCommunications({ limit: 100 }),
+          api.getConnectorStatus(),
+        ] as const);
+      if (!active) return;
+
+      const failures = [
+        health,
+        metrics,
+        communicationResult,
+        connectorResult,
+      ].filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === 'rejected',
+      );
+      if (failures.some(({ reason }) => isAuthenticationRequired(reason))) {
+        setApiState({ kind: 'unauthenticated' });
+        setProjection({
+          source: 'checking',
+          communications: [],
+          hostedCommunications: [],
+          connectors: [],
+        });
+        return;
       }
+      if (failures.length > 0) {
+        const onlyNetworkFailures = failures.every(({ reason }) =>
+          isBrowserNetworkFailure(reason),
+        );
+        setApiState({ kind: 'unavailable' });
+        setProjection(
+          !production && onlyNetworkFailures
+            ? {
+                source: 'local_fallback',
+                communications,
+                hostedCommunications: [],
+                connectors,
+              }
+            : {
+                source: 'checking',
+                communications: [],
+                hostedCommunications: [],
+                connectors: [],
+              },
+        );
+        return;
+      }
+      if (
+        health.status !== 'fulfilled' ||
+        metrics.status !== 'fulfilled' ||
+        communicationResult.status !== 'fulfilled' ||
+        connectorResult.status !== 'fulfilled'
+      ) {
+        return;
+      }
+
+      setApiState({ kind: 'ready', health: health.value });
+      setProjection({
+        source: 'hosted_durable',
+        metrics: metrics.value,
+        communications: communicationResult.value.items.map(
+          hostedCommunicationToView,
+        ),
+        hostedCommunications: communicationResult.value.items,
+        connectors: connectorResult.value.map(hostedConnectorToView),
+      });
     };
     void load();
     return () => {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -413,6 +413,41 @@ describe('executive evaluator application', () => {
         .getByRole('link', { name: 'Sign in securely' })
         .getAttribute('href'),
     ).toBe('/auth/login?returnTo=%2Finbox%2Fthread-q3-launch');
+  });
+
+  it('waits for concurrent bootstrap results and prioritizes a later 401 over an earlier network failure', async () => {
+    let rejectMetrics!: (reason: unknown) => void;
+    browserApiMock.dashboardMetrics.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectMetrics = reject;
+        }),
+    );
+    browserApiMock.listCommunications.mockResolvedValue({
+      items: [],
+      nextCursor: undefined,
+    });
+    browserApiMock.getConnectorStatus.mockResolvedValue([]);
+
+    renderRoute('/overview');
+
+    await waitFor(() => {
+      expect(browserApiMock.systemHealth).toHaveBeenCalledTimes(1);
+      expect(browserApiMock.dashboardMetrics).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByText('Local fallback fixture.')).toBeNull();
+
+    const unauthorized = new Error('BROWSER_AUTHENTICATION_REQUIRED');
+    unauthorized.name = 'BrowserAuthenticationRequiredError';
+    act(() => {
+      rejectMetrics(unauthorized);
+    });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to Chief' }),
+    ).toBeTruthy();
+    expect(screen.queryByText('Local fallback fixture.')).toBeNull();
+    expect(screen.queryByText('Taylor Reed')).toBeNull();
   });
 
   it('posts same-origin logout and returns to the sign-in state', async () => {
