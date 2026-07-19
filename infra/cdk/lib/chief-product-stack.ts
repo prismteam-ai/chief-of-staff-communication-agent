@@ -23,6 +23,39 @@ import { runtimeExportNames } from './runtime-exports.js';
 const REPOSITORY_ROOT = path.resolve(process.cwd(), '../..');
 const PROJECT_NAME = 'chief-communications';
 const REPOSITORY_NAME = 'chief-of-staff-communication-agent';
+const OUTBOX_RELAY_FAILURE_METRIC_ID = 'OutboxRelayFailureCaptures';
+
+class AccountScopedS3OnFailureDestination
+  extends eventSources.S3OnFailureDestination
+{
+  public constructor(
+    private readonly failureBucket: s3.IBucket,
+    private readonly encryptionKey: kms.IKey,
+    private readonly account: string,
+  ) {
+    super(failureBucket);
+  }
+
+  public override bind(
+    _target: lambda.IEventSourceMapping,
+    targetHandler: lambda.IFunction,
+  ): lambda.DlqDestinationConfig {
+    targetHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:ListBucket', 's3:PutObject'],
+        conditions: {
+          StringEquals: { 's3:ResourceAccount': this.account },
+        },
+        resources: [
+          this.failureBucket.bucketArn,
+          this.failureBucket.arnForObjects('*'),
+        ],
+      }),
+    );
+    this.encryptionKey.grantEncrypt(targetHandler);
+    return { destination: this.failureBucket.bucketArn };
+  }
+}
 
 const coreIndexes = {
   asanaTopicLookup: 'AsanaTopicLookupIndex',
@@ -202,6 +235,21 @@ export class ChiefProductStack extends cdk.Stack {
       objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
+    const outboxRelayFailureBucket = new s3.Bucket(
+      this,
+      'OutboxRelayFailureBucket',
+      {
+        blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+        encryption: s3.BucketEncryption.KMS,
+        encryptionKey: dataKey,
+        bucketKeyEnabled: true,
+        enforceSSL: true,
+        metrics: [{ id: OUTBOX_RELAY_FAILURE_METRIC_ID }],
+        objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+        versioned: true,
+      },
+    );
 
     const ingestionDlq = this.createDeadLetterQueue(
       'IngestionDeadLetterQueue',
@@ -217,10 +265,6 @@ export class ChiefProductStack extends cdk.Stack {
       dataKey,
     );
     const outboxQueue = this.createWorkQueue('OutboxQueue', outboxDlq, dataKey);
-    const outboxRelayDlq = this.createDeadLetterQueue(
-      'OutboxRelayDeadLetterQueue',
-      dataKey,
-    );
 
     const alertTopicName = `${PROJECT_NAME}-runtime-alerts`;
     const alertTopicArn = this.formatArn({
@@ -267,11 +311,6 @@ export class ChiefProductStack extends cdk.Stack {
       alertTopic,
     );
     this.createDeadLetterAlarm('OutboxDeadLetterAlarm', outboxDlq, alertTopic);
-    this.createDeadLetterAlarm(
-      'OutboxRelayDeadLetterAlarm',
-      outboxRelayDlq,
-      alertTopic,
-    );
 
     const productBus = new events.EventBus(this, 'ProductEventBus', {
       kmsKey: dataKey,
@@ -389,11 +428,20 @@ export class ChiefProductStack extends cdk.Stack {
         ],
         maxBatchingWindow: cdk.Duration.seconds(5),
         maxRecordAge: cdk.Duration.hours(24),
-        onFailure: new eventSources.SqsDlq(outboxRelayDlq),
+        onFailure: new AccountScopedS3OnFailureDestination(
+          outboxRelayFailureBucket,
+          dataKey,
+          this.account,
+        ),
         reportBatchItemFailures: true,
         retryAttempts: 5,
         startingPosition: lambda.StartingPosition.TRIM_HORIZON,
       }),
+    );
+    this.createRelayFailureAlarms(
+      outboxRelayFailureBucket,
+      outboxRelayWorker,
+      alertTopic,
     );
 
     this.grantTableData(ingestionWorker, coreTable, 'read-write');
@@ -506,8 +554,8 @@ export class ChiefProductStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'OutboxDeadLetterQueueUrl', {
       value: outboxDlq.queueUrl,
     });
-    new cdk.CfnOutput(this, 'OutboxRelayDeadLetterQueueUrl', {
-      value: outboxRelayDlq.queueUrl,
+    new cdk.CfnOutput(this, 'OutboxRelayFailureBucketName', {
+      value: outboxRelayFailureBucket.bucketName,
     });
 
     const foundationStack = scope.node.tryFindChild('ChiefFoundationStack');
@@ -562,6 +610,57 @@ export class ChiefProductStack extends cdk.Stack {
     const action = new cloudwatchActions.SnsAction(topic);
     alarm.addAlarmAction(action);
     alarm.addOkAction(action);
+  }
+
+  private createRelayFailureAlarms(
+    failureBucket: s3.IBucket,
+    relayWorker: lambda.IFunction,
+    topic: sns.ITopic,
+  ): void {
+    const commonAlarmProps = {
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      datapointsToAlarm: 1,
+      evaluationPeriods: 1,
+      threshold: 0,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    } as const;
+    const captureAlarm = new cloudwatch.Alarm(
+      this,
+      'OutboxRelayFailureCaptureAlarm',
+      {
+        ...commonAlarmProps,
+        alarmDescription:
+          'An object was written to the dedicated DynamoDB Streams relay failure bucket. Inspect the complete invocation payload and perform deliberate relay-aware recovery; the object is not directly redrivable.',
+        metric: new cloudwatch.Metric({
+          dimensionsMap: {
+            BucketName: failureBucket.bucketName,
+            FilterId: OUTBOX_RELAY_FAILURE_METRIC_ID,
+          },
+          metricName: 'PutRequests',
+          namespace: 'AWS/S3',
+          period: cdk.Duration.minutes(1),
+          statistic: 'Sum',
+        }),
+      },
+    );
+    const deliveryAlarm = new cloudwatch.Alarm(
+      this,
+      'OutboxRelayFailureDestinationDeliveryAlarm',
+      {
+        ...commonAlarmProps,
+        alarmDescription:
+          'Lambda could not store a failed DynamoDB Streams relay invocation in S3. Inspect the relay role, bucket policy, and KMS key immediately; the complete recovery payload was not captured.',
+        metric: relayWorker.metric('DestinationDeliveryFailures', {
+          period: cdk.Duration.minutes(1),
+          statistic: 'Sum',
+        }),
+      },
+    );
+    for (const alarm of [captureAlarm, deliveryAlarm]) {
+      const action = new cloudwatchActions.SnsAction(topic);
+      alarm.addAlarmAction(action);
+      alarm.addOkAction(action);
+    }
   }
 
   private createExport(id: string, value: string, exportName: string): void {

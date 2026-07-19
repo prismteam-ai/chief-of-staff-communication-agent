@@ -115,6 +115,8 @@ function allActions(): readonly string[] {
 
 function allPolicyStatements(): Array<{
   readonly Action?: string | string[];
+  readonly Condition?: unknown;
+  readonly Effect?: string;
   readonly Resource?: unknown;
 }> {
   const policies = Object.values(
@@ -124,6 +126,8 @@ function allPolicyStatements(): Array<{
       PolicyDocument?: {
         Statement?: Array<{
           readonly Action?: string | string[];
+          readonly Condition?: unknown;
+          readonly Effect?: string;
           readonly Resource?: unknown;
         }>;
       };
@@ -138,6 +142,8 @@ function workerPolicyStatements(
   functionId: 'ExecutionWorker' | 'IngestionWorker' | 'OutboxRelayWorker',
 ): Array<{
   readonly Action?: string | string[];
+  readonly Condition?: unknown;
+  readonly Effect?: string;
   readonly Resource?: unknown;
 }> {
   const policies = Object.entries(
@@ -152,6 +158,8 @@ function workerPolicyStatements(
           readonly PolicyDocument?: {
             readonly Statement?: Array<{
               readonly Action?: string | string[];
+              readonly Condition?: unknown;
+              readonly Effect?: string;
               readonly Resource?: unknown;
             }>;
           };
@@ -291,7 +299,7 @@ describe('Chief product stack', () => {
   });
 
   it('enforces private, encrypted, versioned Object Lock storage', () => {
-    template.resourceCountIs('AWS::S3::Bucket', 1);
+    template.resourceCountIs('AWS::S3::Bucket', 2);
     template.hasResourceProperties('AWS::S3::Bucket', {
       PublicAccessBlockConfiguration: {
         BlockPublicAcls: true,
@@ -319,12 +327,70 @@ describe('Chief product stack', () => {
     });
   });
 
+  it('retains complete relay failures in a private account-scoped S3 destination', () => {
+    template.resourcePropertiesCountIs(
+      'AWS::S3::Bucket',
+      {
+        BucketEncryption: {
+          ServerSideEncryptionConfiguration: [
+            Match.objectLike({
+              BucketKeyEnabled: true,
+              ServerSideEncryptionByDefault: Match.objectLike({
+                SSEAlgorithm: 'aws:kms',
+              }),
+            }),
+          ],
+        },
+        MetricsConfigurations: [{ Id: 'OutboxRelayFailureCaptures' }],
+        OwnershipControls: {
+          Rules: [{ ObjectOwnership: 'BucketOwnerEnforced' }],
+        },
+        PublicAccessBlockConfiguration: {
+          BlockPublicAcls: true,
+          BlockPublicPolicy: true,
+          IgnorePublicAcls: true,
+          RestrictPublicBuckets: true,
+        },
+        VersioningConfiguration: { Status: 'Enabled' },
+      },
+      1,
+    );
+    const failureBuckets = Object.entries(
+      template.findResources('AWS::S3::Bucket'),
+    ).filter(([, resource]) =>
+      JSON.stringify(resource).includes('OutboxRelayFailureCaptures'),
+    );
+    expect(failureBuckets).toHaveLength(1);
+    const [failureBucketLogicalId, failureBucket] = failureBuckets[0] ?? [];
+    expect(failureBucket).toMatchObject({
+      DeletionPolicy: 'Retain',
+      UpdateReplacePolicy: 'Retain',
+    });
+    template.hasResourceProperties('AWS::S3::BucketPolicy', {
+      Bucket: { Ref: failureBucketLogicalId },
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Action: 's3:*',
+            Condition: { Bool: { 'aws:SecureTransport': 'false' } },
+            Effect: 'Deny',
+          }),
+        ]),
+      },
+    });
+    const outputs = template.toJSON().Outputs as Record<string, unknown>;
+    expect(outputs.OutboxRelayFailureBucketName).toEqual({
+      Value: { Ref: failureBucketLogicalId },
+    });
+    expect(outputs.OutboxRelayDeadLetterQueueUrl).toBeUndefined();
+  });
+
   it('creates encrypted queues, redrive, event routing, and self-resolving DLQ alarms', () => {
-    template.resourceCountIs('AWS::SQS::Queue', 5);
+    template.resourceCountIs('AWS::SQS::Queue', 4);
     template.resourcePropertiesCountIs(
       'AWS::SQS::Queue',
       { KmsMasterKeyId: Match.anyValue() },
-      5,
+      4,
     );
     template.resourcePropertiesCountIs(
       'AWS::SQS::Queue',
@@ -386,7 +452,7 @@ describe('Chief product stack', () => {
         ]),
       },
     });
-    template.resourceCountIs('AWS::CloudWatch::Alarm', 3);
+    template.resourceCountIs('AWS::CloudWatch::Alarm', 4);
     template.resourcePropertiesCountIs(
       'AWS::CloudWatch::Alarm',
       {
@@ -401,7 +467,7 @@ describe('Chief product stack', () => {
         Threshold: 0,
         TreatMissingData: 'notBreaching',
       },
-      3,
+      2,
     );
     template.resourceCountIs('AWS::SecretsManager::Secret', 1);
     template.hasResourceProperties('AWS::SecretsManager::Secret', {
@@ -603,11 +669,19 @@ describe('Chief product stack', () => {
   });
 
   it('relays only new approval locator inserts with bounded partial-batch retries', () => {
+    const failureBucketLogicalId = Object.entries(
+      template.findResources('AWS::S3::Bucket'),
+    ).find(([, resource]) =>
+      JSON.stringify(resource).includes('OutboxRelayFailureCaptures'),
+    )?.[0];
+    expect(failureBucketLogicalId).toBeDefined();
     template.hasResourceProperties('AWS::Lambda::EventSourceMapping', {
       BatchSize: 10,
       BisectBatchOnFunctionError: true,
       DestinationConfig: {
-        OnFailure: { Destination: Match.anyValue() },
+        OnFailure: {
+          Destination: { 'Fn::GetAtt': [failureBucketLogicalId, 'Arn'] },
+        },
       },
       FilterCriteria: {
         Filters: [
@@ -631,7 +705,53 @@ describe('Chief product stack', () => {
     });
   });
 
-  it('gives the relay only stream-read and queue-send data authority', () => {
+  it('alerts separately when a complete relay payload is captured or capture delivery fails', () => {
+    template.resourcePropertiesCountIs(
+      'AWS::CloudWatch::Alarm',
+      {
+        AlarmActions: Match.anyValue(),
+        AlarmDescription:
+          'An object was written to the dedicated DynamoDB Streams relay failure bucket. Inspect the complete invocation payload and perform deliberate relay-aware recovery; the object is not directly redrivable.',
+        ComparisonOperator: 'GreaterThanThreshold',
+        DatapointsToAlarm: 1,
+        Dimensions: Match.arrayWith([
+          { Name: 'BucketName', Value: Match.anyValue() },
+          { Name: 'FilterId', Value: 'OutboxRelayFailureCaptures' },
+        ]),
+        EvaluationPeriods: 1,
+        MetricName: 'PutRequests',
+        Namespace: 'AWS/S3',
+        OKActions: Match.anyValue(),
+        Period: 60,
+        Statistic: 'Sum',
+        Threshold: 0,
+        TreatMissingData: 'notBreaching',
+      },
+      1,
+    );
+    template.resourcePropertiesCountIs(
+      'AWS::CloudWatch::Alarm',
+      {
+        AlarmActions: Match.anyValue(),
+        AlarmDescription:
+          'Lambda could not store a failed DynamoDB Streams relay invocation in S3. Inspect the relay role, bucket policy, and KMS key immediately; the complete recovery payload was not captured.',
+        ComparisonOperator: 'GreaterThanThreshold',
+        DatapointsToAlarm: 1,
+        Dimensions: [{ Name: 'FunctionName', Value: Match.anyValue() }],
+        EvaluationPeriods: 1,
+        MetricName: 'DestinationDeliveryFailures',
+        Namespace: 'AWS/Lambda',
+        OKActions: Match.anyValue(),
+        Period: 60,
+        Statistic: 'Sum',
+        Threshold: 0,
+        TreatMissingData: 'notBreaching',
+      },
+      1,
+    );
+  });
+
+  it('gives the relay only stream-read, queue-send, and account-scoped failure-write authority', () => {
     const statements = workerPolicyStatements('OutboxRelayWorker');
     const actions = statements.flatMap(({ Action }) =>
       Array.isArray(Action) ? Action : Action === undefined ? [] : [Action],
@@ -646,6 +766,8 @@ describe('Chief product stack', () => {
       'kms:Encrypt',
       'kms:GenerateDataKey*',
       'kms:ReEncrypt*',
+      's3:ListBucket',
+      's3:PutObject',
       'sqs:GetQueueAttributes',
       'sqs:GetQueueUrl',
       'sqs:SendMessage',
@@ -658,6 +780,8 @@ describe('Chief product stack', () => {
         'dynamodb:GetRecords',
         'dynamodb:GetShardIterator',
         'dynamodb:ListStreams',
+        's3:ListBucket',
+        's3:PutObject',
         'sqs:SendMessage',
       ]),
     );
@@ -669,7 +793,7 @@ describe('Chief product stack', () => {
         : Action === undefined
           ? []
           : [Action];
-      return values.some((action) => /^(?:dynamodb|kms|sqs):/u.test(action));
+      return values.some((action) => /^(?:dynamodb|kms|s3|sqs):/u.test(action));
     });
     expect(dataPlaneStatements).not.toHaveLength(0);
     expect(
@@ -692,7 +816,24 @@ describe('Chief product stack', () => {
     ]);
     expect(JSON.stringify(statements)).toContain('CoreDomainTable');
     expect(JSON.stringify(statements)).toContain('OutboxQueue');
-    expect(JSON.stringify(statements)).toContain('OutboxRelayDeadLetterQueue');
+    expect(JSON.stringify(statements)).toContain('OutboxRelayFailureBucket');
+    const s3Statements = statements.filter(({ Action }) =>
+      (Array.isArray(Action) ? Action : [Action]).some((action) =>
+        action?.startsWith('s3:'),
+      ),
+    );
+    expect(s3Statements).toHaveLength(1);
+    expect(s3Statements[0]).toMatchObject({
+      Action: ['s3:ListBucket', 's3:PutObject'],
+      Condition: {
+        StringEquals: { 's3:ResourceAccount': '417242953053' },
+      },
+      Effect: 'Allow',
+    });
+    expect(JSON.stringify(s3Statements[0]?.Resource)).toContain(
+      'OutboxRelayFailureBucket',
+    );
+    expect(JSON.stringify(s3Statements[0]?.Resource)).not.toContain('"*"');
     expect(JSON.stringify(statements)).not.toMatch(
       /ConnectorRuntimeTable|RetrievalTable|SnapshotBlobBucket|DigestKeySecret/u,
     );

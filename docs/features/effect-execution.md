@@ -253,6 +253,27 @@ The deployed effect-disabled `DynamoApprovalExecutionPersistence` implements
 the frozen base `ApprovalExecutionPersistence` contract and does not claim
 those controlled-effect extensions.
 
+## DynamoDB Streams relay failure capture
+
+The approval locator relay consumes filtered DynamoDB Streams inserts and
+places the stable operation ID on the execution SQS queue. If a stream batch
+exhausts its bounded retries or record-age limit, Lambda writes the failure to
+a dedicated private, versioned, KMS-encrypted S3 bucket retained with the
+stack. The S3 invocation record includes the complete original Lambda event in
+its `payload`; SQS and SNS stream failure destinations contain only batch
+metadata and cannot provide the same recovery input.
+
+An S3 failure object is not an ordinary SQS message and is not directly
+redrivable. Recovery is deliberate: inspect the invocation metadata and full
+payload, correct the relay failure, validate that each locator is still
+authoritative, and replay only through relay-compatible handling. The stack
+outputs the failure bucket name. A near-real-time S3 `PutRequests` alarm
+signals writes to the dedicated capture bucket, while Lambda
+`DestinationDeliveryFailures` alarms separately if the capture itself fails.
+The relay role can only list/write the dedicated bucket under an
+`s3:ResourceAccount` condition for the deployment account; it has no S3 delete
+authority.
+
 ## Tradeoffs
 
 - The worker reuses the frozen approval/outbox and domain contracts rather
