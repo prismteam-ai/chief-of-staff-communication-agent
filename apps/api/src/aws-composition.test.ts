@@ -26,17 +26,85 @@ function sha256Text(value: string): string {
 }
 
 describe('AWS durable API composition', () => {
+  const productionEnvironment = Object.freeze({
+    AWS_REGION: 'us-east-2',
+    COGNITO_ISSUER:
+      'https://cognito-idp.us-east-2.amazonaws.com/us-east-2_AbCdEf123',
+    COGNITO_USER_POOL_CLIENT_ID: 'chiefclientid123',
+    COGNITO_USER_POOL_ID: 'us-east-2_AbCdEf123',
+    CORE_TABLE_NAME: 'chief-core',
+    PRODUCT_BASE_URL: 'https://chief.example.test',
+    REQUEST_AUTH_MODE: 'enforced',
+    RETRIEVAL_TABLE_NAME: 'chief-retrieval',
+    SNAPSHOT_BUCKET_NAME: 'chief-snapshots',
+  });
+
   it('does not bind approval availability to an injected outbox queue', () => {
     expect(() =>
       createAwsDurableApiDependencies({
-        AWS_REGION: 'us-east-2',
-        CORE_TABLE_NAME: 'chief-core',
+        ...productionEnvironment,
         OUTBOX_QUEUE_URL: 'https://unavailable.invalid/chief-outbox',
-        PRODUCT_BASE_URL: 'https://chief.example.test',
-        RETRIEVAL_TABLE_NAME: 'chief-retrieval',
-        SNAPSHOT_BUCKET_NAME: 'chief-snapshots',
       }),
     ).not.toThrow();
+  });
+
+  it('always composes configured AWS production with enforced Cognito authority', () => {
+    const dependencies = createAwsDurableApiDependencies(productionEnvironment);
+
+    expect(dependencies.authMode).toBe('enforced');
+    expect(dependencies.requestAuthorityResolver).toBeDefined();
+  });
+
+  it.each([
+    'REQUEST_AUTH_MODE',
+    'COGNITO_ISSUER',
+    'COGNITO_USER_POOL_ID',
+    'COGNITO_USER_POOL_CLIENT_ID',
+  ] as const)('fails composition when %s is missing', (name) => {
+    expect(() =>
+      createAwsDurableApiDependencies({
+        ...productionEnvironment,
+        [name]: undefined,
+      }),
+    ).toThrow(`MISSING_${name}`);
+  });
+
+  it.each([
+    [
+      'local-test mode',
+      { REQUEST_AUTH_MODE: 'local-test' },
+      'INVALID_REQUEST_AUTH_MODE',
+    ],
+    [
+      'deny-all mode',
+      { REQUEST_AUTH_MODE: 'deny-all' },
+      'INVALID_REQUEST_AUTH_MODE',
+    ],
+    [
+      'malformed pool',
+      { COGNITO_USER_POOL_ID: 'not-a-pool' },
+      'INVALID_COGNITO_USER_POOL_ID',
+    ],
+    [
+      'malformed client',
+      { COGNITO_USER_POOL_CLIENT_ID: 'client with spaces' },
+      'INVALID_COGNITO_USER_POOL_CLIENT_ID',
+    ],
+    [
+      'issuer for another pool',
+      {
+        COGNITO_ISSUER:
+          'https://cognito-idp.us-east-2.amazonaws.com/us-east-2_Attacker',
+      },
+      'INVALID_COGNITO_ISSUER',
+    ],
+  ])('fails composition for %s', (_label, override, error) => {
+    expect(() =>
+      createAwsDurableApiDependencies({
+        ...productionEnvironment,
+        ...override,
+      }),
+    ).toThrow(error);
   });
 
   it('derives the durable request scope from the shared evaluator identity', () => {

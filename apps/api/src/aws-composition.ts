@@ -17,6 +17,8 @@ import {
 } from '@chief/contracts';
 
 import type { ApiDependencies } from './context.js';
+import { createCognitoRequestAuthorityResolver } from './auth/request-authority.js';
+import { createDynamoAuthorityMembershipResolver } from './auth/aws-membership-resolver.js';
 import {
   DynamoDurableProductRepository,
   MemoryDurableProductRepository,
@@ -43,6 +45,41 @@ function required(
   const value = environment[name]?.trim();
   if (!value) throw new Error(`MISSING_${name}`);
   return value;
+}
+
+interface ProductionAuthConfiguration {
+  readonly userPoolId: string;
+  readonly clientId: string;
+}
+
+function productionAuthConfiguration(
+  environment: Readonly<Record<string, string | undefined>>,
+): ProductionAuthConfiguration {
+  const mode = required(environment, 'REQUEST_AUTH_MODE');
+  if (mode !== 'enforced') throw new Error('INVALID_REQUEST_AUTH_MODE');
+
+  const userPoolId = required(environment, 'COGNITO_USER_POOL_ID');
+  const separator = userPoolId.indexOf('_');
+  const region = userPoolId.slice(0, separator);
+  if (
+    separator < 1 ||
+    !/^[a-z]{2}(?:-[a-z0-9]+)+-[0-9]$/u.test(region) ||
+    !/^[A-Za-z0-9]+$/u.test(userPoolId.slice(separator + 1))
+  )
+    throw new Error('INVALID_COGNITO_USER_POOL_ID');
+
+  const clientId = required(environment, 'COGNITO_USER_POOL_CLIENT_ID');
+  if (!/^[A-Za-z0-9]{1,128}$/u.test(clientId))
+    throw new Error('INVALID_COGNITO_USER_POOL_CLIENT_ID');
+
+  const issuer = required(environment, 'COGNITO_ISSUER');
+  const allowedIssuers = new Set([
+    `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`,
+    `https://cognito-idp.${region}.amazonaws.com.cn/${userPoolId}`,
+  ]);
+  if (!allowedIssuers.has(issuer)) throw new Error('INVALID_COGNITO_ISSUER');
+
+  return Object.freeze({ userPoolId, clientId });
 }
 
 function memoryProbe(): MemoryProbe {
@@ -285,6 +322,7 @@ export function createMemoryDurableApiDependencies(input?: {
 export function createAwsDurableApiDependencies(
   environment: Readonly<Record<string, string | undefined>>,
 ): ApiDependencies {
+  const auth = productionAuthConfiguration(environment);
   const coreTableName = required(environment, 'CORE_TABLE_NAME');
   const retrievalTableName = required(environment, 'RETRIEVAL_TABLE_NAME');
   const snapshotBucketName = required(environment, 'SNAPSHOT_BUCKET_NAME');
@@ -310,6 +348,16 @@ export function createAwsDurableApiDependencies(
       undefined,
     ),
     requestContext: createDurableRequestContext(),
+    requestAuthorityResolver: createCognitoRequestAuthorityResolver({
+      userPoolId: auth.userPoolId,
+      clientId: auth.clientId,
+      tokenUse: 'access',
+      memberships: createDynamoAuthorityMembershipResolver({
+        documentClient: dynamo,
+        tableName: coreTableName,
+      }),
+    }),
+    authMode: 'enforced',
   };
 }
 
