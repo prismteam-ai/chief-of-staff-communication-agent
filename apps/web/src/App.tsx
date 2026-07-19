@@ -2942,11 +2942,16 @@ function ConnectionsPage({
 
 function EvidencePage({
   apiState,
+  apiBaseUrl,
   projection,
 }: {
   readonly apiState: ApiState;
+  readonly apiBaseUrl: string;
   readonly projection: ProductProjection;
 }) {
+  const asanaAcceptanceEvidenceUrl = `${apiBaseUrl.replace(/\/$/u, '')}/trpc/system.asanaAcceptanceEvidence?batch=1&input=${encodeURIComponent(
+    JSON.stringify({ 0: { json: null } }),
+  )}`;
   return (
     <div className="page">
       <PageHeader
@@ -3097,6 +3102,19 @@ function EvidencePage({
               No provider or Asana endpoint authority
             </li>
           </ul>
+          <p>
+            Separate from this effect-disabled runtime, one bounded, explicitly
+            authorized controlled Asana live acceptance is published as a
+            redacted, hash-bound receipt.{' '}
+            <a
+              href={asanaAcceptanceEvidenceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Asana controlled acceptance evidence (read-only){' '}
+              <ExternalLink aria-hidden="true" size={14} />
+            </a>
+          </p>
         </section>
       </div>
 
@@ -3447,7 +3465,13 @@ export function App() {
         />
         <Route
           path="/evidence"
-          element={<EvidencePage apiState={apiState} projection={projection} />}
+          element={
+            <EvidencePage
+              apiState={apiState}
+              apiBaseUrl={apiBaseUrl}
+              projection={projection}
+            />
+          }
         />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
