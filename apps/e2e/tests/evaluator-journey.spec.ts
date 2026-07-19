@@ -314,7 +314,9 @@ test.describe('signed-out evaluator journey', () => {
     );
     await expect(
       page.getByTestId('hosted-connector-seed-summary'),
-    ).toContainText(/seven account-scoped fixture connectors/i);
+    ).toContainText(
+      /seven account-scoped connector cards.*six fixture-mode cards and one manual\/recorded LinkedIn archive card/i,
+    );
     const modeLabels = await page
       .locator('[data-testid^="capability-mode-"]')
       .allTextContents();
