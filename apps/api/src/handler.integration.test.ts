@@ -1,11 +1,13 @@
 import type { APIGatewayProxyEventV2, Context } from 'aws-lambda';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   productHealthResponseSchema,
   listCommunicationsResultSchema,
 } from '@chief/contracts';
 
+import { RequestAuthorityError } from './auth/index.js';
+import { createContext } from './context.js';
 import { createApiHandler } from './handler.js';
 import {
   createFixtureProductService,
@@ -78,11 +80,20 @@ function resultData(responseBody: string | undefined): unknown {
 const handler = createApiHandler({
   productService: createFixtureProductService(),
   requestContext: createFixtureRequestContext(),
+  authMode: 'local-test',
+});
+
+const enforcedHandler = createApiHandler({
+  productService: createFixtureProductService(),
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('API Gateway tRPC Lambda integration', () => {
   it('routes health and typed product queries through the official adapter', async () => {
-    const healthResponse = await handler(
+    const healthResponse = await enforcedHandler(
       eventFor('system.health'),
       lambdaContext,
     );
@@ -103,6 +114,68 @@ describe('API Gateway tRPC Lambda integration', () => {
     expect(
       listCommunicationsResultSchema.parse(resultData(listResponse.body)).items,
     ).toHaveLength(2);
+  });
+
+  it('protects product procedures in enforced mode', async () => {
+    for (const headers of [
+      undefined,
+      { authorization: 'Basic not-a-session' },
+      { authorization: 'Bearer malformed' },
+    ]) {
+      const response = await enforcedHandler(
+        eventFor('communications.list', {
+          input: { limit: 2 },
+          ...(headers === undefined ? {} : { headers }),
+        }),
+        lambdaContext,
+      );
+
+      expect(response.statusCode).toBe(401);
+      expect(response.body).not.toContain('tenant_public_assessment');
+      expect(response.body).not.toContain('not-a-session');
+    }
+  });
+
+  it('returns forbidden for inactive server membership or grants', async () => {
+    const inactiveAuthorityHandler = createApiHandler({
+      productService: createFixtureProductService(),
+      requestAuthorityResolver: {
+        resolve: () =>
+          Promise.reject(
+            new RequestAuthorityError('forbidden', 'inactive_membership'),
+          ),
+      },
+    });
+
+    const response = await inactiveAuthorityHandler(
+      eventFor('communications.list', {
+        input: { limit: 2 },
+        headers: { authorization: 'Bearer a.b.c' },
+      }),
+      lambdaContext,
+    );
+
+    expect(response.statusCode).toBe(403);
+    expect(response.body).not.toContain('inactive_membership');
+  });
+
+  it('refuses the local-test authority lane in production', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+
+    expect(() =>
+      createContext(
+        {
+          event: eventFor('communications.list'),
+          context: lambdaContext,
+          info: {} as never,
+        },
+        {
+          productService: createFixtureProductService(),
+          requestContext: createFixtureRequestContext(),
+          authMode: 'local-test',
+        },
+      ),
+    ).toThrow('LOCAL_TEST_AUTH_FORBIDDEN_IN_PRODUCTION');
   });
 
   it('returns bounded protocol errors for malformed input', async () => {

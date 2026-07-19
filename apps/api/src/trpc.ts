@@ -4,6 +4,7 @@ import { initTRPC, TRPCError } from '@trpc/server';
 import { createObservability } from '@chief/observability';
 
 import type { ApiContext } from './context.js';
+import { RequestAuthorityError } from './auth/index.js';
 
 const fallbackObservability = createObservability('chief-api');
 
@@ -173,3 +174,23 @@ const t = initTRPC.context<ApiContext>().create({
 
 export const router = t.router;
 export const publicProcedure = t.procedure;
+
+const requireRequestAuthority = t.middleware(async ({ ctx, next }) => {
+  try {
+    const requestAuthority = await ctx.resolveRequestAuthority();
+    if (
+      ctx.authMode === 'enforced' &&
+      requestAuthority.mode !== 'verified-session'
+    )
+      throw new RequestAuthorityError('unauthorized', 'invalid_session');
+    return next({ ctx: { ...ctx, requestAuthority } });
+  } catch (error) {
+    if (!(error instanceof RequestAuthorityError)) throw error;
+    throw new TRPCError({
+      code: error.kind === 'unauthorized' ? 'UNAUTHORIZED' : 'FORBIDDEN',
+      message: error.message,
+    });
+  }
+});
+
+export const protectedProcedure = t.procedure.use(requireRequestAuthority);

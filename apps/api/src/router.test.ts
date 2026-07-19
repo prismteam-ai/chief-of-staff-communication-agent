@@ -20,6 +20,7 @@ import {
 } from '@chief/contracts';
 import { createObservability } from '@chief/observability';
 
+import { createLocalTestRequestAuthorityResolver } from './auth/index.js';
 import {
   createFixtureProductService,
   createFixtureRequestContext,
@@ -37,35 +38,34 @@ function createCaller(
   requestContext: ProductRequestContext = createFixtureRequestContext(),
   productService: ProductService = createFixtureProductService(),
 ) {
+  const resolver = createLocalTestRequestAuthorityResolver(requestContext);
   return appRouter.createCaller({
-    event: {} as never,
     lambdaContext: {} as never,
     observability: createObservability('chief-api-test'),
     productService,
-    requestContext,
+    authMode: 'local-test',
+    resolveRequestAuthority: () => resolver.resolve({ headers: {} }),
   });
 }
 
 describe('typed product router', () => {
-  it('fails health closed when durable product or retrieval readiness is unavailable', async () => {
+  it('keeps anonymous health independent from product authority and data access', async () => {
     const fixture = createFixtureProductService();
     const unavailable = new Proxy(fixture, {
       get(target, property, receiver): unknown {
-        if (property === 'searchKnowledge') {
+        if (typeof Reflect.get(target, property, receiver) === 'function') {
           return () => {
-            throw new Error('injected retrieval-head failure');
+            throw new Error('anonymous health crossed the product boundary');
           };
         }
         const value: unknown = Reflect.get(target, property, receiver);
-        return typeof value === 'function'
-          ? (value.bind(target) as unknown)
-          : value;
+        return value;
       },
     });
 
     await expect(
       createCaller(createFixtureRequestContext(), unavailable).system.health(),
-    ).rejects.toThrow('injected retrieval-head failure');
+    ).resolves.toMatchObject({ service: 'chief-api', status: 'ok' });
   });
 
   it('serves the complete fixture-backed product surface with schema parity', async () => {

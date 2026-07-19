@@ -44,7 +44,7 @@ import {
   ProductServiceError,
   type ProductResult,
 } from './product-service.js';
-import { publicProcedure, router } from './trpc.js';
+import { protectedProcedure, publicProcedure, router } from './trpc.js';
 
 function toTrpcError(error: unknown): never {
   if (!(error instanceof ProductServiceError)) throw error;
@@ -70,191 +70,233 @@ async function productCall<T>(operation: () => ProductResult<T>): Promise<T> {
 export const systemRouter = router({
   health: publicProcedure
     .output(productHealthResponseSchema)
-    .query(async ({ ctx }) => {
+    .query(({ ctx }) => {
       ctx.observability.logger.info('Product API health requested', {
         surface: 'typed-product-api',
         externalEffects: 'disabled',
       });
-      await Promise.all([
-        productCall(() =>
-          ctx.productService.getConnectorStatus(ctx.requestContext, {}),
-        ),
-        productCall(() =>
-          ctx.productService.searchKnowledge(ctx.requestContext, {
-            queryText: 'bounded readiness probe',
-            exactEntityRefs: [],
-            limit: 1,
-          }),
-        ),
-      ]);
       return createProductHealthResponse('chief-api');
     }),
 });
 
 export const dashboardRouter = router({
-  metrics: publicProcedure
+  metrics: protectedProcedure
     .input(getSlaMetricsInputSchema)
     .output(dashboardMetricsResultSchema)
     .query(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.dashboardMetrics(ctx.requestContext, input),
+        ctx.productService.dashboardMetrics(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
-  sla: publicProcedure
+  sla: protectedProcedure
     .input(getSlaMetricsInputSchema)
     .output(getSlaMetricsResultSchema)
     .query(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.getSlaMetrics(ctx.requestContext, input),
+        ctx.productService.getSlaMetrics(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
 });
 
 export const communicationsRouter = router({
-  list: publicProcedure
+  list: protectedProcedure
     .input(listCommunicationsInputSchema)
     .output(listCommunicationsResultSchema)
     .query(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.listCommunications(ctx.requestContext, input),
+        ctx.productService.listCommunications(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
-  get: publicProcedure
+  get: protectedProcedure
     .input(getCommunicationInputSchema)
     .output(getCommunicationResultSchema)
     .query(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.getCommunication(ctx.requestContext, input),
+        ctx.productService.getCommunication(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
-  thread: publicProcedure
+  thread: protectedProcedure
     .input(getThreadContextInputSchema)
     .output(getThreadContextResultSchema)
     .query(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.getThreadContext(ctx.requestContext, input),
+        ctx.productService.getThreadContext(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
 });
 
 export const connectorsRouter = router({
-  status: publicProcedure
+  status: protectedProcedure
     .input(getConnectorStatusInputSchema)
     .output(getConnectorStatusResultSchema)
     .query(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.getConnectorStatus(ctx.requestContext, input),
+        ctx.productService.getConnectorStatus(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
 });
 
 export const workRouter = router({
-  relatedAsana: publicProcedure
+  relatedAsana: protectedProcedure
     .input(getRelatedAsanaWorkInputSchema)
     .output(getRelatedAsanaWorkResultSchema)
     .query(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.getRelatedAsanaWork(ctx.requestContext, input),
+        ctx.productService.getRelatedAsanaWork(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
 });
 
 export const knowledgeRouter = router({
-  search: publicProcedure
+  search: protectedProcedure
     .input(searchKnowledgeInputSchema)
     .output(searchKnowledgeResultSchema)
     .query(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.searchKnowledge(ctx.requestContext, input),
+        ctx.productService.searchKnowledge(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
 });
 
 export const agentRouter = router({
-  recommend: publicProcedure
+  recommend: protectedProcedure
     .input(recommendActionInputSchema)
     .output(recommendActionResultSchema)
     .mutation(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.recommendAction(ctx.requestContext, input),
+        ctx.productService.recommendAction(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
-  createDraft: publicProcedure
+  createDraft: protectedProcedure
     .input(createDraftInputSchema)
     .output(createDraftResultSchema)
     .mutation(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.createDraft(ctx.requestContext, input),
+        ctx.productService.createDraft(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
-  reviseDraft: publicProcedure
+  reviseDraft: protectedProcedure
     .input(reviseDraftInputSchema)
     .output(reviseDraftResultSchema)
     .mutation(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.reviseDraft(ctx.requestContext, input),
+        ctx.productService.reviseDraft(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
-  requestContext: publicProcedure
+  requestContext: protectedProcedure
     .input(requestContextInputSchema)
     .output(requestContextResultSchema)
     .mutation(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.requestContext(ctx.requestContext, input),
+        ctx.productService.requestContext(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
 });
 
 export const approvalsRouter = router({
-  prepare: publicProcedure
+  prepare: protectedProcedure
     .input(submitApprovalInputSchema)
     .output(submitApprovalResultSchema)
     .mutation(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.prepareApproval(ctx.requestContext, input),
+        ctx.productService.prepareApproval(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
-  prepareAsana: publicProcedure
+  prepareAsana: protectedProcedure
     .input(prepareAsanaActionInputSchema)
     .output(prepareAsanaActionResultSchema)
     .mutation(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.prepareAsanaAction(ctx.requestContext, input),
+        ctx.productService.prepareAsanaAction(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
-  prepareDraft: publicProcedure
+  prepareDraft: protectedProcedure
     .input(prepareDraftApprovalInputSchema)
     .output(prepareDraftApprovalResultSchema)
     .mutation(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.prepareDraftApproval(ctx.requestContext, input),
+        ctx.productService.prepareDraftApproval(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
-  approve: publicProcedure
+  approve: protectedProcedure
     .input(approveProposalInputSchema)
     .output(approveProposalResultSchema)
     .mutation(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.approveProposal(ctx.requestContext, input),
+        ctx.productService.approveProposal(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
-  status: publicProcedure
+  status: protectedProcedure
     .input(getApprovalStatusInputSchema)
     .output(getApprovalStatusResultSchema)
     .query(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.getApprovalStatus(ctx.requestContext, input),
+        ctx.productService.getApprovalStatus(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
 });
 
 export const executionRouter = router({
-  status: publicProcedure
+  status: protectedProcedure
     .input(executionStatusInputSchema)
     .output(executionStatusResultSchema)
     .query(({ ctx, input }) =>
       productCall(() =>
-        ctx.productService.getExecutionStatus(ctx.requestContext, input),
+        ctx.productService.getExecutionStatus(
+          ctx.requestAuthority.requestContext,
+          input,
+        ),
       ),
     ),
 });
@@ -289,3 +331,16 @@ export type {
   ProductRequestContext,
   ProductService,
 } from './product-service.js';
+export {
+  RequestAuthorityError,
+  createCognitoRequestAuthorityResolver,
+  createCognitoSessionTokenVerifier,
+  createRequestAuthorityResolver,
+} from './auth/index.js';
+export type {
+  AuthorityMembershipResolution,
+  AuthorityMembershipResolver,
+  RequestAuthorityResolver,
+  ResolvedRequestAuthority,
+  VerifiedSessionIdentity,
+} from './auth/index.js';
