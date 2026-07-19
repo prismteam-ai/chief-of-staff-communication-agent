@@ -389,6 +389,15 @@ describe('Chief foundation stack', () => {
     });
     expect(productFunctions).toHaveLength(2);
 
+    const apiFunction = productFunctions.find(
+      (resource) =>
+        resource.Properties?.Environment?.Variables?.POWERTOOLS_SERVICE_NAME ===
+        'chief-api',
+    );
+    expect(apiFunction?.Properties?.Environment?.Variables).not.toHaveProperty(
+      'OUTBOX_QUEUE_URL',
+    );
+
     for (const function_ of productFunctions) {
       const environment = function_.Properties?.Environment?.Variables ?? {};
       expect(environment).toMatchObject({
@@ -425,7 +434,6 @@ describe('Chief foundation stack', () => {
         'kms:Decrypt',
         'kms:GenerateDataKey',
         's3:GetObject',
-        'sqs:SendMessage',
       ]),
     );
     expect(mcpActions).toEqual(
@@ -444,12 +452,13 @@ describe('Chief foundation stack', () => {
       expect(actions).not.toContain('secretsmanager:GetSecretValue');
       expect(actions).not.toContain('s3:DeleteObject');
     }
+    expect(apiActions).not.toContain('sqs:SendMessage');
     expect(mcpActions).not.toContain('kms:GenerateDataKey');
     expect(mcpActions).not.toContain('sqs:SendMessage');
 
     const apiPolicy = JSON.stringify(apiStatements);
     const mcpPolicy = JSON.stringify(mcpStatements);
-    expect(apiPolicy).toContain(
+    expect(apiPolicy).not.toContain(
       'chief-communications:runtime:outbox-queue-arn',
     );
     expect(apiPolicy).not.toContain(

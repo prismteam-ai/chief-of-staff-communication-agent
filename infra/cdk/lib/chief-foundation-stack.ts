@@ -40,8 +40,6 @@ interface RuntimeBindings {
   readonly coreTableArn: string;
   readonly coreTableName: string;
   readonly dataKeyArn: string;
-  readonly outboxQueueArn: string;
-  readonly outboxQueueUrl: string;
   readonly retrievalTableArn: string;
   readonly retrievalTableName: string;
   readonly snapshotBucketArn: string;
@@ -85,7 +83,6 @@ export class ChiefFoundationStack extends cdk.Stack {
         ...fixtureEnvironment,
         CONNECTOR_RUNTIME_TABLE_NAME: runtime.connectorRuntimeTableName,
         CORE_TABLE_NAME: runtime.coreTableName,
-        OUTBOX_QUEUE_URL: runtime.outboxQueueUrl,
         PUBLIC_ROUTE_SCOPE: 'fixture-read-propose-approve-effect-disabled',
         RETRIEVAL_TABLE_NAME: runtime.retrievalTableName,
         SNAPSHOT_BUCKET_NAME: runtime.snapshotBucketName,
@@ -351,8 +348,6 @@ export class ChiefFoundationStack extends cdk.Stack {
       coreTableArn: cdk.Fn.importValue(runtimeExportNames.coreTableArn),
       coreTableName: cdk.Fn.importValue(runtimeExportNames.coreTableName),
       dataKeyArn: cdk.Fn.importValue(runtimeExportNames.dataKeyArn),
-      outboxQueueArn: cdk.Fn.importValue(runtimeExportNames.outboxQueueArn),
-      outboxQueueUrl: cdk.Fn.importValue(runtimeExportNames.outboxQueueUrl),
       retrievalTableArn: cdk.Fn.importValue(
         runtimeExportNames.retrievalTableArn,
       ),
@@ -380,12 +375,6 @@ export class ChiefFoundationStack extends cdk.Stack {
     );
     this.grantTableData(function_, runtime.retrievalTableArn, 'read');
     this.grantSnapshotRead(function_, runtime.snapshotBucketArn);
-    function_.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['sqs:SendMessage'],
-        resources: [runtime.outboxQueueArn],
-      }),
-    );
     function_.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['kms:Decrypt', 'kms:GenerateDataKey'],
