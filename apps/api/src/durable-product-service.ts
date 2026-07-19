@@ -497,14 +497,19 @@ function readProposalIndex(value: unknown): readonly string[] {
   return normalized;
 }
 
-function citation(sourceId: string, chunkId: string, label: string): Citation {
+function citation(
+  sourceId: string,
+  chunkId: string,
+  label: string,
+  evidenceText: string,
+): Citation {
   return citationSchema.parse({
     citationId: `${sourceId}:${chunkId}:1`,
     sourceId,
     sourceVersion: '1',
     chunkId,
     label,
-    contentHash: sha256(`${sourceId}:${chunkId}:${label}`),
+    contentHash: sha256(evidenceText),
     hydratedUnderAuthorizationEpoch: 1,
   });
 }
@@ -760,6 +765,7 @@ function createSeed(baseUrl: string): SeedProjection {
             `source-communication-${sourceOrdinal}`,
             `chunk-communication-${sourceOrdinal}`,
             subject ?? `${channel} synthetic communication`,
+            normalizedBody,
           ),
         ],
       }),

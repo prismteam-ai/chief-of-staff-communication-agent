@@ -417,6 +417,54 @@ describe('durable hosted product vertical', () => {
     ).resolves.toBeUndefined();
   }, 30_000);
 
+  it('binds communication citations to the exact normalized evidence text', async () => {
+    const service = new DurableProductService(
+      new MemoryDurableProductRepository(),
+      { search: () => Promise.reject(new Error('MUST_NOT_QUERY')) },
+      'https://chief.example.test',
+    );
+    const context = createDurableRequestContext();
+    const messageRevisionIds = [
+      'message-revision-1-1',
+      'revision-tenant-demo-northstar-0001-02',
+    ] as const;
+
+    for (const messageRevisionId of messageRevisionIds) {
+      const { communication } = await service.getCommunication(context, {
+        messageRevisionId,
+      });
+      const citedEvidence = communication.citations[0];
+
+      if (citedEvidence === undefined)
+        throw new Error('Expected one communication citation.');
+      expect(citedEvidence.contentHash).toBe(
+        sha256Text(communication.normalizedText),
+      );
+      expect(citedEvidence.contentHash).not.toBe(
+        sha256Text(
+          `${citedEvidence.sourceId}:${citedEvidence.chunkId}:${citedEvidence.label}`,
+        ),
+      );
+      expect(citedEvidence.citationId).toBe(
+        `${citedEvidence.sourceId}:${citedEvidence.chunkId}:${citedEvidence.sourceVersion}`,
+      );
+    }
+
+    const { communication: boundedCommunication } =
+      await service.getCommunication(context, {
+        messageRevisionId: 'revision-tenant-demo-northstar-0001-02',
+      });
+    expect(boundedCommunication.normalizedText).not.toBe(
+      boundedCommunication.authoredText,
+    );
+    expect(boundedCommunication.citations[0]?.contentHash).toBe(
+      sha256Text(boundedCommunication.normalizedText),
+    );
+    expect(boundedCommunication.citations[0]?.contentHash).not.toBe(
+      sha256Text(boundedCommunication.authoredText),
+    );
+  });
+
   it('fails closed when the durable V2 marker is partial or drifted', async () => {
     const repository = new MemoryDurableProductRepository();
     await repository.putRevision(deterministicEvaluatorIdentityV2.tenantId, {
