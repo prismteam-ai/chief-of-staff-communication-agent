@@ -313,7 +313,7 @@ describe('Chief foundation stack', () => {
           }),
         },
       },
-      2,
+      1,
     );
     template.resourcePropertiesCountIs(
       'AWS::Lambda::Function',
@@ -460,11 +460,7 @@ describe('Chief foundation stack', () => {
 
     for (const function_ of productFunctions) {
       const environment = function_.Properties?.Environment?.Variables ?? {};
-      expect(environment).toMatchObject({
-        FIXTURE_TENANT_ID: 'chief-evaluator-fixture',
-        NODE_ENV: 'production',
-        PUBLIC_FIXTURE_MODE: 'enabled',
-      });
+      expect(environment).toMatchObject({ NODE_ENV: 'production' });
       for (const forbiddenKey of [
         'API_KEY',
         'CLIENT_SECRET',
@@ -479,6 +475,10 @@ describe('Chief foundation stack', () => {
     }
 
     const apiEnvironment = apiFunction?.Properties?.Environment?.Variables;
+    expect(apiEnvironment).toMatchObject({
+      FIXTURE_TENANT_ID: 'chief-evaluator-fixture',
+      PUBLIC_FIXTURE_MODE: 'enabled',
+    });
     expect(apiEnvironment?.AUTH_SESSION_TTL_SECONDS).toBe('900');
     expect(apiEnvironment?.AUTH_STATE_TTL_SECONDS).toBe('300');
     expect(apiEnvironment?.COGNITO_DOMAIN).toBeDefined();
@@ -497,6 +497,18 @@ describe('Chief foundation stack', () => {
     expect(mcpEnvironment).not.toHaveProperty('AUTH_SESSION_TTL_SECONDS');
     expect(mcpEnvironment).not.toHaveProperty('AUTH_STATE_TTL_SECONDS');
     expect(mcpEnvironment).not.toHaveProperty('COGNITO_DOMAIN');
+    for (const unusedEnvironmentKey of [
+      'CONNECTOR_RUNTIME_TABLE_NAME',
+      'EXTERNAL_EFFECTS',
+      'FIXTURE_TENANT_ID',
+      'MODEL_EFFECTS',
+      'PROVIDER_EFFECTS',
+      'PUBLIC_FIXTURE_MODE',
+      'PUBLIC_ROUTE_SCOPE',
+      'WORK_MANAGEMENT_EFFECTS',
+    ]) {
+      expect(mcpEnvironment).not.toHaveProperty(unusedEnvironmentKey);
+    }
 
     const apiStatements = applicationPolicyStatements('ApiFunction');
     const mcpStatements = applicationPolicyStatements('McpFunction');
@@ -545,6 +557,9 @@ describe('Chief foundation stack', () => {
     );
     expect(mcpPolicy).not.toContain(
       'chief-communications:runtime:outbox-queue-arn',
+    );
+    expect(mcpPolicy).not.toContain(
+      'chief-communications:runtime:connector-runtime-table-arn',
     );
     expect(`${apiPolicy}${mcpPolicy}`).not.toMatch(
       /(?:digest-key-secret|event-bus|ingestion-queue)/u,

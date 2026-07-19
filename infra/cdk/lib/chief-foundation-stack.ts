@@ -156,12 +156,9 @@ export class ChiefFoundationStack extends cdk.Stack {
       'chief-mcp',
       mcpLogGroup,
       {
-        ...fixtureEnvironment,
         COGNITO_ISSUER: cognitoIssuer,
         COGNITO_USER_POOL_ID: userPool.userPoolId,
-        CONNECTOR_RUNTIME_TABLE_NAME: runtime.connectorRuntimeTableName,
         CORE_TABLE_NAME: runtime.coreTableName,
-        PUBLIC_ROUTE_SCOPE: 'fixture-mcp-read-propose-approval-handoff',
         REQUEST_AUTH_MODE: 'enforced',
         RETRIEVAL_TABLE_NAME: runtime.retrievalTableName,
         SNAPSHOT_BUCKET_NAME: runtime.snapshotBucketName,
@@ -502,7 +499,6 @@ export class ChiefFoundationStack extends cdk.Stack {
     runtime: RuntimeBindings,
   ): void {
     this.grantCoreTableData(function_, runtime.coreTableArn);
-    this.grantTableData(function_, runtime.connectorRuntimeTableArn, 'read');
     this.grantTableData(function_, runtime.retrievalTableArn, 'read');
     this.grantSnapshotRead(function_, runtime.snapshotBucketArn);
     function_.addToRolePolicy(
