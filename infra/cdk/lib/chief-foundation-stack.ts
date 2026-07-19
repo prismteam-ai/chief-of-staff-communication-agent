@@ -483,6 +483,17 @@ export class ChiefFoundationStack extends cdk.Stack {
     runtime: RuntimeBindings,
   ): void {
     this.grantCoreTableData(function_, runtime.coreTableArn);
+    function_.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['dynamodb:DeleteItem', 'dynamodb:PutItem'],
+        conditions: {
+          StringEquals: {
+            'dynamodb:EnclosingOperation': 'TransactWriteItems',
+          },
+        },
+        resources: [runtime.coreTableArn],
+      }),
+    );
     this.grantTableData(
       function_,
       runtime.connectorRuntimeTableArn,

@@ -51,6 +51,7 @@ interface LambdaTemplateResource {
 
 interface PolicyStatement {
   readonly Action?: string | readonly string[];
+  readonly Condition?: unknown;
   readonly Resource?: unknown;
 }
 
@@ -520,6 +521,7 @@ describe('Chief foundation stack', () => {
     );
     expect(apiActions).toEqual(
       expect.arrayContaining([
+        'dynamodb:DeleteItem',
         'dynamodb:PutItem',
         'dynamodb:Query',
         'dynamodb:TransactWriteItems',
@@ -538,12 +540,12 @@ describe('Chief foundation stack', () => {
     );
     for (const actions of [apiActions, mcpActions]) {
       expect(actions).not.toContain('dynamodb:Scan');
-      expect(actions).not.toContain('dynamodb:DeleteItem');
       expect(actions).not.toContain('events:PutEvents');
       expect(actions).not.toContain('secretsmanager:GetSecretValue');
       expect(actions).not.toContain('s3:DeleteObject');
     }
     expect(apiActions).not.toContain('sqs:SendMessage');
+    expect(mcpActions).not.toContain('dynamodb:DeleteItem');
     expect(mcpActions).not.toContain('kms:GenerateDataKey');
     expect(mcpActions).not.toContain('sqs:SendMessage');
 
@@ -564,6 +566,22 @@ describe('Chief foundation stack', () => {
     expect(`${apiPolicy}${mcpPolicy}`).not.toMatch(
       /(?:digest-key-secret|event-bus|ingestion-queue)/u,
     );
+    const browserSessionStatements = apiStatements.filter(({ Action }) => {
+      const actions = actionValues(Action);
+      return (
+        actions.includes('dynamodb:PutItem') &&
+        actions.includes('dynamodb:DeleteItem')
+      );
+    });
+    expect(browserSessionStatements).toHaveLength(1);
+    expect(JSON.stringify(browserSessionStatements[0]?.Resource)).toContain(
+      'chief-communications:runtime:core-table-arn',
+    );
+    expect(browserSessionStatements[0]?.Condition).toEqual({
+      StringEquals: {
+        'dynamodb:EnclosingOperation': 'TransactWriteItems',
+      },
+    });
 
     const apiWritePolicy = JSON.stringify(
       apiStatements.filter(({ Action }) =>
