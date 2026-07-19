@@ -95,8 +95,8 @@ active, stable-epoch manifest inspection and an exact digest of the issued
 source/chunk/version/epoch/evidence rows. A copied hash, altered row, altered
 result object, or head change fails closed with `STALE_REVISION`; there is no
 fixture-identity or app-tier-classification fallback. This citation-proof wiring
-is deployed in assessed release `16a36872f2ecaea82574d569fbbcf6bdc2553ba4`
-listed below.
+is deployed in commit `57660f3f22d2cc2c93ebe4f9659ebacf8ad1f867` listed
+below.
 
 The focused compatibility suite runs the actual production staging writer into
 compaction, CAS promotion, persisted query-vector production, bounded
@@ -241,10 +241,11 @@ Expected parent deployment outputs:
 - MCP endpoint: `<ChiefFoundationStack.McpUrl>`
 - MCP health: `<ChiefFoundationStack.McpHealthUrl>`
 
-The assessed `16a36872f2ecaea82574d569fbbcf6bdc2553ba4` runtime release is live at
-the URLs below. It includes durable citation-lineage verification, quarantine
-of stale proposal replay/effects, availability-safe passive dashboard counts,
-and the truthful single-citation hosted workflow:
+The final deployed commit is
+`57660f3f22d2cc2c93ebe4f9659ebacf8ad1f867`. Its runtime is live at the URLs
+below and includes durable citation-lineage verification, quarantine of stale
+proposal replay/effects, availability-safe passive dashboard counts, and the
+truthful single-citation hosted workflow:
 
 - UI: `https://d3hgq3e86d3knk.cloudfront.net`
 - API base: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com`

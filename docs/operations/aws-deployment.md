@@ -1,11 +1,11 @@
 # AWS deployment
 
-Status: the assessed `16a36872f2ecaea82574d569fbbcf6bdc2553ba4` runtime release is
-deployed. `ChiefProductStack` and `ChiefFoundationStack` are both
-`UPDATE_COMPLETE`; scoped deterministic non-PII evaluator data is seeded; and
-strict hosted acceptance passed 19 runnable checks with 2 fixture-only skips
-and 0 failures. The verified run required dashboard HTTP 200, no fabricated
-Asana evidence, API/MCP retrieval parity, and the durable
+Status: commit `57660f3f22d2cc2c93ebe4f9659ebacf8ad1f867` is deployed.
+`ChiefProductStack` and `ChiefFoundationStack` are both `UPDATE_COMPLETE`;
+scoped deterministic non-PII evaluator data is seeded; and strict hosted
+acceptance passed 19 runnable checks with 2 fixture-only skips and 0 failures.
+The verified run required dashboard HTTP 200, no fabricated Asana evidence,
+API/MCP retrieval parity, and the durable
 revision/approval/effect-disabled-receipt journey.
 
 ## Runtime shape
@@ -449,8 +449,7 @@ policy. A direct UI route such as `/inbox/thread-q3-launch` must serve the SPA,
 while an unknown `/trpc/...`, unknown `/mcp/...`, and missing asset with a file
 extension must retain their origin error status and must not return HTML 200.
 
-Record evaluator endpoints as deployment outputs. The current assessed release
-uses:
+Record evaluator endpoints as deployment outputs. The current deployment uses:
 
 - UI: `https://d3hgq3e86d3knk.cloudfront.net`
 - API base: `https://prjip3os8i.execute-api.us-east-2.amazonaws.com`
@@ -523,9 +522,9 @@ Hosted provider, Asana, model, and authenticated MCP acceptance remain separate
 deployment-dependent checks. A successful deterministic evaluator test is not
 evidence of a live provider effect.
 
-For the current assessed release, the parent workflow deployed an exact clean
-snapshot, reseeded the synthetic scope through the production
-register/enumerate/compact/promote path, and completed strict hosted acceptance
+For final deployed commit `57660f3f22d2cc2c93ebe4f9659ebacf8ad1f867`,
+the parent workflow reseeded the synthetic scope through the production
+register/enumerate/compact/promote path and completed strict hosted acceptance
 with 19 runnable checks passed, 2 fixture-only checks skipped, and 0 failures.
 Those results prove the deterministic effect-disabled evaluator vertical, not
 provider authentication, live provider delivery, or an Asana mutation.

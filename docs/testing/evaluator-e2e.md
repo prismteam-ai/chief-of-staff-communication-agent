@@ -79,7 +79,8 @@ does not invent deployment evidence. A final hosted acceptance run must supply
 both origins (or one shared API/MCP origin) and must finish with no skipped
 health assertion.
 
-The assessed `16a36872f2ecaea82574d569fbbcf6bdc2553ba4` runtime release uses
+The final deployed commit
+`57660f3f22d2cc2c93ebe4f9659ebacf8ad1f867` uses
 `https://d3hgq3e86d3knk.cloudfront.net` for the UI and
 `https://prjip3os8i.execute-api.us-east-2.amazonaws.com` for API/MCP. Its strict
 hosted run passed all 19 runnable checks, skipped 2 explicitly fixture-only
