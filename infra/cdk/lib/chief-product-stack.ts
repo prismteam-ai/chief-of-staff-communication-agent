@@ -65,7 +65,11 @@ export class ChiefProductStack extends cdk.Stack {
       pendingWindow: cdk.Duration.days(30),
     });
 
-    const coreTable = this.createTable('CoreDomainTable', dataKey);
+    const coreTable = this.createTable(
+      'CoreDomainTable',
+      dataKey,
+      dynamodb.StreamViewType.NEW_IMAGE,
+    );
     coreTable.addGlobalSecondaryIndex({
       indexName: coreIndexes.workQueue,
       partitionKey: { name: 'gsiWorkPk', type: dynamodb.AttributeType.STRING },
@@ -213,6 +217,10 @@ export class ChiefProductStack extends cdk.Stack {
       dataKey,
     );
     const outboxQueue = this.createWorkQueue('OutboxQueue', outboxDlq, dataKey);
+    const outboxRelayDlq = this.createDeadLetterQueue(
+      'OutboxRelayDeadLetterQueue',
+      dataKey,
+    );
 
     const alertTopicName = `${PROJECT_NAME}-runtime-alerts`;
     const alertTopicArn = this.formatArn({
@@ -259,6 +267,11 @@ export class ChiefProductStack extends cdk.Stack {
       alertTopic,
     );
     this.createDeadLetterAlarm('OutboxDeadLetterAlarm', outboxDlq, alertTopic);
+    this.createDeadLetterAlarm(
+      'OutboxRelayDeadLetterAlarm',
+      outboxRelayDlq,
+      alertTopic,
+    );
 
     const productBus = new events.EventBus(this, 'ProductEventBus', {
       kmsKey: dataKey,
@@ -348,6 +361,40 @@ export class ChiefProductStack extends cdk.Stack {
         reportBatchItemFailures: true,
       }),
     );
+    const outboxRelayWorker = this.createWorker(
+      'OutboxRelayWorker',
+      'apps/outbox-relay/src/handler.ts',
+      'chief-outbox-relay',
+      {
+        ...effectDisabledEnvironment,
+        OUTBOX_QUEUE_URL: outboxQueue.queueUrl,
+        POWERTOOLS_METRICS_NAMESPACE: 'ChiefProduct',
+      },
+    );
+    outboxRelayWorker.addEventSource(
+      new eventSources.DynamoEventSource(coreTable, {
+        batchSize: 10,
+        bisectBatchOnError: true,
+        filters: [
+          {
+            pattern: JSON.stringify({
+              dynamodb: {
+                NewImage: {
+                  entityType: { S: ['approval_execution_locator'] },
+                },
+              },
+              eventName: ['INSERT'],
+            }),
+          },
+        ],
+        maxBatchingWindow: cdk.Duration.seconds(5),
+        maxRecordAge: cdk.Duration.hours(24),
+        onFailure: new eventSources.SqsDlq(outboxRelayDlq),
+        reportBatchItemFailures: true,
+        retryAttempts: 5,
+        startingPosition: lambda.StartingPosition.TRIM_HORIZON,
+      }),
+    );
 
     this.grantTableData(ingestionWorker, coreTable, 'read-write');
     this.grantTableData(ingestionWorker, connectorRuntimeTable, 'read-write');
@@ -368,6 +415,7 @@ export class ChiefProductStack extends cdk.Stack {
       }),
     );
     outboxQueue.grantConsumeMessages(executionWorker);
+    outboxQueue.grantSendMessages(outboxRelayWorker);
 
     this.createExport(
       'CoreTableName',
@@ -458,6 +506,9 @@ export class ChiefProductStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'OutboxDeadLetterQueueUrl', {
       value: outboxDlq.queueUrl,
     });
+    new cdk.CfnOutput(this, 'OutboxRelayDeadLetterQueueUrl', {
+      value: outboxRelayDlq.queueUrl,
+    });
 
     const foundationStack = scope.node.tryFindChild('ChiefFoundationStack');
     if (foundationStack instanceof cdk.Stack) {
@@ -517,7 +568,11 @@ export class ChiefProductStack extends cdk.Stack {
     new cdk.CfnOutput(this, id, { exportName, value });
   }
 
-  private createTable(id: string, encryptionKey: kms.IKey): dynamodb.Table {
+  private createTable(
+    id: string,
+    encryptionKey: kms.IKey,
+    stream?: dynamodb.StreamViewType,
+  ): dynamodb.Table {
     return new dynamodb.Table(this, id, {
       partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
@@ -529,6 +584,7 @@ export class ChiefProductStack extends cdk.Stack {
       },
       deletionProtection: true,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
+      stream,
     });
   }
 

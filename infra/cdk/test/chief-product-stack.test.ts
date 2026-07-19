@@ -68,7 +68,8 @@ function workerLambdaBundles(
       resource.Type !== 'AWS::Lambda::Function' ||
       resource.Properties?.Runtime !== 'nodejs22.x' ||
       (serviceName !== 'chief-ingestion-worker' &&
-        serviceName !== 'chief-execution-worker')
+        serviceName !== 'chief-execution-worker' &&
+        serviceName !== 'chief-outbox-relay')
     ) {
       continue;
     }
@@ -90,6 +91,7 @@ function workerLambdaBundles(
   expect([...bundles.keys()].sort()).toEqual([
     'chief-execution-worker',
     'chief-ingestion-worker',
+    'chief-outbox-relay',
   ]);
   return bundles;
 }
@@ -133,7 +135,7 @@ function allPolicyStatements(): Array<{
 }
 
 function workerPolicyStatements(
-  functionId: 'ExecutionWorker' | 'IngestionWorker',
+  functionId: 'ExecutionWorker' | 'IngestionWorker' | 'OutboxRelayWorker',
 ): Array<{
   readonly Action?: string | string[];
   readonly Resource?: unknown;
@@ -224,6 +226,11 @@ describe('Chief product stack', () => {
     template.hasResourceProperties('AWS::KMS::Key', {
       EnableKeyRotation: true,
     });
+    template.resourcePropertiesCountIs(
+      'AWS::DynamoDB::Table',
+      { StreamSpecification: { StreamViewType: 'NEW_IMAGE' } },
+      1,
+    );
   });
 
   it('asserts the exact projection allowlist for every named index', () => {
@@ -313,11 +320,11 @@ describe('Chief product stack', () => {
   });
 
   it('creates encrypted queues, redrive, event routing, and self-resolving DLQ alarms', () => {
-    template.resourceCountIs('AWS::SQS::Queue', 4);
+    template.resourceCountIs('AWS::SQS::Queue', 5);
     template.resourcePropertiesCountIs(
       'AWS::SQS::Queue',
       { KmsMasterKeyId: Match.anyValue() },
-      4,
+      5,
     );
     template.resourcePropertiesCountIs(
       'AWS::SQS::Queue',
@@ -379,7 +386,7 @@ describe('Chief product stack', () => {
         ]),
       },
     });
-    template.resourceCountIs('AWS::CloudWatch::Alarm', 2);
+    template.resourceCountIs('AWS::CloudWatch::Alarm', 3);
     template.resourcePropertiesCountIs(
       'AWS::CloudWatch::Alarm',
       {
@@ -394,7 +401,7 @@ describe('Chief product stack', () => {
         Threshold: 0,
         TreatMissingData: 'notBreaching',
       },
-      2,
+      3,
     );
     template.resourceCountIs('AWS::SecretsManager::Secret', 1);
     template.hasResourceProperties('AWS::SecretsManager::Secret', {
@@ -405,7 +412,7 @@ describe('Chief product stack', () => {
     });
   });
 
-  it('binds both production compositions explicitly and keeps all effects disabled', () => {
+  it('binds every production composition explicitly and keeps all effects disabled', () => {
     template.resourcePropertiesCountIs(
       'AWS::Lambda::Function',
       {
@@ -432,7 +439,7 @@ describe('Chief product stack', () => {
     const workers = Object.values(
       template.findResources('AWS::Lambda::Function'),
     ) as SynthesizedWorkerResource[];
-    expect(workers).toHaveLength(2);
+    expect(workers).toHaveLength(3);
     const workerEnvironments = workers.map(
       ({ Properties }) =>
         (
@@ -448,6 +455,10 @@ describe('Chief product stack', () => {
     const executionEnvironment = workerEnvironments.find(
       (environment) =>
         environment.POWERTOOLS_SERVICE_NAME === 'chief-execution-worker',
+    );
+    const outboxRelayEnvironment = workerEnvironments.find(
+      (environment) =>
+        environment.POWERTOOLS_SERVICE_NAME === 'chief-outbox-relay',
     );
     expect(ingestionEnvironment).toMatchObject({
       INGESTION_ASANA_TOPIC_LOOKUP_INDEX_NAME: 'AsanaTopicLookupIndex',
@@ -499,6 +510,28 @@ describe('Chief product stack', () => {
         'WORK_MANAGEMENT_EFFECTS',
       ].sort(),
     );
+    expect(outboxRelayEnvironment).toMatchObject({
+      EXTERNAL_EFFECTS: 'disabled',
+      MODEL_EFFECTS: 'disabled',
+      NODE_OPTIONS: '--enable-source-maps',
+      POWERTOOLS_METRICS_NAMESPACE: 'ChiefProduct',
+      POWERTOOLS_SERVICE_NAME: 'chief-outbox-relay',
+      PROVIDER_EFFECTS: 'disabled',
+      WORK_MANAGEMENT_EFFECTS: 'disabled',
+    });
+    expectCdkReference(outboxRelayEnvironment?.OUTBOX_QUEUE_URL);
+    expect(Object.keys(outboxRelayEnvironment ?? {}).sort()).toEqual(
+      [
+        'EXTERNAL_EFFECTS',
+        'MODEL_EFFECTS',
+        'NODE_OPTIONS',
+        'OUTBOX_QUEUE_URL',
+        'POWERTOOLS_METRICS_NAMESPACE',
+        'POWERTOOLS_SERVICE_NAME',
+        'PROVIDER_EFFECTS',
+        'WORK_MANAGEMENT_EFFECTS',
+      ].sort(),
+    );
     const ingestionWorker = workers.find(
       ({ Properties }) =>
         (
@@ -517,13 +550,25 @@ describe('Chief product stack', () => {
         )?.Environment?.Variables?.POWERTOOLS_SERVICE_NAME ===
         'chief-execution-worker',
     );
+    const outboxRelayWorker = workers.find(
+      ({ Properties }) =>
+        (
+          Properties as {
+            Environment?: { Variables?: Record<string, unknown> };
+          }
+        )?.Environment?.Variables?.POWERTOOLS_SERVICE_NAME ===
+        'chief-outbox-relay',
+    );
     expect(
       ingestionWorker?.Properties?.ReservedConcurrentExecutions,
     ).toBeUndefined();
     expect(
       executionWorker?.Properties?.ReservedConcurrentExecutions,
     ).toBeUndefined();
-    template.resourceCountIs('AWS::Lambda::EventSourceMapping', 2);
+    expect(
+      outboxRelayWorker?.Properties?.ReservedConcurrentExecutions,
+    ).toBeUndefined();
+    template.resourceCountIs('AWS::Lambda::EventSourceMapping', 3);
     template.resourcePropertiesCountIs(
       'AWS::Lambda::EventSourceMapping',
       {
@@ -534,14 +579,14 @@ describe('Chief product stack', () => {
       },
       2,
     );
-    template.resourceCountIs('AWS::Logs::LogGroup', 2);
+    template.resourceCountIs('AWS::Logs::LogGroup', 3);
     template.resourcePropertiesCountIs(
       'AWS::Logs::LogGroup',
       { RetentionInDays: 90 },
-      2,
+      3,
     );
     const environments = workerEnvironments;
-    expect(environments).toHaveLength(2);
+    expect(environments).toHaveLength(3);
     expect(
       environments.every((environment) => {
         return [
@@ -554,6 +599,102 @@ describe('Chief product stack', () => {
     ).toBe(true);
     expect(JSON.stringify(environments)).not.toMatch(
       /(?:bearer\s|sk-[a-z0-9]|gh[pousr]_|-----BEGIN)/iu,
+    );
+  });
+
+  it('relays only new approval locator inserts with bounded partial-batch retries', () => {
+    template.hasResourceProperties('AWS::Lambda::EventSourceMapping', {
+      BatchSize: 10,
+      BisectBatchOnFunctionError: true,
+      DestinationConfig: {
+        OnFailure: { Destination: Match.anyValue() },
+      },
+      FilterCriteria: {
+        Filters: [
+          {
+            Pattern: Match.serializedJson({
+              dynamodb: {
+                NewImage: {
+                  entityType: { S: ['approval_execution_locator'] },
+                },
+              },
+              eventName: ['INSERT'],
+            }),
+          },
+        ],
+      },
+      FunctionResponseTypes: ['ReportBatchItemFailures'],
+      MaximumBatchingWindowInSeconds: 5,
+      MaximumRecordAgeInSeconds: 86_400,
+      MaximumRetryAttempts: 5,
+      StartingPosition: 'TRIM_HORIZON',
+    });
+  });
+
+  it('gives the relay only stream-read and queue-send data authority', () => {
+    const statements = workerPolicyStatements('OutboxRelayWorker');
+    const actions = statements.flatMap(({ Action }) =>
+      Array.isArray(Action) ? Action : Action === undefined ? [] : [Action],
+    );
+    const allowed = new Set([
+      'dynamodb:DescribeStream',
+      'dynamodb:GetRecords',
+      'dynamodb:GetShardIterator',
+      'dynamodb:ListStreams',
+      'kms:Decrypt',
+      'kms:DescribeKey',
+      'kms:Encrypt',
+      'kms:GenerateDataKey*',
+      'kms:ReEncrypt*',
+      'sqs:GetQueueAttributes',
+      'sqs:GetQueueUrl',
+      'sqs:SendMessage',
+      'xray:PutTelemetryRecords',
+      'xray:PutTraceSegments',
+    ]);
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        'dynamodb:DescribeStream',
+        'dynamodb:GetRecords',
+        'dynamodb:GetShardIterator',
+        'dynamodb:ListStreams',
+        'sqs:SendMessage',
+      ]),
+    );
+    expect(actions.every((action) => allowed.has(action))).toBe(true);
+
+    const dataPlaneStatements = statements.filter(({ Action }) => {
+      const values = Array.isArray(Action)
+        ? Action
+        : Action === undefined
+          ? []
+          : [Action];
+      return values.some((action) => /^(?:dynamodb|kms|sqs):/u.test(action));
+    });
+    expect(dataPlaneStatements).not.toHaveLength(0);
+    expect(
+      dataPlaneStatements.every(({ Action, Resource }) => {
+        if (Array.isArray(Resource)) return !Resource.includes('*');
+        if (Resource !== '*') return true;
+        return Action === 'dynamodb:ListStreams';
+      }),
+    ).toBe(true);
+    expect(
+      statements
+        .filter(({ Resource }) => Resource === '*')
+        .map(({ Action, Resource }) => ({ Action, Resource })),
+    ).toEqual([
+      {
+        Action: ['xray:PutTraceSegments', 'xray:PutTelemetryRecords'],
+        Resource: '*',
+      },
+      { Action: 'dynamodb:ListStreams', Resource: '*' },
+    ]);
+    expect(JSON.stringify(statements)).toContain('CoreDomainTable');
+    expect(JSON.stringify(statements)).toContain('OutboxQueue');
+    expect(JSON.stringify(statements)).toContain('OutboxRelayDeadLetterQueue');
+    expect(JSON.stringify(statements)).not.toMatch(
+      /ConnectorRuntimeTable|RetrievalTable|SnapshotBlobBucket|DigestKeySecret/u,
     );
   });
 
@@ -675,9 +816,10 @@ describe('Chief product stack', () => {
     });
     expect(dataPlaneStatements.length).toBeGreaterThan(0);
     expect(
-      dataPlaneStatements.every(({ Resource }) => {
+      dataPlaneStatements.every(({ Action, Resource }) => {
         if (Array.isArray(Resource)) return !Resource.includes('*');
-        return Resource !== '*';
+        if (Resource !== '*') return true;
+        return Action === 'dynamodb:ListStreams';
       }),
     ).toBe(true);
   });
