@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import {
   requirePublicHostedUrl,
+  requireHostedEvaluatorCredentials,
   validateHostedEnvironment,
   type HostedEnvironmentVariables,
 } from '../hosted-environment.js';
@@ -98,4 +99,29 @@ test.describe('hosted acceptance URL guard', () => {
       expect(() => requirePublicHostedUrl('CHIEF_BASE_URL', value)).toThrow();
     });
   }
+});
+
+test.describe('hosted evaluator credentials', () => {
+  test('requires both values without reflecting either value', () => {
+    expect(() => requireHostedEvaluatorCredentials({})).toThrow(
+      'CHIEF_EVALUATOR_USERNAME',
+    );
+    expect(() =>
+      requireHostedEvaluatorCredentials({
+        CHIEF_EVALUATOR_USERNAME: 'evaluator@example.com',
+      }),
+    ).toThrow('CHIEF_EVALUATOR_PASSWORD');
+  });
+
+  test('preserves the password exactly and normalizes only the username', () => {
+    expect(
+      requireHostedEvaluatorCredentials({
+        CHIEF_EVALUATOR_USERNAME: ' evaluator@example.com ',
+        CHIEF_EVALUATOR_PASSWORD: ' password-with-boundary-spaces ',
+      }),
+    ).toEqual({
+      username: 'evaluator@example.com',
+      password: ' password-with-boundary-spaces ',
+    });
+  });
 });

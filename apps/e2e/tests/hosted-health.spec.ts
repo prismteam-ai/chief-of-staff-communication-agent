@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../auth-fixture.js';
 
 function endpointFromEnvironment(name: string): string | undefined {
   const value = process.env[name]?.trim();

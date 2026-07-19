@@ -27,9 +27,9 @@ export default defineConfig({
     channel: browserChannel,
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
-    screenshot: 'only-on-failure',
-    trace: 'retain-on-failure',
-    video: 'retain-on-failure',
+    screenshot: 'off',
+    trace: 'off',
+    video: 'off',
   },
   webServer: undefined,
 });

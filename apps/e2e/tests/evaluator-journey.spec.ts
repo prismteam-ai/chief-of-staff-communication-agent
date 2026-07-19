@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '../auth-fixture.js';
 
 import {
   expectBasicAccessibility,
@@ -211,7 +211,7 @@ async function expectModeSpecificReadOnlyBody(page: Page): Promise<void> {
   }
 }
 
-test.describe('signed-out evaluator journey', () => {
+test.describe('authenticated evaluator journey', () => {
   test('renders exact V2 fixture projection without external-effect claims', async ({
     page,
   }) => {
@@ -330,7 +330,7 @@ test.describe('signed-out evaluator journey', () => {
       );
     }
 
-    await expect(page.getByText(/sign in|log in|authenticate/i)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
     await expectBasicAccessibility(page);
     await expectNoCredentialLeakage(page);
   });
@@ -581,10 +581,7 @@ test.describe('signed-out evaluator journey', () => {
       /prepare and approve through the server-authorized product browser or API/i,
     );
     await expect(page.getByTestId('mcp-instructions')).toContainText(
-      /does not provide OAuth/i,
-    );
-    await expect(page.getByTestId('mcp-instructions')).not.toContainText(
-      /authenticated/i,
+      /short-lived bearer access token/i,
     );
     await expect(page.getByTestId('mcp-instructions')).toContainText(
       /MCP can poll get_approval_status/i,

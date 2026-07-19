@@ -1,9 +1,6 @@
-import {
-  expect,
-  test,
-  type APIRequestContext,
-  type APIResponse,
-} from '@playwright/test';
+import type { APIRequestContext, APIResponse } from '@playwright/test';
+
+import { expect, test } from '../auth-fixture.js';
 
 import { readRequiredHostedEnvironment } from '../hosted-environment.js';
 
@@ -51,7 +48,7 @@ async function trpcQuery(
 ): Promise<Record<string, unknown>> {
   const encoded = encodeURIComponent(JSON.stringify(input));
   const response = await request.get(
-    `${hosted.apiBaseUrl}/trpc/${route}?input=${encoded}`,
+    `${hosted.webBaseUrl}/trpc/${route}?input=${encoded}`,
   );
   expect(response.ok(), `${route} query should succeed`).toBe(true);
   return unwrapTrpcResult(await responseJson(response));
@@ -59,6 +56,7 @@ async function trpcQuery(
 
 async function mcpRequest(
   request: APIRequestContext,
+  authorization: string,
   id: number,
   method: string,
   params?: Record<string, unknown>,
@@ -66,6 +64,7 @@ async function mcpRequest(
   const response = await request.post(`${hosted.mcpBaseUrl}/mcp`, {
     headers: {
       accept: 'application/json, text/event-stream',
+      authorization,
       'content-type': 'application/json',
     },
     data: {
@@ -110,7 +109,7 @@ function assertTruthfulLaunchRetrieval(result: Record<string, unknown>): void {
 test.describe('non-skippable durable hosted composition', () => {
   test('persists revise, approval, outbox receipt and proves MCP protocol calls', async ({
     page,
-    request,
+    mcpAuthorization,
   }) => {
     await page.goto('/inbox/thread-q3-launch');
     await expect(
@@ -128,12 +127,12 @@ test.describe('non-skippable durable hosted composition', () => {
       await expect(citation).not.toContainText(/asana|SEC-4821/i);
     }
 
-    const relatedAsana = await trpcQuery(request, 'work.relatedAsana', {
+    const relatedAsana = await trpcQuery(page.request, 'work.relatedAsana', {
       messageRevisionId: launchMessageRevisionId,
       limit: 10,
     });
     expect(relatedAsana).toEqual({ items: [] });
-    const launchRetrieval = await trpcQuery(request, 'knowledge.search', {
+    const launchRetrieval = await trpcQuery(page.request, 'knowledge.search', {
       queryText: 'Friday launch owner',
       exactEntityRefs: [launchRetrievalExactEntityRef],
       limit: 10,
@@ -228,11 +227,11 @@ test.describe('non-skippable durable hosted composition', () => {
     );
     expect(new URL(page.url()).pathname).toBe(`/approvals/${proposalId}`);
 
-    const approvalStatus = await trpcQuery(request, 'approvals.status', {
+    const approvalStatus = await trpcQuery(page.request, 'approvals.status', {
       proposalId,
     });
     expect(approvalStatus).toMatchObject({ proposalId, status: 'approved' });
-    const executionStatus = await trpcQuery(request, 'execution.status', {
+    const executionStatus = await trpcQuery(page.request, 'execution.status', {
       proposalId,
     });
     expect(executionStatus).toMatchObject({
@@ -244,17 +243,31 @@ test.describe('non-skippable durable hosted composition', () => {
       receipt: { operationId },
     });
 
-    const initialize = await mcpRequest(request, 1, 'initialize', {
-      protocolVersion: '2025-06-18',
-      capabilities: {},
-      clientInfo: { name: 'chief-hosted-acceptance', version: '1.0.0' },
-    });
+    if (mcpAuthorization === undefined) {
+      throw new Error('HOSTED_MCP_AUTHORIZATION_MISSING');
+    }
+    const initialize = await mcpRequest(
+      page.request,
+      mcpAuthorization,
+      1,
+      'initialize',
+      {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'chief-hosted-acceptance', version: '1.0.0' },
+      },
+    );
     expect(initialize.error).toBeUndefined();
     expect(initialize.result).toMatchObject({
       protocolVersion: '2025-06-18',
     });
 
-    const tools = await mcpRequest(request, 2, 'tools/list');
+    const tools = await mcpRequest(
+      page.request,
+      mcpAuthorization,
+      2,
+      'tools/list',
+    );
     expect(tools.error).toBeUndefined();
     const toolNames = (
       (tools.result?.tools as readonly { readonly name: string }[]) ?? []
@@ -266,24 +279,36 @@ test.describe('non-skippable durable hosted composition', () => {
     expect(toolNames).not.toContain('approve');
     expect(toolNames).not.toContain('send_message');
 
-    const relatedAsanaToolCall = await mcpRequest(request, 3, 'tools/call', {
-      name: 'get_related_asana_work',
-      arguments: { messageRevisionId: launchMessageRevisionId, limit: 10 },
-    });
+    const relatedAsanaToolCall = await mcpRequest(
+      page.request,
+      mcpAuthorization,
+      3,
+      'tools/call',
+      {
+        name: 'get_related_asana_work',
+        arguments: { messageRevisionId: launchMessageRevisionId, limit: 10 },
+      },
+    );
     expect(relatedAsanaToolCall.error).toBeUndefined();
     expect(relatedAsanaToolCall.result?.isError).not.toBe(true);
     expect(relatedAsanaToolCall.result?.structuredContent).toEqual(
       relatedAsana,
     );
 
-    const searchToolCall = await mcpRequest(request, 4, 'tools/call', {
-      name: 'search_knowledge',
-      arguments: {
-        queryText: 'Friday launch owner',
-        exactEntityRefs: [launchRetrievalExactEntityRef],
-        limit: 10,
+    const searchToolCall = await mcpRequest(
+      page.request,
+      mcpAuthorization,
+      4,
+      'tools/call',
+      {
+        name: 'search_knowledge',
+        arguments: {
+          queryText: 'Friday launch owner',
+          exactEntityRefs: [launchRetrievalExactEntityRef],
+          limit: 10,
+        },
       },
-    });
+    );
     expect(searchToolCall.error).toBeUndefined();
     expect(searchToolCall.result?.isError).not.toBe(true);
     expect(searchToolCall.result?.structuredContent).toEqual(launchRetrieval);
@@ -291,10 +316,16 @@ test.describe('non-skippable durable hosted composition', () => {
       searchToolCall.result?.structuredContent as Record<string, unknown>,
     );
 
-    const approvalToolCall = await mcpRequest(request, 5, 'tools/call', {
-      name: 'get_approval_status',
-      arguments: { proposalId },
-    });
+    const approvalToolCall = await mcpRequest(
+      page.request,
+      mcpAuthorization,
+      5,
+      'tools/call',
+      {
+        name: 'get_approval_status',
+        arguments: { proposalId },
+      },
+    );
     expect(approvalToolCall.error).toBeUndefined();
     expect(approvalToolCall.result?.isError).not.toBe(true);
     expect(approvalToolCall.result?.structuredContent).toEqual(approvalStatus);

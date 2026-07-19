@@ -48,7 +48,8 @@ export default defineConfig({
           command: `pnpm --filter @chief/web exec vite --host 127.0.0.1 --port ${localPort} --strictPort`,
           env: {
             ...process.env,
-            VITE_API_BASE_URL: readPublicUrl('CHIEF_API_BASE_URL') ?? '',
+            VITE_API_BASE_URL:
+              readPublicUrl('CHIEF_API_BASE_URL') ?? 'http://127.0.0.1:65534',
           },
           url: baseURL,
           reuseExistingServer: false,

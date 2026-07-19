@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '../auth-fixture.js';
 
 const browserErrors = new WeakMap<Page, string[]>();
 
@@ -9,6 +9,11 @@ test.beforeEach(({ page }) => {
   page.on('console', (message) => {
     if (message.type() === 'error') {
       const location = message.location();
+      const expectedLocalFallbackProbe =
+        process.env.CHIEF_BASE_URL === undefined &&
+        location.url.startsWith('http://127.0.0.1:65534/trpc/') &&
+        message.text().includes('net::ERR_CONNECTION_REFUSED');
+      if (expectedLocalFallbackProbe) return;
       const source =
         location.url.length > 0
           ? ` (${location.url}:${location.lineNumber})`

@@ -12,6 +12,16 @@ export interface HostedEnvironmentVariables {
   readonly CHIEF_MCP_BASE_URL?: string;
 }
 
+export interface HostedEvaluatorCredentials {
+  readonly username: string;
+  readonly password: string;
+}
+
+export interface HostedEvaluatorCredentialVariables {
+  readonly CHIEF_EVALUATOR_USERNAME?: string;
+  readonly CHIEF_EVALUATOR_PASSWORD?: string;
+}
+
 function isPublicIpv4(hostname: string): boolean {
   const octets = hostname.split('.').map(Number);
   if (
@@ -124,4 +134,22 @@ export function validateHostedEnvironment(
 
 export function readRequiredHostedEnvironment(): HostedEnvironment {
   return validateHostedEnvironment(process.env);
+}
+
+export function requireHostedEvaluatorCredentials(
+  environment: HostedEvaluatorCredentialVariables,
+): HostedEvaluatorCredentials {
+  const username = environment.CHIEF_EVALUATOR_USERNAME?.trim();
+  const password = environment.CHIEF_EVALUATOR_PASSWORD;
+  if (username === undefined || username.length === 0) {
+    throw new Error(
+      'CHIEF_EVALUATOR_USERNAME is required for hosted acceptance.',
+    );
+  }
+  if (password === undefined || password.length === 0) {
+    throw new Error(
+      'CHIEF_EVALUATOR_PASSWORD is required for hosted acceptance.',
+    );
+  }
+  return { username, password };
 }
