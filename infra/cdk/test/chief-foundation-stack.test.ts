@@ -449,6 +449,11 @@ describe('Chief foundation stack', () => {
         resource.Properties?.Environment?.Variables?.POWERTOOLS_SERVICE_NAME ===
         'chief-api',
     );
+    const mcpFunction = productFunctions.find(
+      (resource) =>
+        resource.Properties?.Environment?.Variables?.POWERTOOLS_SERVICE_NAME ===
+        'chief-mcp',
+    );
     expect(apiFunction?.Properties?.Environment?.Variables).not.toHaveProperty(
       'OUTBOX_QUEUE_URL',
     );
@@ -484,6 +489,14 @@ describe('Chief foundation stack', () => {
     expect(JSON.stringify(apiEnvironment?.COGNITO_ISSUER)).toContain(
       'https://cognito-idp.us-east-2.',
     );
+    const mcpEnvironment = mcpFunction?.Properties?.Environment?.Variables;
+    expect(mcpEnvironment?.COGNITO_ISSUER).toBeDefined();
+    expect(mcpEnvironment?.COGNITO_USER_POOL_CLIENT_ID).toBeDefined();
+    expect(mcpEnvironment?.COGNITO_USER_POOL_ID).toBeDefined();
+    expect(mcpEnvironment?.REQUEST_AUTH_MODE).toBe('enforced');
+    expect(mcpEnvironment).not.toHaveProperty('AUTH_SESSION_TTL_SECONDS');
+    expect(mcpEnvironment).not.toHaveProperty('AUTH_STATE_TTL_SECONDS');
+    expect(mcpEnvironment).not.toHaveProperty('COGNITO_DOMAIN');
 
     const apiStatements = applicationPolicyStatements('ApiFunction');
     const mcpStatements = applicationPolicyStatements('McpFunction');
