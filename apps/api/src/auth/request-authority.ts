@@ -9,11 +9,13 @@ import { serverRequestContextSchema } from '@chief/contracts';
 import type { ProductRequestContext } from '../product-service.js';
 
 const JWT_SHAPE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u;
+const BROWSER_SESSION_COOKIE = '__Host-chief_session';
 
 export type RequestAuthMode = 'enforced' | 'local-test';
 
 export interface RequestAuthorityInput {
   readonly headers: Readonly<Record<string, string | undefined>>;
+  readonly method?: string;
 }
 
 export type ResolvedRequestAuthority =
@@ -36,6 +38,7 @@ export class RequestAuthorityError extends Error {
     public readonly reason:
       | 'authentication_required'
       | 'invalid_session'
+      | 'csrf_validation_failed'
       | 'inactive_membership'
       | 'inactive_grant',
   ) {
@@ -58,8 +61,19 @@ export interface VerifiedSessionIdentity {
   readonly tokenId: string;
 }
 
+export type VerifiedAuthorityIdentity = Pick<
+  VerifiedSessionIdentity,
+  'subject' | 'issuer' | 'clientId' | 'expiresAt'
+>;
+
 export interface SessionTokenVerifier {
   verify(token: string): Promise<VerifiedSessionIdentity>;
+}
+
+export interface BrowserSessionReader {
+  readSession(
+    sessionTokenHash: string,
+  ): Promise<VerifiedAuthorityIdentity | undefined>;
 }
 
 export interface AuthorityGrantResolution {
@@ -81,7 +95,7 @@ export interface AuthorityMembershipResolution {
 
 export interface AuthorityMembershipResolver {
   resolveMembership(
-    identity: VerifiedSessionIdentity,
+    identity: VerifiedAuthorityIdentity,
   ): Promise<AuthorityMembershipResolution | undefined>;
 }
 
@@ -93,15 +107,28 @@ export interface CognitoSessionVerifierOptions {
   readonly jwks?: Jwks;
 }
 
+function singleHeader(
+  headers: Readonly<Record<string, string | undefined>>,
+  expectedName: string,
+  kind: 'unauthorized' | 'forbidden' = 'unauthorized',
+): string | undefined {
+  const entries = Object.entries(headers).filter(
+    ([name]) =>
+      name.toLocaleLowerCase('en-US') ===
+      expectedName.toLocaleLowerCase('en-US'),
+  );
+  if (entries.length > 1)
+    throw new RequestAuthorityError(
+      kind,
+      kind === 'forbidden' ? 'csrf_validation_failed' : 'invalid_session',
+    );
+  return entries[0]?.[1];
+}
+
 function authorizationHeader(
   headers: Readonly<Record<string, string | undefined>>,
 ): string | undefined {
-  const entries = Object.entries(headers).filter(
-    ([name]) => name.toLocaleLowerCase('en-US') === 'authorization',
-  );
-  if (entries.length > 1)
-    throw new RequestAuthorityError('unauthorized', 'invalid_session');
-  return entries[0]?.[1];
+  return singleHeader(headers, 'authorization');
 }
 
 function bearerToken(
@@ -116,21 +143,102 @@ function bearerToken(
   return match[1] as string;
 }
 
-function claimsHash(identity: VerifiedSessionIdentity): string {
+function browserSessionToken(
+  headers: Readonly<Record<string, string | undefined>>,
+): string {
+  const cookie = singleHeader(headers, 'cookie');
+  if (cookie === undefined)
+    throw new RequestAuthorityError('unauthorized', 'authentication_required');
+  if (cookie.length > 4_096)
+    throw new RequestAuthorityError('unauthorized', 'invalid_session');
+  const values = cookie
+    .split(';')
+    .map((part) => part.trim())
+    .flatMap((part) => {
+      const separator = part.indexOf('=');
+      return separator < 1
+        ? []
+        : [[part.slice(0, separator), part.slice(separator + 1)] as const];
+    })
+    .filter(([name]) => name === BROWSER_SESSION_COOKIE);
+  if (values.length !== 1)
+    throw new RequestAuthorityError(
+      'unauthorized',
+      values.length === 0 ? 'authentication_required' : 'invalid_session',
+    );
+  return values[0]?.[1] as string;
+}
+
+export function browserSessionTokenHash(token: string): string {
+  if (!/^[A-Za-z0-9_-]{43}$/u.test(token))
+    throw new RequestAuthorityError('unauthorized', 'invalid_session');
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+function claimsHash(identity: VerifiedAuthorityIdentity): string {
   return createHash('sha256')
     .update(
       JSON.stringify({
         clientId: identity.clientId,
         expiresAt: identity.expiresAt,
-        issuedAt: identity.issuedAt,
         issuer: identity.issuer,
         subject: identity.subject,
-        tokenId: identity.tokenId,
-        tokenUse: identity.tokenUse,
       }),
       'utf8',
     )
     .digest('hex');
+}
+
+function assertBrowserCsrf(
+  request: RequestAuthorityInput,
+  expectedOrigin: string,
+): void {
+  const method = request.method?.toUpperCase();
+  if (method === undefined)
+    throw new RequestAuthorityError('forbidden', 'csrf_validation_failed');
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return;
+  if (singleHeader(request.headers, 'origin', 'forbidden') !== expectedOrigin)
+    throw new RequestAuthorityError('forbidden', 'csrf_validation_failed');
+}
+
+async function resolveVerifiedIdentity(
+  identity: VerifiedAuthorityIdentity,
+  memberships: AuthorityMembershipResolver,
+  now: () => Date,
+): Promise<ResolvedRequestAuthority> {
+  const membership = await memberships.resolveMembership(identity);
+  if (membership === undefined || membership.status !== 'active')
+    throw new RequestAuthorityError('forbidden', 'inactive_membership');
+  const grants = membership.grants
+    .filter(({ status }) => status === 'active')
+    .map(({ name }) => name);
+  if (grants.length === 0)
+    throw new RequestAuthorityError('forbidden', 'inactive_grant');
+  const requestContext = serverRequestContextSchema.parse({
+    actor: {
+      authoritySource: 'verified_identity',
+      tenantId: membership.tenantId,
+      userId: membership.userId,
+      accountScopes: [...membership.accountScopes],
+      brandScopes: [...membership.brandScopes],
+      grants,
+      membershipVersion: membership.membershipVersion,
+      verifiedClaimsHash: claimsHash(identity),
+      verifiedAt: now().toISOString(),
+    },
+    retrievalScope: {
+      derivation: 'server_grants',
+      tenantId: membership.tenantId,
+      accountIds: [...membership.accountScopes],
+      brandIds: [...membership.brandScopes],
+      authorizationEpoch: membership.authorizationEpoch,
+      scopeHash: membership.scopeHash,
+    },
+  });
+  return Object.freeze({
+    mode: 'verified-session' as const,
+    requestContext,
+  });
 }
 
 export function createCognitoSessionTokenVerifier(
@@ -183,39 +291,47 @@ export function createRequestAuthorityResolver(input: {
       const identity = await input.sessionVerifier.verify(
         bearerToken(request.headers),
       );
-      const membership = await input.memberships.resolveMembership(identity);
-      if (membership === undefined || membership.status !== 'active')
-        throw new RequestAuthorityError('forbidden', 'inactive_membership');
-      const grants = membership.grants
-        .filter(({ status }) => status === 'active')
-        .map(({ name }) => name);
-      if (grants.length === 0)
-        throw new RequestAuthorityError('forbidden', 'inactive_grant');
-      const requestContext = serverRequestContextSchema.parse({
-        actor: {
-          authoritySource: 'verified_identity',
-          tenantId: membership.tenantId,
-          userId: membership.userId,
-          accountScopes: [...membership.accountScopes],
-          brandScopes: [...membership.brandScopes],
-          grants,
-          membershipVersion: membership.membershipVersion,
-          verifiedClaimsHash: claimsHash(identity),
-          verifiedAt: now().toISOString(),
-        },
-        retrievalScope: {
-          derivation: 'server_grants',
-          tenantId: membership.tenantId,
-          accountIds: [...membership.accountScopes],
-          brandIds: [...membership.brandScopes],
-          authorizationEpoch: membership.authorizationEpoch,
-          scopeHash: membership.scopeHash,
-        },
-      });
-      return Object.freeze({
-        mode: 'verified-session' as const,
-        requestContext,
-      });
+      return resolveVerifiedIdentity(identity, input.memberships, now);
+    },
+  };
+}
+
+export function createBrowserSessionRequestAuthorityResolver(input: {
+  readonly sessions: BrowserSessionReader;
+  readonly memberships: AuthorityMembershipResolver;
+  readonly expectedOrigin: string;
+  readonly expectedIssuer: string;
+  readonly expectedClientId: string;
+  readonly now?: () => Date;
+}): RequestAuthorityResolver {
+  const now = input.now ?? (() => new Date());
+  const expectedOrigin = new URL(input.expectedOrigin);
+  if (
+    expectedOrigin.protocol !== 'https:' ||
+    expectedOrigin.username !== '' ||
+    expectedOrigin.password !== '' ||
+    expectedOrigin.pathname !== '/' ||
+    expectedOrigin.search !== '' ||
+    expectedOrigin.hash !== '' ||
+    expectedOrigin.origin !== input.expectedOrigin
+  )
+    throw new Error('INVALID_BROWSER_SESSION_ORIGIN');
+  return {
+    async resolve(request) {
+      if (authorizationHeader(request.headers) !== undefined)
+        throw new RequestAuthorityError('unauthorized', 'invalid_session');
+      assertBrowserCsrf(request, expectedOrigin.origin);
+      const identity = await input.sessions.readSession(
+        browserSessionTokenHash(browserSessionToken(request.headers)),
+      );
+      if (
+        identity === undefined ||
+        identity.issuer !== input.expectedIssuer ||
+        identity.clientId !== input.expectedClientId ||
+        identity.expiresAt <= Math.floor(now().getTime() / 1_000)
+      )
+        throw new RequestAuthorityError('unauthorized', 'invalid_session');
+      return resolveVerifiedIdentity(identity, input.memberships, now);
     },
   };
 }
@@ -263,5 +379,5 @@ export function createDenyAllRequestAuthorityResolver(): RequestAuthorityResolve
 export function requestAuthorityInput(
   event: APIGatewayProxyEventV2,
 ): RequestAuthorityInput {
-  return { headers: event.headers };
+  return { headers: event.headers, method: event.requestContext.http.method };
 }

@@ -17,8 +17,16 @@ import {
 } from '@chief/contracts';
 
 import type { ApiDependencies } from './context.js';
-import { createCognitoRequestAuthorityResolver } from './auth/request-authority.js';
+import {
+  createBrowserSessionRequestAuthorityResolver,
+  createCognitoSessionTokenVerifier,
+} from './auth/request-authority.js';
 import { createDynamoAuthorityMembershipResolver } from './auth/aws-membership-resolver.js';
+import { createDynamoBrowserAuthPersistence } from './auth/aws-browser-session-store.js';
+import {
+  browserAuthConfiguration,
+  createBrowserAuthHandler,
+} from './auth/browser-auth.js';
 import {
   DynamoDurableProductRepository,
   MemoryDurableProductRepository,
@@ -50,6 +58,7 @@ function required(
 interface ProductionAuthConfiguration {
   readonly userPoolId: string;
   readonly clientId: string;
+  readonly issuer: string;
 }
 
 function productionAuthConfiguration(
@@ -79,7 +88,7 @@ function productionAuthConfiguration(
   ]);
   if (!allowedIssuers.has(issuer)) throw new Error('INVALID_COGNITO_ISSUER');
 
-  return Object.freeze({ userPoolId, clientId });
+  return Object.freeze({ userPoolId, clientId, issuer });
 }
 
 function memoryProbe(): MemoryProbe {
@@ -340,6 +349,15 @@ export function createAwsDurableApiDependencies(
     memory: memoryProbe(),
   });
   const retrieval = createReadOnlyAwsRetrieval(runtime);
+  const browserAuth = browserAuthConfiguration(environment);
+  const memberships = createDynamoAuthorityMembershipResolver({
+    documentClient: dynamo,
+    tableName: coreTableName,
+  });
+  const sessions = createDynamoBrowserAuthPersistence({
+    documentClient: dynamo,
+    tableName: coreTableName,
+  });
   return {
     productService: new DurableProductService(
       new DynamoDurableProductRepository(dynamo, coreTableName),
@@ -348,13 +366,25 @@ export function createAwsDurableApiDependencies(
       undefined,
     ),
     requestContext: createDurableRequestContext(),
-    requestAuthorityResolver: createCognitoRequestAuthorityResolver({
-      userPoolId: auth.userPoolId,
-      clientId: auth.clientId,
-      tokenUse: 'access',
-      memberships: createDynamoAuthorityMembershipResolver({
-        documentClient: dynamo,
-        tableName: coreTableName,
+    requestAuthorityResolver: createBrowserSessionRequestAuthorityResolver({
+      sessions,
+      memberships,
+      expectedOrigin: browserAuth.productOrigin,
+      expectedIssuer: auth.issuer,
+      expectedClientId: auth.clientId,
+    }),
+    browserAuthHandler: createBrowserAuthHandler({
+      configuration: browserAuth,
+      persistence: sessions,
+      accessTokenVerifier: createCognitoSessionTokenVerifier({
+        userPoolId: auth.userPoolId,
+        clientId: auth.clientId,
+        tokenUse: 'access',
+      }),
+      idTokenVerifier: createCognitoSessionTokenVerifier({
+        userPoolId: auth.userPoolId,
+        clientId: auth.clientId,
+        tokenUse: 'id',
       }),
     }),
     authMode: 'enforced',

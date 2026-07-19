@@ -17,6 +17,7 @@ import type {
   ProductRequestContext,
   ProductService,
 } from './product-service.js';
+import type { BrowserAuthHandler } from './auth/browser-auth.js';
 
 const observability = createObservability('chief-api');
 
@@ -48,6 +49,7 @@ export interface ApiDependencies {
   readonly requestContext: ProductRequestContext;
   readonly requestAuthorityResolver?: RequestAuthorityResolver;
   readonly authMode?: RequestAuthMode;
+  readonly browserAuthHandler?: BrowserAuthHandler;
 }
 
 export const defaultApiDependencies: ApiDependencies = Object.freeze(

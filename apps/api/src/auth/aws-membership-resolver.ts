@@ -13,7 +13,7 @@ import {
 import type {
   AuthorityMembershipResolution,
   AuthorityMembershipResolver,
-  VerifiedSessionIdentity,
+  VerifiedAuthorityIdentity,
 } from './request-authority.js';
 
 const cognitoSubjectSchema = z
@@ -91,7 +91,7 @@ export function authorityMembershipKey(
 
 function parseMembershipItem(
   item: Readonly<Record<string, unknown>>,
-  identity: VerifiedSessionIdentity,
+  identity: VerifiedAuthorityIdentity,
 ): AuthorityMembershipItem {
   const key = authorityMembershipKey(identity.subject);
   const parsed = authorityMembershipItemSchema.safeParse(item);

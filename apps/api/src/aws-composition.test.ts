@@ -27,7 +27,11 @@ function sha256Text(value: string): string {
 
 describe('AWS durable API composition', () => {
   const productionEnvironment = Object.freeze({
+    AUTH_SESSION_TTL_SECONDS: '900',
+    AUTH_STATE_TTL_SECONDS: '300',
     AWS_REGION: 'us-east-2',
+    COGNITO_DOMAIN:
+      'https://chief-417242953053-us-east-2.auth.us-east-2.amazoncognito.com',
     COGNITO_ISSUER:
       'https://cognito-idp.us-east-2.amazonaws.com/us-east-2_AbCdEf123',
     COGNITO_USER_POOL_CLIENT_ID: 'chiefclientid123',
@@ -58,8 +62,11 @@ describe('AWS durable API composition', () => {
   it.each([
     'REQUEST_AUTH_MODE',
     'COGNITO_ISSUER',
+    'COGNITO_DOMAIN',
     'COGNITO_USER_POOL_ID',
     'COGNITO_USER_POOL_CLIENT_ID',
+    'AUTH_SESSION_TTL_SECONDS',
+    'AUTH_STATE_TTL_SECONDS',
   ] as const)('fails composition when %s is missing', (name) => {
     expect(() =>
       createAwsDurableApiDependencies({
@@ -97,6 +104,16 @@ describe('AWS durable API composition', () => {
           'https://cognito-idp.us-east-2.amazonaws.com/us-east-2_Attacker',
       },
       'INVALID_COGNITO_ISSUER',
+    ],
+    [
+      'non-Cognito browser domain',
+      { COGNITO_DOMAIN: 'https://auth.attacker.example' },
+      'INVALID_COGNITO_DOMAIN',
+    ],
+    [
+      'excessive session lifetime',
+      { AUTH_SESSION_TTL_SECONDS: '3600' },
+      'INVALID_AUTH_SESSION_TTL_SECONDS',
     ],
   ])('fails composition for %s', (_label, override, error) => {
     expect(() =>

@@ -4,6 +4,8 @@ import type { Jwk, Jwks } from 'aws-jwt-verify/jwk';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  browserSessionTokenHash,
+  createBrowserSessionRequestAuthorityResolver,
   createCognitoSessionTokenVerifier,
   createRequestAuthorityResolver,
   type AuthorityMembershipResolution,
@@ -15,6 +17,7 @@ const userPoolId = 'us-east-2_AbCdEf123';
 const issuer = `https://cognito-idp.us-east-2.amazonaws.com/${userPoolId}`;
 const clientId = 'chief-client-id';
 const kid = 'chief-test-key';
+const browserCookieForTest = '__Host-chief_session';
 const nowSeconds = Math.floor(Date.now() / 1_000);
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {
   modulusLength: 2048,
@@ -213,6 +216,126 @@ describe('Cognito request authority', () => {
         'unauthorized',
         reason as RequestAuthorityError['reason'],
       ),
+    );
+  });
+});
+
+describe('browser session request authority', () => {
+  const sessionToken = Buffer.alloc(32, 7).toString('base64url');
+  const sessionHash = browserSessionTokenHash(sessionToken);
+
+  it('resolves a Strict browser session through server membership authority', async () => {
+    const readSession = vi.fn(() => Promise.resolve(verifiedIdentity));
+    const resolveMembership = vi.fn(() => Promise.resolve(membership()));
+    const resolver = createBrowserSessionRequestAuthorityResolver({
+      sessions: { readSession },
+      memberships: { resolveMembership },
+      expectedOrigin: 'https://chief.example.test',
+      expectedIssuer: issuer,
+      expectedClientId: clientId,
+      now: () => new Date(nowSeconds * 1_000),
+    });
+
+    const result = await resolver.resolve({
+      method: 'GET',
+      headers: {
+        cookie: `theme=dark; __Host-chief_session=${sessionToken}`,
+      },
+    });
+
+    expect(readSession).toHaveBeenCalledWith(sessionHash);
+    expect(resolveMembership).toHaveBeenCalledWith(verifiedIdentity);
+    expect(result).toMatchObject({
+      mode: 'verified-session',
+      requestContext: { actor: { tenantId: 'tenant-server' } },
+    });
+    expect(JSON.stringify(result)).not.toContain(sessionToken);
+  });
+
+  it.each([
+    ['missing origin', {}],
+    ['wrong origin', { origin: 'https://attacker.example' }],
+    [
+      'duplicate origin',
+      {
+        origin: 'https://chief.example.test',
+        Origin: 'https://chief.example.test',
+      },
+    ],
+  ])('rejects unsafe cookie requests with %s', async (_label, extraHeaders) => {
+    const resolver = createBrowserSessionRequestAuthorityResolver({
+      sessions: { readSession: () => Promise.resolve(verifiedIdentity) },
+      memberships: { resolveMembership: () => Promise.resolve(membership()) },
+      expectedOrigin: 'https://chief.example.test',
+      expectedIssuer: issuer,
+      expectedClientId: clientId,
+    });
+
+    await expect(
+      resolver.resolve({
+        method: 'POST',
+        headers: {
+          cookie: `${browserCookieForTest}=${sessionToken}`,
+          ...extraHeaders,
+        },
+      }),
+    ).rejects.toMatchObject(
+      expectAuthorityError('forbidden', 'csrf_validation_failed'),
+    );
+  });
+
+  it('rejects expired sessions and bearer/session authority smuggling', async () => {
+    const resolver = createBrowserSessionRequestAuthorityResolver({
+      sessions: {
+        readSession: () =>
+          Promise.resolve({ ...verifiedIdentity, expiresAt: nowSeconds - 1 }),
+      },
+      memberships: { resolveMembership: () => Promise.resolve(membership()) },
+      expectedOrigin: 'https://chief.example.test',
+      expectedIssuer: issuer,
+      expectedClientId: clientId,
+      now: () => new Date(nowSeconds * 1_000),
+    });
+    const cookie = `__Host-chief_session=${sessionToken}`;
+
+    await expect(
+      resolver.resolve({ method: 'GET', headers: { cookie } }),
+    ).rejects.toMatchObject(
+      expectAuthorityError('unauthorized', 'invalid_session'),
+    );
+    await expect(
+      resolver.resolve({
+        method: 'GET',
+        headers: { cookie, authorization: 'Bearer a.b.c' },
+      }),
+    ).rejects.toMatchObject(
+      expectAuthorityError('unauthorized', 'invalid_session'),
+    );
+  });
+
+  it.each([
+    ['wrong persisted client', { clientId: 'attacker-client' }],
+    ['wrong persisted issuer', { issuer: 'https://issuer.attacker.example' }],
+  ])('rejects a session with %s', async (_label, override) => {
+    const resolver = createBrowserSessionRequestAuthorityResolver({
+      sessions: {
+        readSession: () =>
+          Promise.resolve({ ...verifiedIdentity, ...override }),
+      },
+      memberships: { resolveMembership: () => Promise.resolve(membership()) },
+      expectedOrigin: 'https://chief.example.test',
+      expectedIssuer: issuer,
+      expectedClientId: clientId,
+      now: () => new Date(nowSeconds * 1_000),
+    });
+
+    await expect(
+      resolver.resolve({
+        method: 'GET',
+        headers: { cookie: `__Host-chief_session=${sessionToken}` },
+      }),
+    ).rejects.toMatchObject(
+      expectAuthorityError('unauthorized', 'invalid_session'),
     );
   });
 });

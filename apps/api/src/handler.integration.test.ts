@@ -93,6 +93,34 @@ afterEach(() => {
 });
 
 describe('API Gateway tRPC Lambda integration', () => {
+  it('routes only the /auth family through the browser authorization handler', async () => {
+    const handle = vi.fn(() =>
+      Promise.resolve({
+        statusCode: 302,
+        headers: { location: 'https://login.example.test' },
+      }),
+    );
+    const authHandler = createApiHandler({
+      productService: createFixtureProductService(),
+      requestContext: createFixtureRequestContext(),
+      browserAuthHandler: { handle },
+    });
+    const baseEvent = eventFor('system.health');
+    const loginEvent: APIGatewayProxyEventV2 = {
+      ...baseEvent,
+      rawPath: '/auth/login',
+      requestContext: {
+        ...baseEvent.requestContext,
+        http: { ...baseEvent.requestContext.http, path: '/auth/login' },
+      },
+    };
+
+    const response = await authHandler(loginEvent, lambdaContext);
+
+    expect(response).toMatchObject({ statusCode: 302 });
+    expect(handle).toHaveBeenCalledExactlyOnceWith(loginEvent);
+  });
+
   it('routes health and typed product queries through the official adapter', async () => {
     const healthResponse = await enforcedHandler(
       eventFor('system.health'),
