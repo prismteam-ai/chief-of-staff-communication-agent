@@ -234,7 +234,7 @@ pnpm --filter @chief/api-client test
 pnpm --filter @chief/browser-api test
 ```
 
-The assessed `fbfc0babb6c8c358ff6c4c8cc81b3e66865aad42` runtime release is deployed at
+The assessed `b390b6bf685db80f6aaa3b9fa0d66a7175de5abc` runtime release is deployed at
 `https://d3hgq3e86d3knk.cloudfront.net`, with the product API at
 `https://prjip3os8i.execute-api.us-east-2.amazonaws.com`. The strict hosted run
 completed with **19 runnable checks passed, 2 fixture-only checks skipped, and

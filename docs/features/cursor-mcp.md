@@ -173,7 +173,7 @@ journey. Its representative `tools/call` is `get_approval_status` with the
 browser-created proposal ID; MCP must return structured content exactly equal
 to the API approval status for that same approved proposal.
 
-The assessed `fbfc0babb6c8c358ff6c4c8cc81b3e66865aad42` runtime release is deployed at
+The assessed `b390b6bf685db80f6aaa3b9fa0d66a7175de5abc` runtime release is deployed at
 `https://d3hgq3e86d3knk.cloudfront.net`, with MCP at
 `https://prjip3os8i.execute-api.us-east-2.amazonaws.com/mcp`. After the scoped
 authoritative evaluator reseed, the strict hosted run completed with **19
