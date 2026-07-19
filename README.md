@@ -297,6 +297,10 @@ Separate from that effect-disabled runtime, the production Asana connector has
 one bounded, explicitly authorized live create/update/reconcile proof plus an
 immediate zero-dispatch replay. See
 [controlled Asana live acceptance](docs/evidence/asana-controlled-live-acceptance-20260719.md).
+The hosted runtime republishes that exact committed receipt read-only at the
+credential-free public query
+[`system.asanaAcceptanceEvidence`](https://prjip3os8i.execute-api.us-east-2.amazonaws.com/trpc/system.asanaAcceptanceEvidence?batch=1&input=%7B%220%22%3A%7B%22json%22%3Anull%7D%7D),
+with its SHA-256 for byte-for-byte comparison against this repository.
 
 The private LinkedIn archive is not imported, exposed, or required by this
 public vertical. Live provider authentication and external-effect acceptance
