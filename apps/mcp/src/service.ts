@@ -5,7 +5,7 @@ export const MCP_MAX_BODY_BYTES = 64 * 1024;
 export const MCP_DEFAULT_TOOL_TIMEOUT_MS = 5_000;
 
 export interface McpRequestScope {
-  readonly kind: 'public_fixture';
+  readonly kind: 'public_fixture' | 'verified_identity';
   readonly tenantId: string;
   readonly userId: string;
   readonly authorizationEpoch: number;

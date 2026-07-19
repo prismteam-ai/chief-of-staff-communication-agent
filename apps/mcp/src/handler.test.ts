@@ -2,9 +2,14 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from 'aws-lambda';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { createMemoryDurableApiDependencies } from '@chief/api';
+import {
+  createMemoryDurableApiDependencies,
+  RequestAuthorityError,
+  type ProductRequestContext,
+  type ProductService,
+} from '@chief/api';
 
 import {
   deterministicEvaluatorIdentityV1,
@@ -20,16 +25,82 @@ import {
   mcpSearchKnowledgeResultSchema,
   mcpToolNameSchema,
   proposalHandoffSchema,
+  serverRequestContextSchema,
 } from '@chief/contracts';
 
 import {
   configuredProductBaseUrl,
   FixtureMcpToolService,
   publicFixtureIdentifiers,
+  publicFixtureScope,
 } from './fixture-service.js';
-import { createHandler, handler } from './handler.js';
-import { ProductServiceMcpAdapter } from './product-service-adapter.js';
-import type { McpToolService } from './service.js';
+import { createHandler } from './handler.js';
+import {
+  createMcpAdapterResolver,
+  ProductServiceMcpAdapter,
+} from './product-service-adapter.js';
+import type { McpRequestScope, McpToolService } from './service.js';
+
+const TEST_BEARER = 'test-header.test-payload.test-signature';
+const testDependencies = createMemoryDurableApiDependencies({
+  baseUrl: 'https://chief.example.test',
+});
+const testContext = testDependencies.requestContext;
+const testScope: McpRequestScope = publicFixtureScope;
+
+function authenticatedHandler(options: {
+  readonly service: McpToolService;
+  readonly scope?: McpRequestScope;
+  readonly timeoutMs?: number;
+  readonly healthCheck?: () => Promise<void>;
+}) {
+  return createHandler({
+    adapterResolver: {
+      resolve: ({ headers }) => {
+        const authorization = Object.entries(headers).filter(
+          ([name]) => name.toLowerCase() === 'authorization',
+        );
+        if (
+          authorization.length !== 1 ||
+          authorization[0]?.[1] !== `Bearer ${TEST_BEARER}`
+        ) {
+          throw new RequestAuthorityError(
+            'unauthorized',
+            authorization.length === 0
+              ? 'authentication_required'
+              : 'invalid_session',
+          );
+        }
+        return Promise.resolve({
+          service: options.service,
+          scope: options.scope ?? testScope,
+        });
+      },
+    },
+    ...(options.healthCheck === undefined
+      ? {}
+      : { healthCheck: options.healthCheck }),
+    ...(options.timeoutMs === undefined
+      ? {}
+      : { timeoutMs: options.timeoutMs }),
+  });
+}
+
+const defaultTestHandler = authenticatedHandler({
+  service: new FixtureMcpToolService(),
+});
+const durableTestHandler = authenticatedHandler({
+  service: new ProductServiceMcpAdapter(
+    testDependencies.productService,
+    testContext,
+  ),
+  scope: {
+    kind: 'verified_identity',
+    tenantId: testContext.actor.tenantId,
+    userId: testContext.actor.userId,
+    authorizationEpoch: testContext.retrievalScope?.authorizationEpoch ?? 1,
+  },
+});
 
 interface JsonRpcResponse {
   readonly jsonrpc: '2.0';
@@ -55,6 +126,7 @@ function event(options: {
       accept: 'application/json, text/event-stream',
       'content-type': 'application/json',
       host: 'mcp.example.test',
+      authorization: `Bearer ${TEST_BEARER}`,
       ...options.headers,
     },
     requestContext: {
@@ -95,7 +167,7 @@ function rpcRequest(
 
 async function invoke(
   body: string,
-  selectedHandler = handler,
+  selectedHandler = defaultTestHandler,
 ): Promise<{
   readonly response: APIGatewayProxyStructuredResultV2;
   readonly rpc: JsonRpcResponse;
@@ -112,7 +184,7 @@ async function invoke(
 async function callTool(
   name: string,
   args: Readonly<Record<string, unknown>>,
-  selectedHandler = handler,
+  selectedHandler = defaultTestHandler,
 ) {
   const { response, rpc } = await invoke(
     rpcRequest('tools/call', { name, arguments: args }),
@@ -132,7 +204,7 @@ async function callTool(
 }
 
 describe('Chief remote MCP Lambda', () => {
-  const frozenFixtureHandler = createHandler({
+  const frozenFixtureHandler = authenticatedHandler({
     service: new FixtureMcpToolService(),
   });
   it('accepts only a credential-free HTTPS product origin', () => {
@@ -146,9 +218,12 @@ describe('Chief remote MCP Lambda', () => {
     ).toThrow('credential-free HTTPS origin');
   });
 
-  it('reports dependency-aware health without external effects', async () => {
+  it('reports public liveness without external effects', async () => {
+    const healthEvent = event({ method: 'GET', rawPath: '/mcp/health' });
+    delete healthEvent.headers.authorization;
+    healthEvent.headers.cookie = '__Host-chief_session=not-an-mcp-credential';
     const response = (await frozenFixtureHandler(
-      event({ method: 'GET', rawPath: '/mcp/health' }),
+      healthEvent,
     )) as APIGatewayProxyStructuredResultV2;
     const body = JSON.parse(response.body ?? '{}') as Record<string, unknown>;
 
@@ -166,17 +241,204 @@ describe('Chief remote MCP Lambda', () => {
     });
   });
 
-  it('fails health closed when the promoted retrieval projection is unavailable', async () => {
-    const fixture = new FixtureMcpToolService();
-    const unavailableHandler = createHandler({
-      service: {
-        call: (toolName, input, scope) => {
-          if (toolName === 'search_knowledge') {
-            throw new Error('injected retrieval-head failure');
-          }
-          return fixture.call(toolName, input, scope);
-        },
+  it('requires a bearer token before every non-health MCP request', async () => {
+    const missing = event({ body: rpcRequest('tools/list') });
+    delete missing.headers.authorization;
+    const response = (await frozenFixtureHandler(
+      missing,
+    )) as APIGatewayProxyStructuredResultV2;
+
+    expect(response.statusCode).toBe(401);
+    expect(response.headers).toMatchObject({
+      'cache-control': 'no-store',
+      'www-authenticate': 'Bearer realm="chief-mcp"',
+    });
+    expect(JSON.parse(response.body ?? '{}')).toEqual({
+      jsonrpc: '2.0',
+      id: null,
+      error: { code: -32_001, message: 'Authentication is required.' },
+    });
+  });
+
+  it('does not widen the public health exception to nested MCP paths', async () => {
+    const nested = event({ method: 'GET', rawPath: '/mcp/private/health' });
+    delete nested.headers.authorization;
+    const response = (await frozenFixtureHandler(
+      nested,
+    )) as APIGatewayProxyStructuredResultV2;
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it.each([
+    ['basic authorization', { authorization: 'Basic dXNlcjpwYXNz' }],
+    ['malformed bearer', { authorization: 'Bearer not-a-jwt' }],
+    [
+      'duplicate authorization',
+      {
+        authorization: `Bearer ${TEST_BEARER}`,
+        Authorization: `Bearer ${TEST_BEARER}`,
       },
+    ],
+  ])('rejects %s without reflecting credentials', async (_label, input) => {
+    const response = (await frozenFixtureHandler(
+      event({ body: rpcRequest('tools/list'), headers: input }),
+    )) as APIGatewayProxyStructuredResultV2;
+
+    expect(response.statusCode).toBe(401);
+    expect(response.body).toContain('Authentication is required.');
+    expect(response.body).not.toContain('Basic');
+    expect(response.body).not.toContain(TEST_BEARER);
+    expect(response.body).not.toContain('not-a-jwt');
+  });
+
+  it('rejects browser cookies even alongside a valid bearer token', async () => {
+    const resolve = vi.fn(() =>
+      Promise.resolve({
+        service: new FixtureMcpToolService(),
+        scope: testScope,
+      }),
+    );
+    const cookieRejectingHandler = createHandler({
+      adapterResolver: { resolve },
+    });
+    const response = (await cookieRejectingHandler(
+      event({
+        body: rpcRequest('tools/list'),
+        headers: { cookie: '__Host-chief_session=opaque-browser-session' },
+      }),
+    )) as APIGatewayProxyStructuredResultV2;
+
+    expect(response.statusCode).toBe(401);
+    expect(resolve).not.toHaveBeenCalled();
+    expect(response.body).not.toContain('opaque-browser-session');
+  });
+
+  it('maps inactive membership to one non-leaking forbidden response', async () => {
+    const inactiveHandler = createHandler({
+      adapterResolver: {
+        resolve: () =>
+          Promise.reject(
+            new RequestAuthorityError('forbidden', 'inactive_membership'),
+          ),
+      },
+    });
+    const response = (await inactiveHandler(
+      event({ body: rpcRequest('tools/list') }),
+    )) as APIGatewayProxyStructuredResultV2;
+
+    expect(response.statusCode).toBe(403);
+    expect(response.headers).not.toHaveProperty('www-authenticate');
+    expect(response.body).toContain('The request is not permitted.');
+    expect(response.body).not.toContain('inactive_membership');
+    expect(response.body).not.toContain(testContext.actor.tenantId);
+  });
+
+  it('derives an independent product context and scope for every verified membership', async () => {
+    const firstContext = serverRequestContextSchema.parse({
+      actor: {
+        ...testContext.actor,
+        tenantId: 'tenant-membership-a',
+        userId: 'user-membership-a',
+        accountScopes: ['account-a'],
+        brandScopes: ['brand-a'],
+        grants: ['communications:read'],
+        membershipVersion: 3,
+      },
+      retrievalScope: {
+        ...testContext.retrievalScope!,
+        tenantId: 'tenant-membership-a',
+        accountIds: ['account-a'],
+        brandIds: ['brand-a'],
+        authorizationEpoch: 3,
+      },
+    });
+    const secondContext = serverRequestContextSchema.parse({
+      actor: {
+        ...testContext.actor,
+        tenantId: 'tenant-membership-b',
+        userId: 'user-membership-b',
+        accountScopes: ['account-b'],
+        brandScopes: ['brand-b'],
+        grants: ['knowledge:read', 'actions:prepare'],
+        membershipVersion: 8,
+      },
+      retrievalScope: {
+        ...testContext.retrievalScope!,
+        tenantId: 'tenant-membership-b',
+        accountIds: ['account-b'],
+        brandIds: ['brand-b'],
+        authorizationEpoch: 8,
+      },
+    });
+    const observed: ProductRequestContext[] = [];
+    const productService = {
+      getConnectorStatus: (context: ProductRequestContext) => {
+        observed.push(context);
+        return Promise.resolve({ connectors: [] });
+      },
+    } as unknown as ProductService;
+    const resolveAuthority = vi
+      .fn()
+      .mockResolvedValueOnce({
+        mode: 'verified-session' as const,
+        requestContext: firstContext,
+      })
+      .mockResolvedValueOnce({
+        mode: 'verified-session' as const,
+        requestContext: secondContext,
+      });
+    const resolver = createMcpAdapterResolver({
+      productService,
+      requestAuthorityResolver: { resolve: resolveAuthority },
+    });
+
+    const first = await resolver.resolve({ headers: {} });
+    const second = await resolver.resolve({ headers: {} });
+    await first.service.call('get_connector_status', {}, first.scope);
+    await second.service.call('get_connector_status', {}, second.scope);
+
+    expect(resolveAuthority).toHaveBeenCalledTimes(2);
+    expect(first.scope).toEqual({
+      kind: 'verified_identity',
+      tenantId: 'tenant-membership-a',
+      userId: 'user-membership-a',
+      authorizationEpoch: 3,
+    });
+    expect(second.scope).toEqual({
+      kind: 'verified_identity',
+      tenantId: 'tenant-membership-b',
+      userId: 'user-membership-b',
+      authorizationEpoch: 8,
+    });
+    expect(
+      observed.map(({ actor, retrievalScope }) => ({
+        accounts: actor.accountScopes,
+        brands: actor.brandScopes,
+        grants: actor.grants,
+        epoch: retrievalScope?.authorizationEpoch,
+      })),
+    ).toEqual([
+      {
+        accounts: ['account-a'],
+        brands: ['brand-a'],
+        grants: ['communications:read'],
+        epoch: 3,
+      },
+      {
+        accounts: ['account-b'],
+        brands: ['brand-b'],
+        grants: ['knowledge:read', 'actions:prepare'],
+        epoch: 8,
+      },
+    ]);
+  });
+
+  it('fails health closed when its configured readiness check fails', async () => {
+    const fixture = new FixtureMcpToolService();
+    const unavailableHandler = authenticatedHandler({
+      service: fixture,
+      healthCheck: () => Promise.reject(new Error('injected failure')),
     });
     const response = (await unavailableHandler(
       event({ method: 'GET', rawPath: '/mcp/health' }),
@@ -242,10 +504,11 @@ describe('Chief remote MCP Lambda', () => {
         capabilities: {},
         clientInfo: { name: 'durable-approval-test', version: '1.0.0' },
       }),
+      durableTestHandler,
     );
     expect(initialized.rpc.error).toBeUndefined();
 
-    const listed = await invoke(rpcRequest('tools/list'));
+    const listed = await invoke(rpcRequest('tools/list'), durableTestHandler);
     const tools = (listed.rpc.result?.tools ?? []) as readonly {
       readonly name: string;
       readonly description?: string;
@@ -256,11 +519,15 @@ describe('Chief remote MCP Lambda', () => {
       'Legacy compatibility tool; unavailable in the durable fixed-scope MCP runtime. Use the HTTPS product draft-approval flow. No effect is executed.',
     );
 
-    const rejected = await callTool('submit_for_approval', {
-      actionPlanId: publicFixtureIdentifiers.actionPlanId,
-      expectedActionPlanRevision: publicFixtureIdentifiers.actionPlanRevision,
-      actionPlanHash: publicFixtureIdentifiers.actionPlanHash,
-    });
+    const rejected = await callTool(
+      'submit_for_approval',
+      {
+        actionPlanId: publicFixtureIdentifiers.actionPlanId,
+        expectedActionPlanRevision: publicFixtureIdentifiers.actionPlanRevision,
+        actionPlanHash: publicFixtureIdentifiers.actionPlanHash,
+      },
+      durableTestHandler,
+    );
     expect(rejected.rpc.error).toBeUndefined();
     expect(rejected.result).toMatchObject({
       isError: true,
@@ -279,7 +546,7 @@ describe('Chief remote MCP Lambda', () => {
       baseUrl: 'https://chief.example.test',
     });
     const context = dependencies.requestContext;
-    const durableHandler = createHandler({
+    const durableHandler = authenticatedHandler({
       service: new ProductServiceMcpAdapter(
         dependencies.productService,
         context,
@@ -417,14 +684,18 @@ describe('Chief remote MCP Lambda', () => {
   );
 
   it('does not fabricate exact-scoped citations without durable evidence', async () => {
-    const { response, result } = await callTool('search_knowledge', {
-      queryText: 'Friday launch owner',
-      exactEntityRefs: [
-        deterministicEvaluatorIdentityV1.communications[0]
-          .retrievalExactEntityRef,
-      ],
-      limit: 2,
-    });
+    const { response, result } = await callTool(
+      'search_knowledge',
+      {
+        queryText: 'Friday launch owner',
+        exactEntityRefs: [
+          deterministicEvaluatorIdentityV1.communications[0]
+            .retrievalExactEntityRef,
+        ],
+        limit: 2,
+      },
+      durableTestHandler,
+    );
 
     expect(response.statusCode).toBe(200);
     expect(result?.isError).not.toBe(true);
@@ -445,7 +716,7 @@ describe('Chief remote MCP Lambda', () => {
   });
 
   it('mirrors the product API communication fixture and cursor semantics', async () => {
-    const fixtureHandler = createHandler({
+    const fixtureHandler = authenticatedHandler({
       service: new FixtureMcpToolService(),
     });
     const firstPage = await callTool(
@@ -548,7 +819,7 @@ describe('Chief remote MCP Lambda', () => {
   });
 
   it('mirrors product connector, Asana, knowledge, and SLA facts', async () => {
-    const fixtureHandler = createHandler({
+    const fixtureHandler = authenticatedHandler({
       service: new FixtureMcpToolService(),
     });
     const connectors = mcpGetConnectorStatusResultSchema.parse(
@@ -653,7 +924,7 @@ describe('Chief remote MCP Lambda', () => {
   });
 
   it('mirrors product recommendation, draft, context, and proposal identifiers', async () => {
-    const fixtureHandler = createHandler({
+    const fixtureHandler = authenticatedHandler({
       service: new FixtureMcpToolService(),
     });
     const recommendation = mcpRecommendActionResultSchema.parse(
@@ -752,7 +1023,7 @@ describe('Chief remote MCP Lambda', () => {
   });
 
   it('creates an idempotent immutable approval handoff with no direct effect', async () => {
-    const fixtureHandler = createHandler({
+    const fixtureHandler = authenticatedHandler({
       service: new FixtureMcpToolService(),
     });
     const args = {
@@ -824,7 +1095,9 @@ describe('Chief remote MCP Lambda', () => {
         };
       },
     };
-    const crossTenantHandler = createHandler({ service: crossTenantService });
+    const crossTenantHandler = authenticatedHandler({
+      service: crossTenantService,
+    });
     const { result } = await callTool(
       'recommend_action',
       {
@@ -841,7 +1114,7 @@ describe('Chief remote MCP Lambda', () => {
   });
 
   it('denies unknown recommendation, action-plan, and proposal identifiers', async () => {
-    const fixtureHandler = createHandler({
+    const fixtureHandler = authenticatedHandler({
       service: new FixtureMcpToolService(),
     });
     const unknownRecommendation = await callTool(
@@ -895,7 +1168,7 @@ describe('Chief remote MCP Lambda', () => {
   });
 
   it('bounds request bodies before JSON parsing', async () => {
-    const response = (await handler(
+    const response = (await frozenFixtureHandler(
       event({ body: 'x'.repeat(64 * 1024 + 1) }),
     )) as APIGatewayProxyStructuredResultV2;
     const rpc = JSON.parse(response.body ?? '{}') as JsonRpcResponse;
@@ -908,7 +1181,7 @@ describe('Chief remote MCP Lambda', () => {
   });
 
   it('rejects URL query authority including bearer tokens without reflecting it', async () => {
-    const response = (await handler(
+    const response = (await frozenFixtureHandler(
       event({
         rawQueryString: 'access_token=super-secret&tenantId=attacker',
         body: rpcRequest('tools/list'),
@@ -922,7 +1195,7 @@ describe('Chief remote MCP Lambda', () => {
 
   it('decodes API Gateway base64 bodies', async () => {
     const body = rpcRequest('tools/list');
-    const response = (await handler(
+    const response = (await frozenFixtureHandler(
       event({
         body: Buffer.from(body, 'utf8').toString('base64'),
         isBase64Encoded: true,
@@ -938,7 +1211,7 @@ describe('Chief remote MCP Lambda', () => {
     const hangingService: McpToolService = {
       call: () => new Promise(() => undefined),
     };
-    const timeoutHandler = createHandler({
+    const timeoutHandler = authenticatedHandler({
       service: hangingService,
       timeoutMs: 5,
     });

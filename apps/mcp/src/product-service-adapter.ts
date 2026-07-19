@@ -1,6 +1,8 @@
 import {
-  createAwsDurableApiDependencies,
-  createMemoryDurableApiDependencies,
+  createAwsDurableMcpDependencies,
+  RequestAuthorityError,
+  type RequestAuthorityInput,
+  type RequestAuthorityResolver,
   type ProductRequestContext,
   type ProductService,
 } from '@chief/api';
@@ -114,26 +116,56 @@ export class ProductServiceMcpAdapter implements McpToolService {
   }
 }
 
-export function createDefaultMcpProductAdapter(
-  environment: Readonly<Record<string, string | undefined>>,
-): Readonly<{ service: McpToolService; scope: McpRequestScope }> {
-  const dependencies =
-    environment.NODE_ENV === 'test'
-      ? createMemoryDurableApiDependencies({
-          baseUrl: environment.CHIEF_PRODUCT_BASE_URL,
-        })
-      : createAwsDurableApiDependencies({
-          ...environment,
-          PRODUCT_BASE_URL: environment.CHIEF_PRODUCT_BASE_URL,
-        });
-  const context = dependencies.requestContext;
-  return {
-    service: new ProductServiceMcpAdapter(dependencies.productService, context),
-    scope: {
-      kind: 'public_fixture',
-      tenantId: context.actor.tenantId,
-      userId: context.actor.userId,
-      authorizationEpoch: context.retrievalScope?.authorizationEpoch ?? 1,
+export interface AuthorizedMcpAdapter {
+  readonly service: McpToolService;
+  readonly scope: McpRequestScope;
+}
+
+export interface McpAdapterResolver {
+  resolve(input: RequestAuthorityInput): Promise<AuthorizedMcpAdapter>;
+}
+
+export function createMcpAdapterResolver(input: {
+  readonly productService: ProductService;
+  readonly requestAuthorityResolver: RequestAuthorityResolver;
+}): McpAdapterResolver {
+  return Object.freeze({
+    async resolve(request: RequestAuthorityInput) {
+      const authority = await input.requestAuthorityResolver.resolve(request);
+      if (authority.mode !== 'verified-session') {
+        throw new RequestAuthorityError('unauthorized', 'invalid_session');
+      }
+      const context = authority.requestContext;
+      if (context.retrievalScope === undefined) {
+        throw new RequestAuthorityError('forbidden', 'inactive_grant');
+      }
+      return Object.freeze({
+        service: new ProductServiceMcpAdapter(input.productService, context),
+        scope: Object.freeze({
+          kind: 'verified_identity' as const,
+          tenantId: context.actor.tenantId,
+          userId: context.actor.userId,
+          authorizationEpoch: context.retrievalScope.authorizationEpoch,
+        }),
+      });
     },
-  };
+  });
+}
+
+export function createDefaultMcpAdapterResolver(
+  environment: Readonly<Record<string, string | undefined>>,
+): McpAdapterResolver {
+  if (environment.NODE_ENV === 'test') {
+    return {
+      resolve: () =>
+        Promise.reject(
+          new RequestAuthorityError('unauthorized', 'authentication_required'),
+        ),
+    };
+  }
+  const dependencies = createAwsDurableMcpDependencies({
+    ...environment,
+    PRODUCT_BASE_URL: environment.CHIEF_PRODUCT_BASE_URL,
+  });
+  return createMcpAdapterResolver(dependencies);
 }

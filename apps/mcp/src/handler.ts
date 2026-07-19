@@ -5,18 +5,17 @@ import type {
 
 import { createObservability } from '@chief/observability';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { RequestAuthorityError } from '@chief/api';
 
-import { createDefaultMcpProductAdapter } from './product-service-adapter.js';
-import { createMcpServer } from './server.js';
-import type { McpRequestScope, McpToolService } from './service.js';
 import {
-  MCP_DEFAULT_TOOL_TIMEOUT_MS,
-  MCP_MAX_BODY_BYTES,
-  McpToolRuntime,
-} from './service.js';
+  createDefaultMcpAdapterResolver,
+  type McpAdapterResolver,
+} from './product-service-adapter.js';
+import { createMcpServer } from './server.js';
+import { MCP_DEFAULT_TOOL_TIMEOUT_MS, MCP_MAX_BODY_BYTES } from './service.js';
 
 const observability = createObservability('chief-mcp');
-const defaultAdapter = createDefaultMcpProductAdapter(process.env);
+const defaultAdapterResolver = createDefaultMcpAdapterResolver(process.env);
 
 const headers = {
   'content-type': 'application/json; charset=utf-8',
@@ -37,6 +36,37 @@ function jsonRpcError(
       error: { code, message },
     }),
   };
+}
+
+function authorityError(error: RequestAuthorityError): APIGatewayProxyResultV2 {
+  const unauthorized = error.kind === 'unauthorized';
+  return {
+    statusCode: unauthorized ? 401 : 403,
+    headers: {
+      ...headers,
+      ...(unauthorized
+        ? { 'www-authenticate': 'Bearer realm="chief-mcp"' }
+        : {}),
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: null,
+      error: {
+        code: unauthorized ? -32_001 : -32_003,
+        message: unauthorized
+          ? 'Authentication is required.'
+          : 'The request is not permitted.',
+      },
+    }),
+  };
+}
+
+function hasCookieHeader(
+  values: Readonly<Record<string, string | undefined>>,
+): boolean {
+  return Object.keys(values).some(
+    (name) => name.toLocaleLowerCase('en-US') === 'cookie',
+  );
 }
 
 function requestBody(event: APIGatewayProxyEventV2): Uint8Array {
@@ -76,12 +106,12 @@ async function toApiGatewayResponse(
 }
 
 export function createHandler(options?: {
-  readonly service?: McpToolService;
-  readonly scope?: McpRequestScope;
+  readonly adapterResolver?: McpAdapterResolver;
+  readonly healthCheck?: () => Promise<void>;
   readonly timeoutMs?: number;
 }) {
-  const service = options?.service ?? defaultAdapter.service;
-  const scope = options?.scope ?? defaultAdapter.scope;
+  const adapterResolver = options?.adapterResolver ?? defaultAdapterResolver;
+  const healthCheck = options?.healthCheck ?? (() => Promise.resolve());
   const timeoutMs = options?.timeoutMs ?? MCP_DEFAULT_TOOL_TIMEOUT_MS;
 
   return async (
@@ -89,19 +119,11 @@ export function createHandler(options?: {
   ): Promise<APIGatewayProxyResultV2> => {
     if (
       event.requestContext.http.method === 'GET' &&
-      event.rawPath.endsWith('/health')
+      event.rawPath === '/mcp/health'
     ) {
       observability.logger.info('MCP health requested');
-      const readiness = new McpToolRuntime(service, scope, timeoutMs);
       try {
-        await Promise.all([
-          readiness.execute('get_connector_status', {}),
-          readiness.execute('search_knowledge', {
-            queryText: 'bounded readiness probe',
-            exactEntityRefs: [],
-            limit: 1,
-          }),
-        ]);
+        await healthCheck();
       } catch {
         observability.logger.error('MCP readiness failed', {
           errorCode: 'MCP_READINESS_FAILED',
@@ -139,6 +161,31 @@ export function createHandler(options?: {
       return jsonRpcError(413, -32_600, 'Request body exceeds the limit.');
     }
 
+    if (hasCookieHeader(event.headers)) {
+      return authorityError(
+        new RequestAuthorityError('unauthorized', 'invalid_session'),
+      );
+    }
+
+    let adapter;
+    try {
+      adapter = await adapterResolver.resolve({
+        headers: event.headers,
+        method: event.requestContext.http.method,
+      });
+    } catch (error) {
+      if (error instanceof RequestAuthorityError) {
+        observability.logger.warn('MCP request authority rejected', {
+          errorKind: error.kind,
+        });
+        return authorityError(error);
+      }
+      observability.logger.error('MCP request authority failed', {
+        errorCode: 'MCP_AUTHORITY_FAILED',
+      });
+      return jsonRpcError(500, -32_603, 'Internal MCP transport error.');
+    }
+
     const method = event.requestContext.http.method;
     const request = new Request(requestUrl(event), {
       method,
@@ -149,7 +196,11 @@ export function createHandler(options?: {
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
     });
-    const server = createMcpServer({ service, scope, timeoutMs });
+    const server = createMcpServer({
+      service: adapter.service,
+      scope: adapter.scope,
+      timeoutMs,
+    });
     try {
       await server.connect(transport);
       const response = await transport.handleRequest(request);
