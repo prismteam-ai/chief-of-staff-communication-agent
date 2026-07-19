@@ -906,6 +906,12 @@ describe('executive evaluator application', () => {
     const user = userEvent.setup();
     renderRoute('/inbox/thread-q3-launch');
 
+    expect(
+      await screen.findByText('DEMO-4821 · Synthetic pilot review fixture'),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toContain('SEC-4821');
+    expect(document.body.textContent).not.toContain('Asana ·');
+
     const approve = await screen.findByRole('button', {
       name: 'Hosted durable approval required',
     });

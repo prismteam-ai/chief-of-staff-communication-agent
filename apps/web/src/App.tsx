@@ -2052,7 +2052,7 @@ function ThreadPage() {
                     Security review starts Monday; no external date change
                     unless the recovery plan slips.
                   </p>
-                  <small>Gmail · linked to SEC-4821</small>
+                  <small>Gmail fixture · linked to synthetic DEMO-4821</small>
                 </div>
               </li>
               <li>
@@ -2106,7 +2106,7 @@ function ThreadPage() {
                   <ListChecks aria-hidden="true" size={18} />
                 </span>
                 <div>
-                  <strong>SEC-4821 · Enterprise pilot security review</strong>
+                  <strong>DEMO-4821 · Synthetic pilot review fixture</strong>
                   <span>In review · due today · owner Priya Shah</span>
                 </div>
               </div>
@@ -2271,7 +2271,7 @@ function ThreadPage() {
               </div>
               <div>
                 <dt>Asana effect</dt>
-                <dd>Prepare comment for SEC-4821 · disabled</dd>
+                <dd>Prepare comment for synthetic DEMO-4821 · disabled</dd>
               </div>
               <div>
                 <dt>Revision hash</dt>
@@ -2344,7 +2344,9 @@ function ExecutionReceipt({
         <ListChecks aria-hidden="true" size={18} />
         <div>
           <strong>Asana follow-up prepared</strong>
-          <span>SEC-4821 comment plan retained · external task unchanged</span>
+          <span>
+            Synthetic DEMO-4821 plan retained · no external task exists
+          </span>
         </div>
         <ModeChip mode="fixture" />
       </section>

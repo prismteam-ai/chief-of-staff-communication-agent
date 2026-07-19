@@ -191,12 +191,12 @@ export const channelBreakdown = [
 
 export const citations = [
   {
-    id: 'asana-4821',
-    label: 'Asana · SEC-4821',
-    title: 'Enterprise pilot security review',
+    id: 'synthetic-work-4821',
+    label: 'Synthetic work fixture · DEMO-4821',
+    title: 'Synthetic enterprise pilot review',
     excerpt:
       'Customer evidence review moved to 22 July; launch gate remains 26 July if the red-team summary is accepted.',
-    source: 'Asana task snapshot · updated 09:18 UTC',
+    source: 'Committed evaluator fixture · not a provider record',
   },
   {
     id: 'decision-0711',
@@ -218,7 +218,7 @@ export const citations = [
 
 export const initialDraft = `Taylor — thanks for surfacing this early. Keep the 26 July launch target internal for now.
 
-Please ask Security to post the red-team summary to SEC-4821 by 16:00 UTC today, with Customer Success confirming the recovery plan in the same task. I’ll review both at the 17:00 checkpoint before we update the pilot customer.
+Please ask Security to post the red-team summary to the synthetic work fixture DEMO-4821 by 16:00 UTC today, with Customer Success confirming the recovery plan in the same fixture. I’ll review both at the 17:00 checkpoint before we update the pilot customer.
 
 If either input slips, prepare the customer note for a one-business-day adjustment; do not send it yet.
 
@@ -226,7 +226,7 @@ If either input slips, prepare the customer note for a one-business-day adjustme
 
 export const revisedDraft = `Taylor — thanks for surfacing this early. Hold the 26 July launch target internally for now.
 
-Please have Security attach the red-team summary to SEC-4821 by 16:00 UTC today. Customer Success should confirm the recovery plan there as well. I’ll make the go/no-go call at 17:00 UTC.
+Please have Security attach the red-team summary to the synthetic work fixture DEMO-4821 by 16:00 UTC today. Customer Success should confirm the recovery plan there as well. I’ll make the go/no-go call at 17:00 UTC.
 
 If either input slips, prepare — but do not send — a customer note for a one-business-day adjustment.
 
