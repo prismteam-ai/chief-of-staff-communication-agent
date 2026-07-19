@@ -329,11 +329,11 @@ describe('Chief foundation stack', () => {
           Properties?.ReservedConcurrentExecutions === undefined,
       ),
     ).toBe(true);
-    template.resourceCountIs('AWS::Logs::LogGroup', 3);
+    template.resourceCountIs('AWS::Logs::LogGroup', 4);
     template.resourcePropertiesCountIs(
       'AWS::Logs::LogGroup',
       { RetentionInDays: 90 },
-      3,
+      4,
     );
     template.hasResourceProperties('AWS::ApiGatewayV2::Stage', {
       AccessLogSettings: Match.objectLike({
@@ -561,6 +561,34 @@ describe('Chief foundation stack', () => {
         ),
     );
     expect(dataStatements.every(({ Resource }) => Resource !== '*')).toBe(true);
+  });
+
+  it('enables the core-table TTL attribute for bounded auth records', () => {
+    template.resourceCountIs('Custom::AWS', 1);
+    const ttlResources = template.findResources('Custom::AWS');
+    expect(JSON.stringify(ttlResources)).toContain('UpdateTimeToLive');
+    expect(JSON.stringify(ttlResources)).toContain(
+      String.raw`\"AttributeName\":\"ttl\"`,
+    );
+    expect(JSON.stringify(ttlResources)).toContain(
+      String.raw`\"Enabled\":true`,
+    );
+    const policies = Object.values(
+      template.findResources('AWS::IAM::Policy'),
+    ) as Array<{
+      Properties?: {
+        PolicyDocument?: { Statement?: PolicyStatement[] };
+      };
+    }>;
+    const ttlStatements = policies
+      .flatMap(({ Properties }) => Properties?.PolicyDocument?.Statement ?? [])
+      .filter(({ Action }) =>
+        actionValues(Action).includes('dynamodb:UpdateTimeToLive'),
+      );
+    expect(ttlStatements).toHaveLength(1);
+    expect(JSON.stringify(ttlStatements[0]?.Resource)).toContain(
+      'chief-communications:runtime:core-table-arn',
+    );
   });
 
   it('deploys the built web app and invalidates changed CloudFront assets', () => {

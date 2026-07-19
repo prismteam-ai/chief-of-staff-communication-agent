@@ -6,6 +6,7 @@ import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as customResources from 'aws-cdk-lib/custom-resources';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
@@ -66,7 +67,32 @@ export class ChiefFoundationStack extends cdk.Stack {
     const apiLogGroup = this.createLogGroup('ApiLogGroup');
     const mcpLogGroup = this.createLogGroup('McpLogGroup');
     const apiAccessLogGroup = this.createLogGroup('ApiAccessLogGroup');
+    const authTtlLogGroup = this.createLogGroup('AuthTtlLogGroup');
     const runtime = this.importRuntimeBindings();
+    new customResources.AwsCustomResource(this, 'EnableCoreTableAuthTtl', {
+      onCreate: {
+        service: 'DynamoDB',
+        action: 'UpdateTimeToLive',
+        parameters: {
+          TableName: runtime.coreTableName,
+          TimeToLiveSpecification: {
+            AttributeName: 'ttl',
+            Enabled: true,
+          },
+        },
+        physicalResourceId: customResources.PhysicalResourceId.of(
+          `${PROJECT_NAME}-core-auth-ttl-v1`,
+        ),
+      },
+      policy: customResources.AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: ['dynamodb:UpdateTimeToLive'],
+          resources: [runtime.coreTableArn],
+        }),
+      ]),
+      installLatestAwsSdk: false,
+      logGroup: authTtlLogGroup,
+    });
     const userPool = new cognito.UserPool(this, 'UserPool', {
       userPoolName: `${PROJECT_NAME}-users`,
       selfSignUpEnabled: false,
