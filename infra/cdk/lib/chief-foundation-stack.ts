@@ -89,6 +89,10 @@ export class ChiefFoundationStack extends cdk.Stack {
           actions: ['dynamodb:UpdateTimeToLive'],
           resources: [runtime.coreTableArn],
         }),
+        new iam.PolicyStatement({
+          actions: ['kms:Decrypt'],
+          resources: [runtime.dataKeyArn],
+        }),
       ]),
       installLatestAwsSdk: false,
       logGroup: authTtlLogGroup,

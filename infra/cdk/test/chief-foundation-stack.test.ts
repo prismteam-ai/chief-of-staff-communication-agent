@@ -608,14 +608,26 @@ describe('Chief foundation stack', () => {
         PolicyDocument?: { Statement?: PolicyStatement[] };
       };
     }>;
-    const ttlStatements = policies
-      .flatMap(({ Properties }) => Properties?.PolicyDocument?.Statement ?? [])
-      .filter(({ Action }) =>
+    const ttlPolicy = policies.find(({ Properties }) =>
+      (Properties?.PolicyDocument?.Statement ?? []).some(({ Action }) =>
         actionValues(Action).includes('dynamodb:UpdateTimeToLive'),
-      );
-    expect(ttlStatements).toHaveLength(1);
-    expect(JSON.stringify(ttlStatements[0]?.Resource)).toContain(
+      ),
+    );
+    const ttlStatements =
+      ttlPolicy?.Properties?.PolicyDocument?.Statement ?? [];
+    const updateStatement = ttlStatements.filter(({ Action }) =>
+      actionValues(Action).includes('dynamodb:UpdateTimeToLive'),
+    );
+    const decryptStatement = ttlStatements.filter(({ Action }) =>
+      actionValues(Action).includes('kms:Decrypt'),
+    );
+    expect(updateStatement).toHaveLength(1);
+    expect(JSON.stringify(updateStatement[0]?.Resource)).toContain(
       'chief-communications:runtime:core-table-arn',
+    );
+    expect(decryptStatement).toHaveLength(1);
+    expect(JSON.stringify(decryptStatement[0]?.Resource)).toContain(
+      'chief-communications:runtime:data-key-arn',
     );
   });
 
