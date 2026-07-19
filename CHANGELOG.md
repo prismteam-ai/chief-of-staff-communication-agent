@@ -104,6 +104,14 @@ while retaining all cited facts.` before approve/receipt/reload; also added
 - Strengthened hosted acceptance to require an empty related-Asana result and
   no Asana/SEC-4821 citation when the durable corpus contains none, while
   proving the genuine communication citation is identical across API and MCP.
+- Replaced public browser access with Cognito Hosted UI authorization-code
+  login using S256 PKCE, single-use OAuth state, opaque server-side sessions,
+  strict-origin CSRF checks, and revocable `__Host-` cookies. API Gateway v2
+  cookie arrays are accepted only as an unambiguous bounded carrier; mixed,
+  duplicate, oversized, or bearer-plus-cookie authority fails closed.
+- Added an autonomous DynamoDB-stream outbox relay with a sole-producer queue
+  policy, conditional claims, idempotent retries, terminal effect-disabled
+  receipts, bounded failure evidence, and no public direct-effect surface.
 - Replaced fixture-only hosted API and MCP defaults with the durable product
   composition while retaining the deterministic fixed-scope evaluator data.
 - Replaced the incompatible arbitrary-sequence retrieval delta with immutable
@@ -131,7 +139,7 @@ while retaining all cited facts.` before approve/receipt/reload; also added
 - MCP has no approval or direct-effect tool. The browser local fallback cannot
   approve and is forbidden in strict hosted acceptance.
 - The parent workflow deployed and verified commit
-  `b390b6bf685db80f6aaa3b9fa0d66a7175de5abc`. Both stacks are
+  `fcfe207e68f1504cda508fc7c6df184a88299b47`. Both stacks are
   `UPDATE_COMPLETE`; the deterministic retrieval seed returned
   `already_current`; dashboard metrics returned HTTP 200; and strict hosted
   acceptance passed 19 runnable checks with 2 fixture-only skips and 0 failures.
