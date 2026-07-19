@@ -1125,8 +1125,10 @@ describe('executive evaluator application', () => {
     expect(instructions.textContent).toContain(
       'Prepare and approve through the server-authorized product browser or API.',
     );
-    expect(instructions.textContent).toContain('does not provide OAuth');
-    expect(instructions.textContent).not.toContain('authenticated');
+    expect(instructions.textContent).toContain(
+      'short-lived bearer access token',
+    );
+    expect(instructions.textContent).toContain('opaque session cookie');
     expect(instructions.textContent).toContain('get_approval_status');
     expect(instructions.textContent).toContain(
       'external effects remain disabled',

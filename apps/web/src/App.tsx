@@ -2623,7 +2623,7 @@ function ApprovalsPage({
       <PageHeader
         eyebrow="Human control plane"
         title="Pending approvals"
-        description="External actions are never approved implicitly. The signed-out evaluator can persist an exact server-authorized approval and immutable outbox receipt, while provider dispatch remains disabled."
+        description="External actions are never approved implicitly. The authenticated evaluator can persist an exact server-authorized approval and immutable outbox receipt, while provider dispatch remains disabled."
       />
       <div className="approval-page-grid">
         <section className="surface approval-queue">
@@ -2950,7 +2950,7 @@ function EvidencePage({
       <PageHeader
         eyebrow="Evaluator guide"
         title="Evidence, safety & Cursor access"
-        description="Verify the product’s boundaries, repeat the signed-out journey, and connect a fixed-scope MCP client without exposing credentials."
+        description="Verify the product’s boundaries, repeat the authenticated journey, and connect a fixed-scope MCP client without exposing credentials."
       />
       <section className="evidence-hero" id="capabilities">
         <div>
@@ -3080,7 +3080,7 @@ function EvidencePage({
             </li>
             <li>
               <Check size={15} />
-              No tenant/account selector in signed-out mode
+              No client-controlled tenant/account selector
             </li>
             <li>
               <Check size={15} />
@@ -3111,10 +3111,10 @@ function EvidencePage({
           <Code2 aria-hidden="true" size={21} />
         </div>
         <p className="mcp-intro">
-          Use the hosted MCP URL from the deployment output. The current public
-          evaluator is signed out and server-scoped; it does not provide OAuth
-          or account setup. Never paste a bearer token into the URL, source, or
-          chat.
+          Use the hosted MCP URL from the deployment output with a short-lived
+          bearer access token. Browser access uses an opaque session cookie;
+          that cookie is never reused as MCP authority. Never paste a bearer
+          token into the URL, source, or chat.
         </p>
         <div className="mcp-steps">
           <article>
