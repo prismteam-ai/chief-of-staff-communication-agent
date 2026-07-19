@@ -67,7 +67,7 @@ describe('generated-style API client surface', () => {
     const client = createApiClient({
       baseUrl: 'https://chief.example.test',
       fetch: fetchMock,
-      headers: () => ({ Authorization: 'Bearer forbidden-browser-token' }),
+      headers: () => ({ Authorization: 'forbidden' }),
     });
 
     await expect(client.system.health.query()).rejects.toThrow(
