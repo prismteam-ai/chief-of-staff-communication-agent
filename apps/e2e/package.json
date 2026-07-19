@@ -8,7 +8,8 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "playwright test",
-    "test:hosted": "playwright test --config=playwright.hosted.config.ts"
+    "test:hosted": "playwright test --config=playwright.hosted.config.ts",
+    "demo:hosted": "playwright test --config=playwright.demo.config.ts"
   },
   "devDependencies": {
     "@chief/tsconfig": "workspace:*",

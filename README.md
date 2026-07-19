@@ -264,6 +264,11 @@ scenarios. The shipped local fallback labels its work item as the synthetic
 `DEMO-4821` fixture and contains neither the old `SEC-4821` identifier nor an
 `Asana ·` citation label.
 
+The [authenticated hosted demo](docs/demo/chief-hosted-evaluator-20260719.webm)
+records the same asserted durable thread → revision → approval → receipt →
+reload/deep-link flow. Its reproducible capture command and scope are documented
+in [docs/demo](docs/demo/README.md).
+
 ## Capability scope
 
 The repository includes modular Gmail, Microsoft Graph, IMAP/SMTP, Twilio

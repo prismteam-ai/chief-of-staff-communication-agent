@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added a reproducible authenticated hosted demo capture that runs the same
+  non-skippable durable Playwright flow and records its evaluator-safe browser
+  surface without credentials or provider payloads.
 - Added redacted live Asana acceptance evidence for one controlled create,
   preconditioned update, direct verification, and immediate idempotent replay;
   this remains separate from the effect-disabled public evaluator.
