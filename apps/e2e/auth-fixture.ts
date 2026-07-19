@@ -36,24 +36,6 @@ function pkceChallenge(verifier: string): string {
   return createHash('sha256').update(verifier, 'ascii').digest('base64url');
 }
 
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  errorCode: string,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error(errorCode)), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
-}
-
 async function submitHostedLogin(
   page: Page,
   credentials: HostedEvaluatorCredentials,
@@ -100,38 +82,28 @@ async function exchangeMcpAccessToken(input: {
   }).toString();
 
   const page = await input.context.newPage();
-  let resolveCode: (code: string) => void = () => undefined;
-  let rejectCode: (error: Error) => void = () => undefined;
-  const codePromise = new Promise<string>((resolve, reject) => {
-    resolveCode = resolve;
-    rejectCode = reject;
-  });
-  await page.route(`${input.webOrigin}/auth/callback**`, async (route) => {
-    const callback = new URL(route.request().url());
-    const callbackState = callback.searchParams.get('state');
-    const code = callback.searchParams.get('code');
-    if (callbackState !== state || !code) {
-      rejectCode(new Error('COGNITO_MCP_CALLBACK_INVALID'));
-    } else {
-      resolveCode(code);
-    }
-    await route.fulfill({ status: 204, body: '' });
-  });
+  const callbackMatcher = (url: URL) =>
+    url.origin === input.webOrigin && url.pathname === '/auth/callback';
+  const callbackRequest = page.waitForRequest(
+    (request) => callbackMatcher(new URL(request.url())),
+    { timeout: 60_000 },
+  );
+  void callbackRequest.catch(() => undefined);
 
-  let code: string;
+  let callback: URL;
   try {
     await page.goto(authorize.toString(), { waitUntil: 'domcontentloaded' });
     if (new URL(page.url()).origin === input.authorizeUrl.origin) {
       await submitHostedLogin(page, input.credentials);
     }
-    code = await withTimeout(
-      codePromise,
-      20_000,
-      'COGNITO_MCP_CALLBACK_TIMEOUT',
-    );
+    callback = new URL((await callbackRequest).url());
   } finally {
     await page.close();
   }
+  const callbackState = callback.searchParams.get('state');
+  const code = callback.searchParams.get('code');
+  if (callbackState !== state || !code)
+    throw new Error('COGNITO_MCP_CALLBACK_INVALID');
 
   const tokenResponse = await fetch(
     new URL('/oauth2/token', input.authorizeUrl.origin),
