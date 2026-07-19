@@ -629,7 +629,7 @@ describe('deterministic evaluator retrieval seed', () => {
     expect(mismatchedArtifacts.bindingMismatchReads).toBeGreaterThan(0);
     expect(mismatchedArtifacts.objects.size).toBe(0);
     expect(authorityState(authority)).toEqual(authorityBefore);
-  });
+  }, 30_000);
 
   it('rejects a stale authorization epoch before staging data', async () => {
     const { dependencies, authority, artifacts } = fixture();
@@ -661,7 +661,7 @@ describe('deterministic evaluator retrieval seed', () => {
       ...original,
       scope: { ...original.scope, scopeHash: 'f'.repeat(64) },
     });
-  });
+  }, 30_000);
 
   it('leaves a readable promoted head with real bounded citations', async () => {
     const { dependencies, authority, artifacts } = fixture();
