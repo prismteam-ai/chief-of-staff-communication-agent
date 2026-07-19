@@ -48,7 +48,10 @@ import { canonicalSha256 } from '@chief/approval-outbox/canonical';
 import { PersistenceConflictError } from '@chief/persistence-dynamodb';
 import type { AuthoritativeExecutionState } from '@chief/approval-outbox/execution-service';
 import { createDeterministicDurableAgent } from './deterministic-agent-runtime.js';
-import type { DurableProductRepository } from './durable-product-repository.js';
+import type {
+  AtomicCurrentHeadCondition,
+  DurableProductRepository,
+} from './durable-product-repository.js';
 import {
   approveProposalResultSchema,
   dashboardMetricsResultSchema,
@@ -1120,10 +1123,40 @@ export class DurableProductService implements ProductService {
       );
   }
 
+  async #assertCurrentDraftHead(
+    stored: StoredDraft,
+  ): Promise<AtomicCurrentHeadCondition> {
+    const draft = stored.artifact.result.draft;
+    const current = await this.repository.getCurrent<StoredDraft>(
+      TENANT_ID,
+      'draft',
+      draft.draftId,
+    );
+    if (
+      current === undefined ||
+      current.entityType !== 'draft' ||
+      current.entityId !== draft.draftId ||
+      current.revisionId !== draft.draftRevisionId ||
+      current.version !== draft.revision ||
+      canonicalSha256(current.value) !== canonicalSha256(stored)
+    )
+      throw new ProductServiceError(
+        'STALE_REVISION',
+        'The requested draft revision is not the current durable head.',
+      );
+    await this.#assertExactDraftLookup(current.value);
+    return Object.freeze({
+      entityType: 'draft',
+      entityId: draft.draftId,
+      revisionId: draft.draftRevisionId,
+      version: draft.revision,
+    });
+  }
+
   async #assertProposalLineage(
     context: ProductRequestContext,
     proposal: StoredProposal,
-  ): Promise<void> {
+  ): Promise<AtomicCurrentHeadCondition> {
     const storedDraft = await this.repository.getExact<StoredDraft>(
       TENANT_ID,
       'draft-revision',
@@ -1134,6 +1167,9 @@ export class DurableProductService implements ProductService {
         'STALE_REVISION',
         'Persisted proposal draft lineage is no longer available.',
       );
+    const expectedDraftHead = await this.#assertCurrentDraftHead(
+      storedDraft.value,
+    );
     const recommendation =
       await this.repository.getCurrent<RecommendationArtifact>(
         TENANT_ID,
@@ -1175,6 +1211,7 @@ export class DurableProductService implements ProductService {
         'STALE_REVISION',
         'Persisted proposal action-plan lineage is no longer trusted.',
       );
+    return expectedDraftHead;
   }
 
   public async dashboardMetrics(
@@ -1856,6 +1893,7 @@ export class DurableProductService implements ProductService {
         'STALE_REVISION',
         'Draft revision is stale.',
       );
+    await this.#assertCurrentDraftHead(stored.value);
     const recommendation =
       await this.repository.getCurrent<RecommendationArtifact>(
         TENANT_ID,
@@ -1884,6 +1922,7 @@ export class DurableProductService implements ProductService {
       policyVersion: 'effect-disabled-v1',
       expiresAt: EXPIRES_AT,
     });
+    await this.#assertCurrentDraftHead(stored.value);
     const actionPlanId = actionPlan.actionPlanId;
     const proposalId = id('proposal', { actionPlanId, revision: 1 });
     const existing = await this.repository.getCurrent<StoredProposal>(
@@ -1902,6 +1941,7 @@ export class DurableProductService implements ProductService {
         );
       await this.#assertProposalLineage(context, existing.value);
       await this.#registerProposal(existing.value.proposalId);
+      await this.#assertProposalLineage(context, existing.value);
       return this.#prepareApprovalResult(existing.value);
     }
     const updatedAt = this.now();
@@ -1931,7 +1971,9 @@ export class DurableProductService implements ProductService {
       proposalId,
     );
     if (persisted === undefined) throw new Error('PROPOSAL_HEAD_NOT_PERSISTED');
+    await this.#assertProposalLineage(context, persisted.value);
     await this.#registerProposal(persisted.value.proposalId);
+    await this.#assertProposalLineage(context, persisted.value);
     return this.#prepareApprovalResult(persisted.value);
   }
 
@@ -2214,8 +2256,13 @@ export class DurableProductService implements ProductService {
       receipt,
       approvedFromUpdatedAt: proposal.updatedAt,
     };
+    const expectedDraftHead = await this.#assertProposalLineage(
+      context,
+      proposal,
+    );
     try {
       await this.repository.approveAtomically(TENANT_ID, {
+        expectedDraftHead,
         proposal: {
           entityType: 'proposal',
           entityId: proposal.proposalId,

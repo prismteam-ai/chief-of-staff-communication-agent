@@ -22,7 +22,15 @@ export interface RevisionWrite<T = unknown> extends DurableRevision<T> {
   readonly expectedRevisionId?: string;
 }
 
+export interface AtomicCurrentHeadCondition {
+  readonly entityType: string;
+  readonly entityId: string;
+  readonly revisionId: string;
+  readonly version: number;
+}
+
 export interface AtomicApprovalWrite<T = unknown> {
+  readonly expectedDraftHead: AtomicCurrentHeadCondition;
   readonly proposal: RevisionWrite<T> & {
     readonly expectedVersion: number;
     readonly expectedRevisionId: string;
@@ -236,41 +244,56 @@ export class MemoryDurableProductRepository implements DurableProductRepository 
     return Promise.resolve('created');
   }
 
-  public async approveAtomically<T>(
+  public approveAtomically<T>(
     tenantId: string,
     input: AtomicApprovalWrite<T>,
   ): Promise<'created' | 'duplicate'> {
+    if (!this.#matchesCurrentHead(tenantId, input.expectedDraftHead))
+      throw new PersistenceConflictError();
     const operationId = input.execution.aggregate.operationId;
     const existingExecution = this.#execution.get(operationId);
+    const prefix = this.#entityKey(
+      tenantId,
+      input.proposal.entityType,
+      input.proposal.entityId,
+    );
+    const revisionKey = `${prefix}#${input.proposal.version}#${input.proposal.revisionId}`;
+    const expectedProposal: DurableRevision<T> = {
+      entityType: input.proposal.entityType,
+      entityId: input.proposal.entityId,
+      revisionId: input.proposal.revisionId,
+      version: input.proposal.version,
+      committedAt: input.proposal.committedAt,
+      value: input.proposal.value,
+    };
     if (existingExecution !== undefined) {
-      const prefix = this.#entityKey(
-        tenantId,
-        input.proposal.entityType,
-        input.proposal.entityId,
-      );
-      const existingProposal = this.#revisions.get(
-        `${prefix}#${input.proposal.version}#${input.proposal.revisionId}`,
-      );
-      const expectedProposal: DurableRevision<T> = {
-        entityType: input.proposal.entityType,
-        entityId: input.proposal.entityId,
-        revisionId: input.proposal.revisionId,
-        version: input.proposal.version,
-        committedAt: input.proposal.committedAt,
-        value: input.proposal.value,
-      };
+      const existingProposal = this.#revisions.get(revisionKey);
       if (
         existingProposal !== undefined &&
         sameImmutableValue(existingProposal, expectedProposal) &&
         sameImmutableValue(existingExecution, input.execution)
       )
-        return 'duplicate';
+        return Promise.resolve('duplicate');
       throw new PersistenceConflictError();
     }
-    const persisted = await this.putRevision(tenantId, input.proposal);
-    if (persisted !== 'created') throw new PersistenceConflictError();
-    this.#execution.set(operationId, immutable(input.execution));
-    return 'created';
+    if (this.#revisions.has(revisionKey)) throw new PersistenceConflictError();
+    const proposalHead = this.#heads.get(prefix);
+    if (
+      proposalHead === undefined ||
+      input.proposal.expectedVersion !== proposalHead.version ||
+      input.proposal.expectedRevisionId !== proposalHead.revisionId ||
+      input.proposal.version !== proposalHead.version + 1
+    )
+      throw new PersistenceConflictError();
+    const persistedProposal = immutable(expectedProposal);
+    const persistedExecution = immutable(input.execution);
+    this.#revisions.set(revisionKey, persistedProposal);
+    this.#heads.set(prefix, {
+      version: input.proposal.version,
+      revisionId: input.proposal.revisionId,
+    });
+    this.#execution.set(operationId, persistedExecution);
+    return Promise.resolve('created');
   }
 
   public executionRecord(
@@ -282,6 +305,19 @@ export class MemoryDurableProductRepository implements DurableProductRepository 
 
   #entityKey(tenantId: string, entityType: string, entityId: string): string {
     return `${tenantId}\u0000${entityType}\u0000${entityId}`;
+  }
+
+  #matchesCurrentHead(
+    tenantId: string,
+    expected: AtomicCurrentHeadCondition,
+  ): boolean {
+    const head = this.#heads.get(
+      this.#entityKey(tenantId, expected.entityType, expected.entityId),
+    );
+    return (
+      head?.revisionId === expected.revisionId &&
+      head.version === expected.version
+    );
   }
 }
 
@@ -619,6 +655,18 @@ export class DynamoDurableProductRepository implements DurableProductRepository 
     input: AtomicApprovalWrite<T>,
   ): Promise<'created' | 'duplicate'> {
     const write = input.proposal;
+    const expectedDraftHeadKey = coreEntityKey(
+      tenantId,
+      input.expectedDraftHead.entityType,
+      input.expectedDraftHead.entityId,
+    );
+    const expectedDraftRevisionKey = coreRevisionKey(
+      tenantId,
+      input.expectedDraftHead.entityType,
+      input.expectedDraftHead.entityId,
+      input.expectedDraftHead.version,
+      input.expectedDraftHead.revisionId,
+    );
     const headKey = coreEntityKey(tenantId, write.entityType, write.entityId);
     const revisionKey = coreRevisionKey(
       tenantId,
@@ -643,6 +691,30 @@ export class DynamoDurableProductRepository implements DurableProductRepository 
       await this.client.send(
         new TransactWriteCommand({
           TransactItems: [
+            {
+              ConditionCheck: {
+                TableName: this.tableName,
+                Key: expectedDraftHeadKey,
+                ConditionExpression:
+                  '#tenant = :tenant AND #entityType = :entityType AND #entityId = :entityId AND #version = :version AND #revision = :revision AND #revisionSk = :revisionSk',
+                ExpressionAttributeNames: {
+                  '#tenant': 'tenantId',
+                  '#entityType': 'entityType',
+                  '#entityId': 'entityId',
+                  '#version': 'version',
+                  '#revision': 'currentRevisionId',
+                  '#revisionSk': 'currentRevisionSk',
+                },
+                ExpressionAttributeValues: {
+                  ':tenant': tenantId,
+                  ':entityType': input.expectedDraftHead.entityType,
+                  ':entityId': input.expectedDraftHead.entityId,
+                  ':version': input.expectedDraftHead.version,
+                  ':revision': input.expectedDraftHead.revisionId,
+                  ':revisionSk': expectedDraftRevisionKey.SK,
+                },
+              },
+            },
             ...executionPuts,
             {
               Put: {
@@ -770,6 +842,8 @@ export class DynamoDurableProductRepository implements DurableProductRepository 
     tenantId: string,
     input: AtomicApprovalWrite<T>,
   ): Promise<boolean> {
+    if (!(await this.#matchesCurrentHead(tenantId, input.expectedDraftHead)))
+      return false;
     if (!(await this.#matchesRevision(tenantId, input.proposal))) return false;
     const expected = [
       input.execution.locator,
@@ -791,6 +865,35 @@ export class DynamoDurableProductRepository implements DurableProductRepository 
     return actual.every(
       (record, index) =>
         record !== undefined && sameImmutableValue(record, expected[index]),
+    );
+  }
+
+  async #matchesCurrentHead(
+    tenantId: string,
+    expected: AtomicCurrentHeadCondition,
+  ): Promise<boolean> {
+    const output = await this.client.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: coreEntityKey(tenantId, expected.entityType, expected.entityId),
+        ConsistentRead: true,
+      }),
+    );
+    const item = output.Item as Record<string, unknown> | undefined;
+    return (
+      item?.tenantId === tenantId &&
+      item.entityType === expected.entityType &&
+      item.entityId === expected.entityId &&
+      item.version === expected.version &&
+      item.currentRevisionId === expected.revisionId &&
+      item.currentRevisionSk ===
+        coreRevisionKey(
+          tenantId,
+          expected.entityType,
+          expected.entityId,
+          expected.version,
+          expected.revisionId,
+        ).SK
     );
   }
 }

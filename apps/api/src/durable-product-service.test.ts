@@ -21,6 +21,7 @@ import { createDurableRequestContext } from './aws-composition.js';
 import type { ApiDependencies } from './context.js';
 import {
   MemoryDurableProductRepository,
+  type AtomicApprovalWrite,
   type AtomicRevisionWithExactLookup,
 } from './durable-product-repository.js';
 import {
@@ -74,6 +75,24 @@ class FailFirstAtomicDraftCommitRepository extends MemoryDurableProductRepositor
       return Promise.reject(new Error('ATOMIC_DRAFT_COMMIT_INTERRUPTED'));
     }
     return super.putRevisionWithExactLookup(tenantId, input);
+  }
+}
+
+class InterleavingDraftAdvanceRepository extends MemoryDurableProductRepository {
+  #beforeApproval: (() => Promise<void>) | undefined;
+
+  public advanceBeforeNextApproval(action: () => Promise<void>): void {
+    this.#beforeApproval = action;
+  }
+
+  public override async approveAtomically<T>(
+    tenantId: string,
+    input: AtomicApprovalWrite<T>,
+  ): Promise<'created' | 'duplicate'> {
+    const beforeApproval = this.#beforeApproval;
+    this.#beforeApproval = undefined;
+    await beforeApproval?.();
+    return super.approveAtomically(tenantId, input);
   }
 }
 
@@ -1773,6 +1792,159 @@ describe('durable hosted product vertical', () => {
         expectedDraftRevision: revised.result.draft.revision,
       }),
     ).resolves.toMatchObject({ status: 'pending_approval' });
+  });
+
+  it('rejects superseded draft preparation and quarantines a proposal after the draft head advances', async () => {
+    const repository = new MemoryDurableProductRepository();
+    const queued: string[] = [];
+    const dependencies = createMemoryDurableApiDependencies({
+      repository,
+      operationQueue: {
+        enqueue: (operationId) => {
+          queued.push(operationId);
+          return Promise.resolve();
+        },
+      },
+    });
+    const context = createDurableRequestContext();
+    const recommendation = await dependencies.productService.recommendAction(
+      context,
+      {
+        messageRevisionId: messageRevisionIdSchema.parse(
+          'message-revision-1-1',
+        ),
+        expectedMessageRevision: 1,
+      },
+    );
+    const revisionOne = await dependencies.productService.createDraft(context, {
+      recommendationId: recommendation.recommendation.recommendationId,
+      expectedRecommendationRevision: 1,
+    });
+    const staleProposal =
+      await dependencies.productService.prepareDraftApproval(context, {
+        draftRevisionId: revisionOne.result.draft.draftRevisionId,
+        expectedDraftRevision: revisionOne.result.draft.revision,
+      });
+    const persistedProposal = await repository.getCurrent<{
+      readonly status: 'pending_approval' | 'approved';
+      readonly actionPlan: {
+        readonly operations: readonly { readonly operationId: string }[];
+      };
+    }>(
+      durableEvaluatorAuthority.tenantId,
+      'proposal',
+      staleProposal.proposalId,
+    );
+    const operationId =
+      persistedProposal?.value.actionPlan.operations[0]?.operationId;
+    expect(operationId).toBeDefined();
+
+    const revisionTwo = await dependencies.productService.reviseDraft(context, {
+      draftRevisionId: revisionOne.result.draft.draftRevisionId,
+      expectedDraftRevision: revisionOne.result.draft.revision,
+      revisionInstruction:
+        'Make this draft concise while retaining all cited facts.',
+    });
+    expect(revisionTwo.result.draft.revision).toBe(2);
+
+    await expect(
+      dependencies.productService.prepareDraftApproval(context, {
+        draftRevisionId: revisionOne.result.draft.draftRevisionId,
+        expectedDraftRevision: revisionOne.result.draft.revision,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      dependencies.productService.approveProposal(context, {
+        proposalId: staleProposal.proposalId,
+        expectedProposalUpdatedAt: staleProposal.updatedAt,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      dependencies.productService.getApprovalStatus(context, {
+        proposalId: staleProposal.proposalId,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      dependencies.productService.getExecutionStatus(context, {
+        proposalId: staleProposal.proposalId,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+
+    await expect(
+      repository.getCurrent(
+        durableEvaluatorAuthority.tenantId,
+        'proposal',
+        staleProposal.proposalId,
+      ),
+    ).resolves.toMatchObject({ value: { status: 'pending_approval' } });
+    expect(
+      operationId === undefined
+        ? undefined
+        : repository.executionRecord(operationId),
+    ).toBeUndefined();
+    expect(queued).toEqual([]);
+    await expect(
+      dependencies.productService.prepareDraftApproval(context, {
+        draftRevisionId: revisionTwo.result.draft.draftRevisionId,
+        expectedDraftRevision: revisionTwo.result.draft.revision,
+      }),
+    ).resolves.toMatchObject({ status: 'pending_approval' });
+  });
+
+  it('atomically rejects approval when the draft head advances after the service precheck', async () => {
+    const repository = new InterleavingDraftAdvanceRepository();
+    const queued: string[] = [];
+    const dependencies = createMemoryDurableApiDependencies({
+      repository,
+      operationQueue: {
+        enqueue: (operationId) => {
+          queued.push(operationId);
+          return Promise.resolve();
+        },
+      },
+    });
+    const { context, draft, proposal } =
+      await preparePendingApproval(dependencies);
+    const persistedProposal = await repository.getCurrent<{
+      readonly actionPlan: {
+        readonly operations: readonly { readonly operationId: string }[];
+      };
+    }>(durableEvaluatorAuthority.tenantId, 'proposal', proposal.proposalId);
+    const operationId =
+      persistedProposal?.value.actionPlan.operations[0]?.operationId;
+    expect(operationId).toBeDefined();
+    repository.advanceBeforeNextApproval(async () => {
+      const revised = await dependencies.productService.reviseDraft(context, {
+        draftRevisionId: draft.result.draft.draftRevisionId,
+        expectedDraftRevision: draft.result.draft.revision,
+        revisionInstruction:
+          'Make this draft concise while retaining all cited facts.',
+      });
+      expect(revised.result.draft.revision).toBe(2);
+    });
+
+    await expect(
+      dependencies.productService.approveProposal(context, {
+        proposalId: proposal.proposalId,
+        expectedProposalUpdatedAt: proposal.updatedAt,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await expect(
+      repository.getCurrent(
+        durableEvaluatorAuthority.tenantId,
+        'proposal',
+        proposal.proposalId,
+      ),
+    ).resolves.toMatchObject({
+      version: 1,
+      value: { status: 'pending_approval' },
+    });
+    expect(
+      operationId === undefined
+        ? undefined
+        : repository.executionRecord(operationId),
+    ).toBeUndefined();
+    expect(queued).toEqual([]);
   });
 
   it('rejects a stale proposal binding without creating approval state', async () => {
