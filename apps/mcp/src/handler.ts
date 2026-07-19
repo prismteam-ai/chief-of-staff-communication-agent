@@ -161,7 +161,10 @@ export function createHandler(options?: {
       return jsonRpcError(413, -32_600, 'Request body exceeds the limit.');
     }
 
-    if (hasCookieHeader(event.headers)) {
+    if (
+      hasCookieHeader(event.headers) ||
+      (event.cookies !== undefined && event.cookies.length > 0)
+    ) {
       return authorityError(
         new RequestAuthorityError('unauthorized', 'invalid_session'),
       );

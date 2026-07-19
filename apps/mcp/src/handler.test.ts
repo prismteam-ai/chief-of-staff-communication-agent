@@ -314,6 +314,28 @@ describe('Chief remote MCP Lambda', () => {
     expect(response.body).not.toContain('opaque-browser-session');
   });
 
+  it('rejects API Gateway v2 cookie arrays before resolving authority', async () => {
+    const resolve = vi.fn(() =>
+      Promise.resolve({
+        service: new FixtureMcpToolService(),
+        scope: testScope,
+      }),
+    );
+    const cookieRejectingHandler = createHandler({
+      adapterResolver: { resolve },
+    });
+    const cookieEvent = event({ body: rpcRequest('tools/list') });
+    cookieEvent.cookies = ['__Host-chief_session=opaque-browser-session'];
+
+    const response = (await cookieRejectingHandler(
+      cookieEvent,
+    )) as APIGatewayProxyStructuredResultV2;
+
+    expect(response.statusCode).toBe(401);
+    expect(resolve).not.toHaveBeenCalled();
+    expect(response.body).not.toContain('opaque-browser-session');
+  });
+
   it('maps inactive membership to one non-leaking forbidden response', async () => {
     const inactiveHandler = createHandler({
       adapterResolver: {
