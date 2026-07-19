@@ -31,6 +31,7 @@ const configuration = browserAuthConfiguration({
 function event(
   path: string,
   options: {
+    readonly cookies?: string[];
     readonly method?: string;
     readonly query?: string;
     readonly headers?: Record<string, string>;
@@ -43,6 +44,7 @@ function event(
     rawPath: path,
     rawQueryString: options.query ?? '',
     headers: options.headers ?? {},
+    cookies: options.cookies,
     requestContext: {
       accountId: '417242953053',
       apiId: 'fixture-api',
@@ -222,7 +224,7 @@ describe('Hosted UI browser authorization flow', () => {
     const stateCookie = login.cookies?.[0] as string;
     const callback = event('/auth/callback', {
       query: `code=synthetic-code&state=${state}`,
-      headers: { cookie: stateCookie.split(';')[0] as string },
+      cookies: [stateCookie.split(';')[0] as string],
     });
 
     const response = await handler.handle(callback);
@@ -258,6 +260,37 @@ describe('Hosted UI browser authorization flow', () => {
     const replay = await handler.handle(callback);
     expect(replay.statusCode).toBe(400);
     expect(exchange).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects ambiguous or duplicate API Gateway v2 cookie carriers', async () => {
+    const memory = memoryPersistence();
+    const exchange = tokenExchange();
+    const handler = createBrowserAuthHandler({
+      configuration,
+      persistence: memory.persistence,
+      accessTokenVerifier: verifier('access'),
+      idTokenVerifier: verifier('id'),
+      fetch: exchange,
+      now,
+    });
+    const { response: login, state } = await beginLogin(handler);
+    const cookie = login.cookies?.[0]?.split(';')[0] as string;
+    const query = `code=synthetic-code&state=${state}`;
+
+    const mixed = await handler.handle(
+      event('/auth/callback', {
+        query,
+        headers: { cookie },
+        cookies: [cookie],
+      }),
+    );
+    const duplicate = await handler.handle(
+      event('/auth/callback', { query, cookies: [cookie, cookie] }),
+    );
+
+    expect(mixed.statusCode).toBe(400);
+    expect(duplicate.statusCode).toBe(400);
+    expect(exchange).not.toHaveBeenCalled();
   });
 
   it('rejects state mismatch and expired state before token exchange', async () => {

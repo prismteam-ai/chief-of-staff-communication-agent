@@ -59,17 +59,17 @@ async function submitHostedLogin(
   credentials: HostedEvaluatorCredentials,
 ): Promise<void> {
   const username = page
-    .locator('input[name="username"], #signInFormUsername')
+    .locator('input[name="username"]:visible, #signInFormUsername:visible')
     .first();
   const password = page
-    .locator('input[name="password"], #signInFormPassword')
+    .locator('input[name="password"]:visible, #signInFormPassword:visible')
     .first();
   await expect(username).toBeVisible({ timeout: 20_000 });
   await username.fill(credentials.username);
   await password.fill(credentials.password);
   await page
     .locator(
-      'button[type="submit"], input[name="signInSubmitButton"], input[type="submit"]',
+      'button[type="submit"]:visible, input[name="signInSubmitButton"]:visible, input[type="submit"]:visible',
     )
     .first()
     .click();

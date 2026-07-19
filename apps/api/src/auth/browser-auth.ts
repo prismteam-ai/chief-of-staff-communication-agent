@@ -192,16 +192,27 @@ function singleQueryValue(
 }
 
 function cookieValue(
-  headers: Readonly<Record<string, string | undefined>>,
+  event: APIGatewayProxyEventV2,
   name: string,
 ): string | undefined {
-  const headersFound = Object.entries(headers).filter(
+  const headersFound = Object.entries(event.headers).filter(
     ([headerName]) => headerName.toLocaleLowerCase('en-US') === 'cookie',
   );
-  if (headersFound.length !== 1 || (headersFound[0]?.[1]?.length ?? 0) > 4_096)
+  const gatewayCookies = event.cookies ?? [];
+  if (
+    headersFound.length > 1 ||
+    (headersFound[0]?.[1]?.length ?? 0) > 4_096 ||
+    gatewayCookies.length > 64 ||
+    gatewayCookies.reduce((length, value) => length + value.length, 0) >
+      4_096 ||
+    (headersFound.length === 1 && gatewayCookies.length > 0)
+  )
     return undefined;
-  const matches = (headersFound[0]?.[1] ?? '')
-    .split(';')
+  const parts =
+    headersFound.length === 1
+      ? (headersFound[0]?.[1] ?? '').split(';')
+      : gatewayCookies.flatMap((value) => value.split(';'));
+  const matches = parts
     .map((part) => part.trim())
     .filter((part) => part.startsWith(`${name}=`))
     .map((part) => part.slice(name.length + 1));
@@ -346,7 +357,7 @@ export function createBrowserAuthHandler(input: {
           return badRequest();
         const code = singleQueryValue(event, 'code');
         const state = singleQueryValue(event, 'state');
-        const stateFromCookie = cookieValue(event.headers, STATE_COOKIE);
+        const stateFromCookie = cookieValue(event, STATE_COOKIE);
         if (
           code === undefined ||
           state === undefined ||
@@ -424,7 +435,7 @@ export function createBrowserAuthHandler(input: {
           origin[0]?.[1] !== input.configuration.productOrigin
         )
           return { statusCode: 403, headers: noStoreHeaders() };
-        const session = cookieValue(event.headers, SESSION_COOKIE);
+        const session = cookieValue(event, SESSION_COOKIE);
         if (session !== undefined && /^[A-Za-z0-9_-]{43}$/u.test(session))
           await input.persistence.revokeSession(
             browserSessionTokenHash(session),
