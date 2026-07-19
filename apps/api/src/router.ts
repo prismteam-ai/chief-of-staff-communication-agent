@@ -34,6 +34,10 @@ import {
 } from '@chief/contracts';
 
 import {
+  asanaAcceptanceEvidenceResultSchema,
+  createAsanaAcceptanceEvidenceResult,
+} from './asana-acceptance-evidence.js';
+import {
   approveProposalInputSchema,
   approveProposalResultSchema,
   dashboardMetricsResultSchema,
@@ -76,6 +80,15 @@ export const systemRouter = router({
         externalEffects: 'disabled',
       });
       return createProductHealthResponse('chief-api');
+    }),
+  asanaAcceptanceEvidence: publicProcedure
+    .output(asanaAcceptanceEvidenceResultSchema)
+    .query(({ ctx }) => {
+      ctx.observability.logger.info('Asana acceptance evidence requested', {
+        surface: 'typed-product-api',
+        externalEffects: 'disabled',
+      });
+      return createAsanaAcceptanceEvidenceResult();
     }),
 });
 

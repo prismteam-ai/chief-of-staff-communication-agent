@@ -48,6 +48,7 @@ const canonicalPublicProcedurePaths = new Set([
   'dashboard.sla',
   'execution.status',
   'knowledge.search',
+  'system.asanaAcceptanceEvidence',
   'system.health',
   'work.relatedAsana',
 ]);

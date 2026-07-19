@@ -20,6 +20,10 @@ import {
 } from '@chief/contracts';
 import { createObservability } from '@chief/observability';
 
+import {
+  asanaAcceptanceEvidenceMarkdown,
+  asanaAcceptanceEvidenceSha256,
+} from './asana-acceptance-evidence.js';
 import { createLocalTestRequestAuthorityResolver } from './auth/index.js';
 import {
   createFixtureProductService,
@@ -66,6 +70,36 @@ describe('typed product router', () => {
     await expect(
       createCaller(createFixtureRequestContext(), unavailable).system.health(),
     ).resolves.toMatchObject({ service: 'chief-api', status: 'ok' });
+  });
+
+  it('serves the redacted Asana acceptance evidence without product authority', async () => {
+    const fixture = createFixtureProductService();
+    const unavailable = new Proxy(fixture, {
+      get(target, property, receiver): unknown {
+        if (typeof Reflect.get(target, property, receiver) === 'function') {
+          return () => {
+            throw new Error('evidence read crossed the product boundary');
+          };
+        }
+        const value: unknown = Reflect.get(target, property, receiver);
+        return value;
+      },
+    });
+
+    const evidence = await createCaller(
+      createFixtureRequestContext(),
+      unavailable,
+    ).system.asanaAcceptanceEvidence();
+
+    expect(evidence).toMatchObject({
+      documentPath:
+        'docs/evidence/asana-controlled-live-acceptance-20260719.md',
+      contentType: 'text/markdown',
+      sha256: asanaAcceptanceEvidenceSha256,
+      markdown: asanaAcceptanceEvidenceMarkdown,
+    });
+    expect(evidence.markdown).toContain('Controlled Asana live acceptance');
+    expect(evidence.markdown).not.toMatch(/Bearer |password|secret|token=/iu);
   });
 
   it('serves the complete fixture-backed product surface with schema parity', async () => {
