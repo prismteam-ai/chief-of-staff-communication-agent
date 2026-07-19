@@ -19,7 +19,10 @@ import {
 import type { ApiDependencies } from './context.js';
 import {
   createBrowserSessionRequestAuthorityResolver,
+  createCognitoRequestAuthorityResolver,
   createCognitoSessionTokenVerifier,
+  type AuthorityMembershipResolver,
+  type RequestAuthorityResolver,
 } from './auth/request-authority.js';
 import { createDynamoAuthorityMembershipResolver } from './auth/aws-membership-resolver.js';
 import { createDynamoBrowserAuthPersistence } from './auth/aws-browser-session-store.js';
@@ -38,6 +41,7 @@ import {
   type DurableRetrievalResult,
   type DurableRetrievalPort,
 } from './durable-product-service.js';
+import type { ProductService } from './product-service.js';
 
 const CLAIMS_HASH =
   '34d276d72d3cd8f6f75364fc1a68f18e380d714b2dc5058d44c3be9b56d57b9b';
@@ -328,62 +332,105 @@ export function createMemoryDurableApiDependencies(input?: {
   };
 }
 
-export function createAwsDurableApiDependencies(
+interface AwsDurableProductComposition {
+  readonly auth: ProductionAuthConfiguration;
+  readonly documentClient: DynamoDBDocumentClient;
+  readonly memberships: AuthorityMembershipResolver;
+  readonly productService: ProductService;
+}
+
+function createAwsDurableProductComposition(
   environment: Readonly<Record<string, string | undefined>>,
-): ApiDependencies {
+): AwsDurableProductComposition {
   const auth = productionAuthConfiguration(environment);
   const coreTableName = required(environment, 'CORE_TABLE_NAME');
   const retrievalTableName = required(environment, 'RETRIEVAL_TABLE_NAME');
   const snapshotBucketName = required(environment, 'SNAPSHOT_BUCKET_NAME');
   const baseUrl = required(environment, 'PRODUCT_BASE_URL');
-  const dynamo = DynamoDBDocumentClient.from(
+  const documentClient = DynamoDBDocumentClient.from(
     new DynamoDBClient({ region: environment.AWS_REGION ?? 'us-east-2' }),
     { marshallOptions: { removeUndefinedValues: true } },
   );
   const s3 = new S3Client({ region: environment.AWS_REGION ?? 'us-east-2' });
   const runtime = createAwsBoundedRetrievalRuntime({
-    dynamo,
+    dynamo: documentClient,
     s3,
     tableName: retrievalTableName,
     bucketName: snapshotBucketName,
     memory: memoryProbe(),
   });
-  const retrieval = createReadOnlyAwsRetrieval(runtime);
-  const browserAuth = browserAuthConfiguration(environment);
-  const memberships = createDynamoAuthorityMembershipResolver({
-    documentClient: dynamo,
-    tableName: coreTableName,
-  });
-  const sessions = createDynamoBrowserAuthPersistence({
-    documentClient: dynamo,
-    tableName: coreTableName,
-  });
-  return {
+  return Object.freeze({
+    auth,
+    documentClient,
+    memberships: createDynamoAuthorityMembershipResolver({
+      documentClient,
+      tableName: coreTableName,
+    }),
     productService: new DurableProductService(
-      new DynamoDurableProductRepository(dynamo, coreTableName),
-      retrieval,
+      new DynamoDurableProductRepository(documentClient, coreTableName),
+      createReadOnlyAwsRetrieval(runtime),
       baseUrl,
       undefined,
     ),
+  });
+}
+
+export interface AwsDurableMcpDependencies {
+  readonly productService: ProductService;
+  readonly requestAuthorityResolver: RequestAuthorityResolver;
+}
+
+/**
+ * Composes the MCP product runtime with access-token authority only. Browser
+ * OAuth, cookies, state, and session persistence intentionally stay out of
+ * this dependency graph.
+ */
+export function createAwsDurableMcpDependencies(
+  environment: Readonly<Record<string, string | undefined>>,
+): AwsDurableMcpDependencies {
+  const common = createAwsDurableProductComposition(environment);
+  return Object.freeze({
+    productService: common.productService,
+    requestAuthorityResolver: createCognitoRequestAuthorityResolver({
+      userPoolId: common.auth.userPoolId,
+      clientId: common.auth.clientId,
+      tokenUse: 'access',
+      memberships: common.memberships,
+    }),
+  });
+}
+
+export function createAwsDurableApiDependencies(
+  environment: Readonly<Record<string, string | undefined>>,
+): ApiDependencies {
+  const common = createAwsDurableProductComposition(environment);
+  const coreTableName = required(environment, 'CORE_TABLE_NAME');
+  const browserAuth = browserAuthConfiguration(environment);
+  const sessions = createDynamoBrowserAuthPersistence({
+    documentClient: common.documentClient,
+    tableName: coreTableName,
+  });
+  return {
+    productService: common.productService,
     requestContext: createDurableRequestContext(),
     requestAuthorityResolver: createBrowserSessionRequestAuthorityResolver({
       sessions,
-      memberships,
+      memberships: common.memberships,
       expectedOrigin: browserAuth.productOrigin,
-      expectedIssuer: auth.issuer,
-      expectedClientId: auth.clientId,
+      expectedIssuer: common.auth.issuer,
+      expectedClientId: common.auth.clientId,
     }),
     browserAuthHandler: createBrowserAuthHandler({
       configuration: browserAuth,
       persistence: sessions,
       accessTokenVerifier: createCognitoSessionTokenVerifier({
-        userPoolId: auth.userPoolId,
-        clientId: auth.clientId,
+        userPoolId: common.auth.userPoolId,
+        clientId: common.auth.clientId,
         tokenUse: 'access',
       }),
       idTokenVerifier: createCognitoSessionTokenVerifier({
-        userPoolId: auth.userPoolId,
-        clientId: auth.clientId,
+        userPoolId: common.auth.userPoolId,
+        clientId: common.auth.clientId,
         tokenUse: 'id',
       }),
     }),

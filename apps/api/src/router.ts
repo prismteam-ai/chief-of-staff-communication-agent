@@ -323,10 +323,12 @@ export {
 } from './product-service.js';
 export {
   createAwsDurableApiDependencies,
+  createAwsDurableMcpDependencies,
   createDefaultDurableApiDependencies,
   createDurableRequestContext,
   createMemoryDurableApiDependencies,
 } from './aws-composition.js';
+export type { AwsDurableMcpDependencies } from './aws-composition.js';
 export type {
   ProductRequestContext,
   ProductService,
@@ -340,6 +342,7 @@ export {
 export type {
   AuthorityMembershipResolution,
   AuthorityMembershipResolver,
+  RequestAuthorityInput,
   RequestAuthorityResolver,
   ResolvedRequestAuthority,
   VerifiedSessionIdentity,

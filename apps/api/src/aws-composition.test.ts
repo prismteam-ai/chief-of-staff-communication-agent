@@ -16,6 +16,7 @@ import {
 
 import {
   createAwsDurableApiDependencies,
+  createAwsDurableMcpDependencies,
   createDurableRequestContext,
   createReadOnlyAwsRetrieval,
 } from './aws-composition.js';
@@ -57,6 +58,39 @@ describe('AWS durable API composition', () => {
 
     expect(dependencies.authMode).toBe('enforced');
     expect(dependencies.requestAuthorityResolver).toBeDefined();
+  });
+
+  it('composes MCP access-token authority without browser session infrastructure', () => {
+    const mcpEnvironment = {
+      ...productionEnvironment,
+      AUTH_SESSION_TTL_SECONDS: undefined,
+      AUTH_STATE_TTL_SECONDS: undefined,
+      COGNITO_DOMAIN: undefined,
+    };
+    const dependencies = createAwsDurableMcpDependencies(mcpEnvironment);
+
+    expect(Object.keys(dependencies).sort()).toEqual([
+      'productService',
+      'requestAuthorityResolver',
+    ]);
+    expect(dependencies.requestAuthorityResolver).toBeDefined();
+  });
+
+  it.each([
+    'REQUEST_AUTH_MODE',
+    'COGNITO_ISSUER',
+    'COGNITO_USER_POOL_ID',
+    'COGNITO_USER_POOL_CLIENT_ID',
+  ] as const)('fails MCP composition when %s is missing', (name) => {
+    expect(() =>
+      createAwsDurableMcpDependencies({
+        ...productionEnvironment,
+        AUTH_SESSION_TTL_SECONDS: undefined,
+        AUTH_STATE_TTL_SECONDS: undefined,
+        COGNITO_DOMAIN: undefined,
+        [name]: undefined,
+      }),
+    ).toThrow(`MISSING_${name}`);
   });
 
   it.each([
