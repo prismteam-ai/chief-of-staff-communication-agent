@@ -139,4 +139,31 @@ describe('Dynamo browser auth persistence', () => {
       SK: 'AUTH#BROWSER#SESSION#v1',
     });
   });
+
+  it('rejects an unsafe persisted OAuth return target', async () => {
+    const client = new ScriptedDocumentClient();
+    const persistence = createDynamoBrowserAuthPersistence({
+      documentClient: client,
+      tableName: 'chief-core',
+    });
+    client.outcomes.push({
+      Item: {
+        PK: `AUTH#BROWSER#OAUTH_STATE#${stateHash}`,
+        SK: 'AUTH#BROWSER#OAUTH_STATE#v1',
+        schemaVersion: 'chief-browser-oauth-state.v1',
+        entityType: 'browser-oauth-state',
+        stateHash,
+        codeVerifier: Buffer.alloc(64, 1).toString('base64url'),
+        returnPath: 'https://attacker.example',
+        expiresAt: 1_768_737_900,
+        ttl: 1_768_737_900,
+      },
+      $metadata: {},
+    });
+
+    await expect(
+      persistence.consumeOAuthState(stateHash, 1_768_737_600),
+    ).rejects.toThrow('INVALID_BROWSER_OAUTH_STATE_ITEM');
+    expect(client.commands).toHaveLength(1);
+  });
 });

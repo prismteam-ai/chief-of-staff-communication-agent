@@ -217,20 +217,24 @@ function sameValue(left: string, right: string): boolean {
   );
 }
 
-function returnPath(event: APIGatewayProxyEventV2): string {
-  const candidate = singleQueryValue(event, 'returnTo') ?? '/';
-  if (
-    candidate.length > 512 ||
-    !candidate.startsWith('/') ||
-    candidate.startsWith('//') ||
-    candidate.includes('\\') ||
-    [...candidate].some((character) => {
+export function isSafeBrowserReturnPath(candidate: string): boolean {
+  return (
+    candidate.length <= 512 &&
+    candidate.startsWith('/') &&
+    !candidate.startsWith('//') &&
+    !candidate.includes('\\') &&
+    !candidate.includes('?') &&
+    !candidate.includes('#') &&
+    ![...candidate].some((character) => {
       const codePoint = character.codePointAt(0) ?? 0;
       return codePoint < 32 || codePoint === 127;
     })
-  )
-    return '/';
-  return candidate;
+  );
+}
+
+function returnPath(event: APIGatewayProxyEventV2): string {
+  const candidate = singleQueryValue(event, 'returnTo') ?? '/';
+  return isSafeBrowserReturnPath(candidate) ? candidate : '/';
 }
 
 function badRequest(): APIGatewayProxyStructuredResultV2 {

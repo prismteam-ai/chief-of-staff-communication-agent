@@ -6,10 +6,11 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import { z } from 'zod';
 
-import type {
-  BrowserAuthPersistence,
-  BrowserOAuthState,
-  BrowserSessionRecord,
+import {
+  isSafeBrowserReturnPath,
+  type BrowserAuthPersistence,
+  type BrowserOAuthState,
+  type BrowserSessionRecord,
 } from './browser-auth.js';
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -89,6 +90,8 @@ export function createDynamoBrowserAuthPersistence(input: {
 
   return {
     async createOAuthState(state) {
+      if (!isSafeBrowserReturnPath(state.returnPath))
+        throw new Error('INVALID_BROWSER_RETURN_PATH');
       const key = stateKey(state.stateHash);
       const item = oauthStateItemSchema.parse({
         ...key,
@@ -126,7 +129,8 @@ export function createDynamoBrowserAuthPersistence(input: {
       if (
         !parsed.success ||
         parsed.data.PK !== key.PK ||
-        parsed.data.stateHash !== stateHash
+        parsed.data.stateHash !== stateHash ||
+        !isSafeBrowserReturnPath(parsed.data.returnPath)
       )
         throw new Error('INVALID_BROWSER_OAUTH_STATE_ITEM');
       try {

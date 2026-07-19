@@ -185,6 +185,28 @@ describe('Hosted UI browser authorization flow', () => {
     expect(location.searchParams.has('id_token')).toBe(false);
   });
 
+  it.each([
+    'https://attacker.example',
+    '//attacker.example/path',
+    '/inbox?access_token=forbidden',
+    '/inbox#credential-fragment',
+    '/inbox\\redirect',
+  ])('falls back to the root for unsafe return target %s', async (target) => {
+    const memory = memoryPersistence();
+    const handler = createBrowserAuthHandler({
+      configuration,
+      persistence: memory.persistence,
+      accessTokenVerifier: verifier('access'),
+      idTokenVerifier: verifier('id'),
+      fetch: tokenExchange(),
+      now,
+    });
+
+    await beginLogin(handler, target);
+
+    expect([...memory.states.values()][0]?.returnPath).toBe('/');
+  });
+
   it('exchanges a single-use callback and persists only a session hash plus verified identity', async () => {
     const memory = memoryPersistence();
     const exchange = tokenExchange();
