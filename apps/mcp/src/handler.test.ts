@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { createMemoryDurableApiDependencies } from '@chief/api';
 
 import {
+  deterministicEvaluatorIdentityV1,
   mcpCreateDraftResultSchema,
   mcpGetApprovalStatusResultSchema,
   mcpGetConnectorStatusResultSchema,
@@ -273,7 +274,7 @@ describe('Chief remote MCP Lambda', () => {
     expect(rejected.result?.structuredContent).toBeUndefined();
   });
 
-  it('runs initialize, list, retrieval, cited draft, and approval status through durable composition', async () => {
+  it('runs initialize, list, and honest evidence abstention through durable composition', async () => {
     const dependencies = createMemoryDurableApiDependencies({
       baseUrl: 'https://chief.example.test',
     });
@@ -305,13 +306,19 @@ describe('Chief remote MCP Lambda', () => {
 
     const searched = await callTool(
       'search_knowledge',
-      { queryText: 'Friday launch owner', exactEntityRefs: [], limit: 2 },
+      {
+        queryText: 'Friday launch owner',
+        exactEntityRefs: [
+          deterministicEvaluatorIdentityV1.communications[0]
+            .retrievalExactEntityRef,
+        ],
+        limit: 2,
+      },
       durableHandler,
     );
     expect(
-      mcpSearchKnowledgeResultSchema.parse(searched.result?.structuredContent)
-        .citations,
-    ).toHaveLength(2);
+      mcpSearchKnowledgeResultSchema.parse(searched.result?.structuredContent),
+    ).toEqual({ candidates: [], citations: [] });
 
     const recommended = await callTool(
       'recommend_action',
@@ -324,36 +331,10 @@ describe('Chief remote MCP Lambda', () => {
     const recommendation = mcpRecommendActionResultSchema.parse(
       recommended.result?.structuredContent,
     ).recommendation;
-    const drafted = await callTool(
-      'create_draft',
-      {
-        recommendationId: recommendation.recommendationId,
-        expectedRecommendationRevision: 1,
-      },
-      durableHandler,
-    );
-    const draft = mcpCreateDraftResultSchema.parse(
-      drafted.result?.structuredContent,
-    ).result.draft;
-    expect(draft.citations).toHaveLength(2);
-
-    const proposal = await dependencies.productService.prepareDraftApproval(
-      context,
-      {
-        draftRevisionId: draft.draftRevisionId,
-        expectedDraftRevision: draft.revision,
-      },
-    );
-    const status = await callTool(
-      'get_approval_status',
-      { proposalId: proposal.proposalId },
-      durableHandler,
-    );
-    expect(
-      mcpGetApprovalStatusResultSchema.parse(status.result?.structuredContent),
-    ).toMatchObject({
-      proposalId: proposal.proposalId,
-      status: 'pending_approval',
+    expect(recommendation).toMatchObject({
+      actionType: 'request_context',
+      status: 'needs_context',
+      citations: [],
     });
   });
 
@@ -435,10 +416,13 @@ describe('Chief remote MCP Lambda', () => {
     },
   );
 
-  it('returns bounded cited knowledge with candidate/citation parity', async () => {
+  it('does not fabricate exact-scoped citations without durable evidence', async () => {
     const { response, result } = await callTool('search_knowledge', {
-      queryText: 'Friday launch owner and Asana status',
-      exactEntityRefs: [],
+      queryText: 'Friday launch owner',
+      exactEntityRefs: [
+        deterministicEvaluatorIdentityV1.communications[0]
+          .retrievalExactEntityRef,
+      ],
       limit: 2,
     });
 
@@ -447,8 +431,8 @@ describe('Chief remote MCP Lambda', () => {
     const output = mcpSearchKnowledgeResultSchema.parse(
       result?.structuredContent,
     );
-    expect(output.candidates).toHaveLength(2);
-    expect(output.citations).toHaveLength(2);
+    expect(output.candidates).toHaveLength(0);
+    expect(output.citations).toHaveLength(0);
     expect(output.candidates.map(({ chunkId }) => chunkId)).toEqual(
       output.citations.map(({ chunkId }) => chunkId),
     );

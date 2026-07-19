@@ -86,12 +86,12 @@ or draft text. Legacy evaluator evidence is admitted only when source ID,
 chunk, citation ID, content hash, and text all match a canonical fixture;
 citation-ID-only compatibility is rejected.
 
-For the public launch fixture, the product layer also projects the existing
-SEC-4821 fixture task as a separately authorized Asana fact with the verified
-release-readiness relation to the canonical launch thread identity and a
-derived combined manifest hash. This preserves a
-two-fact launch draft without borrowing the unrelated board communication. It
-is deterministic evaluator knowledge, not a live Asana read or mutation.
+For the public launch evaluator, the product layer does not project SEC-4821 or
+synthesize an Asana fact. Only source-owned records returned by durable
+retrieval are eligible, and the retrieval-owned manifest is never replaced by
+an app-tier combined manifest. The hosted launch path therefore produces a
+coherent single-fact, communication-backed reply with no related Asana item or
+citation.
 
 Every model-selected fact ID must resolve inside that authorized context.
 Unknown or duplicate IDs fail toward `request_context`; they never become
@@ -105,8 +105,10 @@ diversity, missing facts, and explicit no-action policy. The model does not set
 its own trusted confidence. The named `minimumActionConfidence` policy is
 `0.67`: a normal action below `0.67`, any missing critical fact, invalid
 citation selection, absent retrieval context, or unavailable/invalid model
-output produces a focused context request. Two relevant facts from one factual
-source class reach exactly `0.67`; one fact remains below policy and abstains.
+output produces a focused context request. One relevant fact from one factual
+source class reaches exactly `0.67` and can produce a coherent reply when no
+critical fact is missing. Additional relevant facts raise confidence according
+to the same capped formula.
 
 Focused questions are deterministic and fact-specific. Date/deadline, owner,
 and amount gaps use specialized questions; other gaps ask what the response
@@ -208,8 +210,8 @@ Focused tests use `MockLanguageModelV3` with stored JSON outputs. They prove:
 - identical fixture input produces identical recommendation, draft, and hashes;
 - citations resolve to the exact selected communication/Asana facts;
 - launch and board facts cannot cross their exact topical boundaries;
-- two same-source facts remain usable when both are relevant, while one fact
-  still abstains under `minimumActionConfidence`;
+- one relevant cited fact reaches `minimumActionConfidence` and remains usable
+  when no critical fact is missing, while missing facts still force abstention;
 - unsupported fact IDs abstain instead of becoming prose;
 - empty retrieval produces one focused request without a model call;
 - prompt injection hidden in quoted history is blocked without a model call;

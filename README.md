@@ -94,8 +94,9 @@ The AWS retrieval adapter now verifies each result against the bounded index's
 active, stable-epoch manifest inspection and an exact digest of the issued
 source/chunk/version/epoch/evidence rows. A copied hash, altered row, altered
 result object, or head change fails closed with `STALE_REVISION`; there is no
-fixture-identity or app-tier-classification fallback. This wiring is a local
-worktree change and is not represented by the deployed release listed below.
+fixture-identity or app-tier-classification fallback. This citation-proof wiring
+is deployed in assessed release `16a36872f2ecaea82574d569fbbcf6bdc2553ba4`
+listed below.
 
 The focused compatibility suite runs the actual production staging writer into
 compaction, CAS promotion, persisted query-vector production, bounded

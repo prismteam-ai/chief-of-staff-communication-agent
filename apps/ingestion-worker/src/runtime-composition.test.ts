@@ -740,12 +740,23 @@ describe('production writer to bounded reader compatibility', () => {
       exactEntityRefs: [],
       styleExamples: [],
     });
+    const formulaBackedConfidence = Number(
+      (
+        0.5 +
+        Math.min(0.32, factIds.length * 0.12) +
+        Math.min(0.15, 1 * 0.05)
+      ).toFixed(2),
+    );
+    expect(formulaBackedConfidence).toBe(0.87);
     expect(recommendation.recommendation).toMatchObject({
       status: 'current',
       actionType: 'reply',
-      confidence: 0.75,
+      confidence: formulaBackedConfidence,
+      missingFacts: [],
     });
-    expect(recommendation.recommendation.citations).toHaveLength(3);
+    expect(recommendation.recommendation.citations).toHaveLength(
+      factIds.length,
+    );
     const draft = await agent.createDraft({
       recommendation,
       expectedRecommendationRevision: 1,
