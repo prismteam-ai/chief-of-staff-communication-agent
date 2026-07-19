@@ -5,6 +5,7 @@ import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
@@ -65,6 +66,28 @@ export class ChiefFoundationStack extends cdk.Stack {
     const mcpLogGroup = this.createLogGroup('McpLogGroup');
     const apiAccessLogGroup = this.createLogGroup('ApiAccessLogGroup');
     const runtime = this.importRuntimeBindings();
+    const userPool = new cognito.UserPool(this, 'UserPool', {
+      userPoolName: `${PROJECT_NAME}-users`,
+      selfSignUpEnabled: false,
+      signInAliases: { email: true },
+      signInCaseSensitive: false,
+      autoVerify: { email: true },
+      standardAttributes: {
+        email: { required: true, mutable: true },
+      },
+      accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
+      passwordPolicy: {
+        minLength: 14,
+        requireDigits: true,
+        requireLowercase: true,
+        requireSymbols: true,
+        requireUppercase: true,
+        tempPasswordValidity: cdk.Duration.days(3),
+      },
+      deletionProtection: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+    const cognitoIssuer = `https://cognito-idp.${this.region}.${this.urlSuffix}/${userPool.userPoolId}`;
     const fixtureEnvironment = {
       EXTERNAL_EFFECTS: 'disabled',
       FIXTURE_TENANT_ID,
@@ -81,9 +104,12 @@ export class ChiefFoundationStack extends cdk.Stack {
       apiLogGroup,
       {
         ...fixtureEnvironment,
+        COGNITO_ISSUER: cognitoIssuer,
+        COGNITO_USER_POOL_ID: userPool.userPoolId,
         CONNECTOR_RUNTIME_TABLE_NAME: runtime.connectorRuntimeTableName,
         CORE_TABLE_NAME: runtime.coreTableName,
         PUBLIC_ROUTE_SCOPE: 'fixture-read-propose-approve-effect-disabled',
+        REQUEST_AUTH_MODE: 'enforced',
         RETRIEVAL_TABLE_NAME: runtime.retrievalTableName,
         SNAPSHOT_BUCKET_NAME: runtime.snapshotBucketName,
       },
@@ -260,6 +286,27 @@ export class ChiefFoundationStack extends cdk.Stack {
     distribution.addBehavior('/mcp', apiOrigin, apiBehavior);
     distribution.addBehavior('/mcp/*', apiOrigin, apiBehavior);
     const webUrl = `https://${distribution.distributionDomainName}`;
+    const userPoolClient = userPool.addClient('BrowserClient', {
+      userPoolClientName: `${PROJECT_NAME}-browser`,
+      generateSecret: false,
+      authFlows: { userSrp: true },
+      oAuth: {
+        flows: { authorizationCodeGrant: true },
+        scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL],
+        callbackUrls: [`${webUrl}/auth/callback`],
+        logoutUrls: [`${webUrl}/`],
+      },
+      authSessionValidity: cdk.Duration.minutes(5),
+      accessTokenValidity: cdk.Duration.minutes(15),
+      idTokenValidity: cdk.Duration.minutes(15),
+      refreshTokenValidity: cdk.Duration.days(7),
+      enableTokenRevocation: true,
+      preventUserExistenceErrors: true,
+    });
+    apiFunction.addEnvironment(
+      'COGNITO_USER_POOL_CLIENT_ID',
+      userPoolClient.userPoolClientId,
+    );
     apiFunction.addEnvironment('PRODUCT_BASE_URL', webUrl);
     mcpFunction.addEnvironment('CHIEF_PRODUCT_BASE_URL', webUrl);
 
@@ -293,6 +340,15 @@ export class ChiefFoundationStack extends cdk.Stack {
     });
     new cdk.CfnOutput(this, 'CloudFrontMcpUrl', {
       value: `https://${distribution.distributionDomainName}/mcp`,
+    });
+    new cdk.CfnOutput(this, 'CognitoUserPoolId', {
+      value: userPool.userPoolId,
+    });
+    new cdk.CfnOutput(this, 'CognitoUserPoolClientId', {
+      value: userPoolClient.userPoolClientId,
+    });
+    new cdk.CfnOutput(this, 'CognitoIssuer', {
+      value: cognitoIssuer,
     });
   }
 
@@ -367,7 +423,7 @@ export class ChiefFoundationStack extends cdk.Stack {
     function_: nodejs.NodejsFunction,
     runtime: RuntimeBindings,
   ): void {
-    this.grantTableData(function_, runtime.coreTableArn, 'read-write');
+    this.grantCoreTableData(function_, runtime.coreTableArn);
     this.grantTableData(
       function_,
       runtime.connectorRuntimeTableArn,
@@ -387,7 +443,7 @@ export class ChiefFoundationStack extends cdk.Stack {
     function_: nodejs.NodejsFunction,
     runtime: RuntimeBindings,
   ): void {
-    this.grantTableData(function_, runtime.coreTableArn, 'read-write');
+    this.grantCoreTableData(function_, runtime.coreTableArn);
     this.grantTableData(function_, runtime.connectorRuntimeTableArn, 'read');
     this.grantTableData(function_, runtime.retrievalTableArn, 'read');
     this.grantSnapshotRead(function_, runtime.snapshotBucketArn);
@@ -429,6 +485,18 @@ export class ChiefFoundationStack extends cdk.Stack {
         }),
       );
     }
+  }
+
+  private grantCoreTableData(
+    function_: nodejs.NodejsFunction,
+    tableArn: string,
+  ): void {
+    function_.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['dynamodb:GetItem', 'dynamodb:TransactWriteItems'],
+        resources: [tableArn],
+      }),
+    );
   }
 
   private grantSnapshotRead(

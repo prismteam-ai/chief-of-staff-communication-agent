@@ -254,6 +254,42 @@ describe('Chief foundation stack', () => {
       }),
     });
     template.resourceCountIs('AWS::ApiGatewayV2::Api', 1);
+    template.hasResourceProperties('AWS::Cognito::UserPool', {
+      AdminCreateUserConfig: { AllowAdminCreateUserOnly: true },
+      DeletionProtection: 'ACTIVE',
+      Policies: {
+        PasswordPolicy: Match.objectLike({
+          MinimumLength: 14,
+          TemporaryPasswordValidityDays: 3,
+        }),
+      },
+      UsernameAttributes: ['email'],
+      UsernameConfiguration: { CaseSensitive: false },
+    });
+    template.hasResourceProperties('AWS::Cognito::UserPoolClient', {
+      AccessTokenValidity: 15,
+      AllowedOAuthFlows: ['code'],
+      AllowedOAuthFlowsUserPoolClient: true,
+      CallbackURLs: [Match.anyValue()],
+      EnableTokenRevocation: true,
+      ExplicitAuthFlows: ['ALLOW_USER_SRP_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH'],
+      GenerateSecret: false,
+      IdTokenValidity: 15,
+      PreventUserExistenceErrors: 'ENABLED',
+      LogoutURLs: [Match.anyValue()],
+      RefreshTokenValidity: 10_080,
+      TokenValidityUnits: {
+        AccessToken: 'minutes',
+        IdToken: 'minutes',
+        RefreshToken: 'minutes',
+      },
+    });
+    const userPoolClients = Object.values(
+      template.findResources('AWS::Cognito::UserPoolClient'),
+    );
+    expect(JSON.stringify(userPoolClients)).toContain('/auth/callback');
+    expect(JSON.stringify(userPoolClients)).not.toContain('example.com');
+    expect(JSON.stringify(userPoolClients)).not.toContain('implicit');
     template.resourcePropertiesCountIs(
       'AWS::Lambda::Function',
       {
@@ -371,6 +407,9 @@ describe('Chief foundation stack', () => {
         'ApiUrl',
         'CloudFrontApiUrl',
         'CloudFrontMcpUrl',
+        'CognitoIssuer',
+        'CognitoUserPoolClientId',
+        'CognitoUserPoolId',
         'McpHealthUrl',
         'McpUrl',
         'WebUrl',
@@ -418,6 +457,15 @@ describe('Chief foundation stack', () => {
       );
     }
 
+    const apiEnvironment = apiFunction?.Properties?.Environment?.Variables;
+    expect(apiEnvironment?.COGNITO_ISSUER).toBeDefined();
+    expect(apiEnvironment?.COGNITO_USER_POOL_CLIENT_ID).toBeDefined();
+    expect(apiEnvironment?.COGNITO_USER_POOL_ID).toBeDefined();
+    expect(apiEnvironment?.REQUEST_AUTH_MODE).toBe('enforced');
+    expect(JSON.stringify(apiEnvironment?.COGNITO_ISSUER)).toContain(
+      'https://cognito-idp.us-east-2.',
+    );
+
     const apiStatements = applicationPolicyStatements('ApiFunction');
     const mcpStatements = applicationPolicyStatements('McpFunction');
     const apiActions = apiStatements.flatMap(({ Action }) =>
@@ -438,7 +486,6 @@ describe('Chief foundation stack', () => {
     );
     expect(mcpActions).toEqual(
       expect.arrayContaining([
-        'dynamodb:PutItem',
         'dynamodb:Query',
         'dynamodb:TransactWriteItems',
         'kms:Decrypt',
@@ -521,7 +568,6 @@ describe('Chief foundation stack', () => {
       'AWS::OpenSearchService::Domain',
       'AWS::OpenSearchServerless::Collection',
       'AWS::Bedrock::KnowledgeBase',
-      'AWS::Cognito::UserPool',
       'AWS::SecretsManager::Secret',
       'AWS::Events::Rule',
       'AWS::StepFunctions::StateMachine',
