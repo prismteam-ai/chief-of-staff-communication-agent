@@ -2640,11 +2640,11 @@ function ConnectionsPage({
   const isHosted = projection.source === 'hosted_durable';
   const hostedSeedCounts = isHosted
     ? {
-        sourceOwnedFixture: projection.connectors.length,
+        sourceOwned: projection.connectors.length,
         recorded: modeCount('recorded'),
         blocked: modeCount('blocked'),
       }
-    : { sourceOwnedFixture: 1, recorded: 0, blocked: 0 };
+    : { sourceOwned: 1, recorded: 0, blocked: 0 };
 
   return (
     <div className="page">
@@ -2664,14 +2664,16 @@ function ConnectionsPage({
       >
         <strong>Hosted evaluator seed</strong>
         <p>
-          Seven account-scoped fixture connectors back the hosted multichannel
-          corpus. Every card is synthetic, deterministic, and effect-disabled.
+          Seven account-scoped connector cards back the hosted multichannel
+          corpus: six fixture-mode cards and one manual/recorded LinkedIn
+          archive card. Every card is synthetic, deterministic, and
+          effect-disabled.
         </p>
         <dl>
           <div>
-            <dt>Source-owned fixture</dt>
+            <dt>Source-owned cards</dt>
             <dd data-testid="hosted-seed-fixture-count">
-              {hostedSeedCounts.sourceOwnedFixture} hosted connector cards
+              {hostedSeedCounts.sourceOwned} hosted connector cards
             </dd>
           </div>
           <div>
@@ -2740,7 +2742,7 @@ function ConnectionsPage({
           </span>
           <div>
             <strong>1. Review hosted scope</strong>
-            <small>Seven account-scoped fixture connectors</small>
+            <small>Six fixture · one recorded</small>
           </div>
         </div>
         <div className="onboarding-line" />
@@ -2919,9 +2921,9 @@ function EvidencePage({
               <div>
                 <strong>Capability truth</strong>
                 <p>
-                  Open Connections and inspect the seven fixture connector
-                  cards. Each card is account-scoped, synthetic, and
-                  effect-disabled.
+                  Open Connections and inspect the six fixture cards and one
+                  recorded LinkedIn archive card. Each card is account-scoped,
+                  synthetic, and effect-disabled.
                 </p>
               </div>
               <Link to="/connections">

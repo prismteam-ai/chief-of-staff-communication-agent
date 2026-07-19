@@ -453,6 +453,11 @@ describe('executive evaluator application', () => {
     expect(
       await screen.findByText(/1,120-message corpus across seven hosted/i),
     ).toBeTruthy();
+    expect(
+      screen.getByText(
+        /inspect the six fixture cards and one recorded LinkedIn archive card/i,
+      ),
+    ).toBeTruthy();
     expect(screen.getByText(/demonstration-only/i)).toBeTruthy();
   });
 
@@ -709,11 +714,18 @@ describe('executive evaluator application', () => {
     expect(apiClientMock.approvals.status.query).toHaveBeenCalledTimes(3);
   });
 
-  it('shows all seven hosted V2 fixture connectors', async () => {
+  it('distinguishes six hosted fixture cards from one recorded card', async () => {
     arrangeHostedProjection();
     renderRoute('/connections');
 
     expect(await screen.findAllByTestId('connector-card')).toHaveLength(7);
+    expect(
+      screen.getByText(
+        /seven account-scoped connector cards.*six fixture-mode cards and one manual\/recorded LinkedIn archive card/i,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText('Source-owned cards')).toBeTruthy();
+    expect(screen.getByText('Six fixture · one recorded')).toBeTruthy();
     expect(screen.getByTestId('hosted-seed-fixture-count').textContent).toBe(
       '7 hosted connector cards',
     );
