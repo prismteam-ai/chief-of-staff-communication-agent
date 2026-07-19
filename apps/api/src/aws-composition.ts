@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
-import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
 import {
@@ -28,7 +27,6 @@ import {
   type DurableManifestBinding,
   type DurableRetrievalResult,
   type DurableRetrievalPort,
-  type OperationQueue,
 } from './durable-product-service.js';
 
 const CLAIMS_HASH =
@@ -271,7 +269,6 @@ export function createMemoryDurableApiDependencies(input?: {
   readonly repository?: MemoryDurableProductRepository;
   readonly now?: () => string;
   readonly baseUrl?: string;
-  readonly operationQueue?: OperationQueue;
 }): ApiDependencies {
   const repository = input?.repository ?? new MemoryDurableProductRepository();
   return {
@@ -280,7 +277,6 @@ export function createMemoryDurableApiDependencies(input?: {
       createMemoryRetrieval(),
       input?.baseUrl ?? 'https://chief.example.test',
       input?.now,
-      input?.operationQueue,
     ),
     requestContext: createDurableRequestContext(),
   };
@@ -293,27 +289,11 @@ export function createAwsDurableApiDependencies(
   const retrievalTableName = required(environment, 'RETRIEVAL_TABLE_NAME');
   const snapshotBucketName = required(environment, 'SNAPSHOT_BUCKET_NAME');
   const baseUrl = required(environment, 'PRODUCT_BASE_URL');
-  const outboxQueueUrl = environment.OUTBOX_QUEUE_URL?.trim();
   const dynamo = DynamoDBDocumentClient.from(
     new DynamoDBClient({ region: environment.AWS_REGION ?? 'us-east-2' }),
     { marshallOptions: { removeUndefinedValues: true } },
   );
   const s3 = new S3Client({ region: environment.AWS_REGION ?? 'us-east-2' });
-  const operationQueue: OperationQueue | undefined =
-    outboxQueueUrl === undefined || outboxQueueUrl === ''
-      ? undefined
-      : {
-          enqueue: async (operationId) => {
-            await new SQSClient({
-              region: environment.AWS_REGION ?? 'us-east-2',
-            }).send(
-              new SendMessageCommand({
-                QueueUrl: outboxQueueUrl,
-                MessageBody: JSON.stringify({ operationId }),
-              }),
-            );
-          },
-        };
   const runtime = createAwsBoundedRetrievalRuntime({
     dynamo,
     s3,
@@ -328,7 +308,6 @@ export function createAwsDurableApiDependencies(
       retrieval,
       baseUrl,
       undefined,
-      operationQueue,
     ),
     requestContext: createDurableRequestContext(),
   };

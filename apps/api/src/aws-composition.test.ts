@@ -15,6 +15,7 @@ import {
 } from '@chief/contracts';
 
 import {
+  createAwsDurableApiDependencies,
   createDurableRequestContext,
   createReadOnlyAwsRetrieval,
 } from './aws-composition.js';
@@ -25,6 +26,19 @@ function sha256Text(value: string): string {
 }
 
 describe('AWS durable API composition', () => {
+  it('does not bind approval availability to an injected outbox queue', () => {
+    expect(() =>
+      createAwsDurableApiDependencies({
+        AWS_REGION: 'us-east-2',
+        CORE_TABLE_NAME: 'chief-core',
+        OUTBOX_QUEUE_URL: 'https://unavailable.invalid/chief-outbox',
+        PRODUCT_BASE_URL: 'https://chief.example.test',
+        RETRIEVAL_TABLE_NAME: 'chief-retrieval',
+        SNAPSHOT_BUCKET_NAME: 'chief-snapshots',
+      }),
+    ).not.toThrow();
+  });
+
   it('derives the durable request scope from the shared evaluator identity', () => {
     const context = createDurableRequestContext();
     expect(context.actor).toMatchObject({

@@ -29,7 +29,6 @@ import {
   DurableProductService,
   type DurableManifestBinding,
   type DurableRetrievalPort,
-  type OperationQueue,
 } from './durable-product-service.js';
 import { ProductServiceError } from './product-service.js';
 
@@ -207,7 +206,6 @@ function createMemoryDurableApiDependencies(input?: {
   readonly repository?: MemoryDurableProductRepository;
   readonly now?: () => string;
   readonly baseUrl?: string;
-  readonly operationQueue?: OperationQueue;
 }): ApiDependencies {
   const repository = input?.repository ?? new MemoryDurableProductRepository();
   const launchRef =
@@ -232,7 +230,6 @@ function createMemoryDurableApiDependencies(input?: {
       ]),
       input?.baseUrl ?? 'https://chief.example.test',
       input?.now,
-      input?.operationQueue,
     ),
     requestContext: createDurableRequestContext(),
   };
@@ -1329,16 +1326,9 @@ describe('durable hosted product vertical', () => {
       '2026-07-18T08:00:05.000Z',
     ];
     const now = () => timestamps.shift() ?? '2026-07-18T08:00:06.000Z';
-    const queued: string[] = [];
     const first = createMemoryDurableApiDependencies({
       repository,
       now,
-      operationQueue: {
-        enqueue: (operationId) => {
-          queued.push(operationId);
-          return Promise.resolve();
-        },
-      },
     });
     const context = createDurableRequestContext();
 
@@ -1452,11 +1442,6 @@ describe('durable hosted product vertical', () => {
     );
     expect(repeated).toEqual(approved);
     expect(repeatedFromCurrent).toEqual(approved);
-    expect(queued).toEqual([
-      approved.operationId,
-      approved.operationId,
-      approved.operationId,
-    ]);
 
     const fresh = createMemoryDurableApiDependencies({ repository, now });
     const reloadedDraft = await fresh.productService.createDraft(context, {
@@ -1739,50 +1724,40 @@ describe('durable hosted product vertical', () => {
     ).resolves.toMatchObject({ status: 'prepared' });
   });
 
-  it('keeps committed approval readable and retries stable queue delivery', async () => {
+  it('commits approval without caller-side relay availability or retry', async () => {
     const repository = new MemoryDurableProductRepository();
-    let queueAttempts = 0;
-    const dependencies = createMemoryDurableApiDependencies({
-      repository,
-      operationQueue: {
-        enqueue: () => {
-          queueAttempts += 1;
-          return queueAttempts === 1
-            ? Promise.reject(new Error('SQS_UNAVAILABLE'))
-            : Promise.resolve();
-        },
-      },
-    });
+    const dependencies = createMemoryDurableApiDependencies({ repository });
     const { context, proposal } = await preparePendingApproval(dependencies);
     const approvalInput = {
       proposalId: proposal.proposalId,
       expectedProposalUpdatedAt: proposal.updatedAt,
     };
 
-    await expect(
-      dependencies.productService.approveProposal(context, approvalInput),
-    ).rejects.toThrow('SQS_UNAVAILABLE');
+    const approved = await dependencies.productService.approveProposal(
+      context,
+      approvalInput,
+    );
     await expect(
       dependencies.productService.getApprovalStatus(context, {
         proposalId: proposal.proposalId,
       }),
-    ).resolves.toMatchObject({ status: 'approved' });
+    ).resolves.toEqual({
+      approvalUrl: proposal.approvalUrl,
+      proposalId: proposal.proposalId,
+      status: 'approved',
+      updatedAt: approved.updatedAt,
+    });
 
-    const retried = await dependencies.productService.approveProposal(
-      context,
-      approvalInput,
-    );
     const repeated = await dependencies.productService.approveProposal(
       context,
       approvalInput,
     );
-    expect(repeated).toEqual(retried);
-    expect(queueAttempts).toBe(3);
+    expect(repeated).toEqual(approved);
     expect(
-      repository.executionRecord(retried.operationId)?.aggregate,
+      repository.executionRecord(approved.operationId)?.aggregate,
     ).toMatchObject({
-      operationId: retried.operationId,
-      effectDisabledReceipt: retried.receipt,
+      operationId: approved.operationId,
+      effectDisabledReceipt: approved.receipt,
     });
   });
 
@@ -1844,16 +1819,7 @@ describe('durable hosted product vertical', () => {
 
   it('rejects superseded draft preparation and quarantines a proposal after the draft head advances', async () => {
     const repository = new MemoryDurableProductRepository();
-    const queued: string[] = [];
-    const dependencies = createMemoryDurableApiDependencies({
-      repository,
-      operationQueue: {
-        enqueue: (operationId) => {
-          queued.push(operationId);
-          return Promise.resolve();
-        },
-      },
-    });
+    const dependencies = createMemoryDurableApiDependencies({ repository });
     const context = createDurableRequestContext();
     const recommendation = await dependencies.productService.recommendAction(
       context,
@@ -1930,7 +1896,6 @@ describe('durable hosted product vertical', () => {
         ? undefined
         : repository.executionRecord(operationId),
     ).toBeUndefined();
-    expect(queued).toEqual([]);
     await expect(
       dependencies.productService.prepareDraftApproval(context, {
         draftRevisionId: revisionTwo.result.draft.draftRevisionId,
@@ -1941,16 +1906,7 @@ describe('durable hosted product vertical', () => {
 
   it('atomically rejects approval when the draft head advances after the service precheck', async () => {
     const repository = new InterleavingDraftAdvanceRepository();
-    const queued: string[] = [];
-    const dependencies = createMemoryDurableApiDependencies({
-      repository,
-      operationQueue: {
-        enqueue: (operationId) => {
-          queued.push(operationId);
-          return Promise.resolve();
-        },
-      },
-    });
+    const dependencies = createMemoryDurableApiDependencies({ repository });
     const { context, draft, proposal } =
       await preparePendingApproval(dependencies);
     const persistedProposal = await repository.getCurrent<{
@@ -1992,7 +1948,6 @@ describe('durable hosted product vertical', () => {
         ? undefined
         : repository.executionRecord(operationId),
     ).toBeUndefined();
-    expect(queued).toEqual([]);
   });
 
   it('rejects a stale proposal binding without creating approval state', async () => {

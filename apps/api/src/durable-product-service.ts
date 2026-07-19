@@ -400,10 +400,6 @@ function verifiedEvaluatorRetrieval(
   };
 }
 
-export interface OperationQueue {
-  enqueue(operationId: string): Promise<void>;
-}
-
 interface SeedProjection {
   readonly communications: readonly CommunicationSummaryView[];
   readonly details: readonly CommunicationDetailView[];
@@ -957,7 +953,6 @@ export class DurableProductService implements ProductService {
     private readonly retrieval: DurableRetrievalPort,
     private readonly baseUrl: string,
     private readonly now: () => string = () => new Date().toISOString(),
-    private readonly operationQueue?: OperationQueue,
   ) {
     this.#seed = createSeed(baseUrl);
   }
@@ -2122,9 +2117,7 @@ export class DurableProductService implements ProductService {
           'STALE_REVISION',
           'Proposal revision is stale.',
         );
-      const result = this.#approvalResult(proposal);
-      await this.operationQueue?.enqueue(result.operationId);
-      return result;
+      return this.#approvalResult(proposal);
     }
     if (proposal.updatedAt !== input.expectedProposalUpdatedAt)
       throw new ProductServiceError(
@@ -2298,9 +2291,7 @@ export class DurableProductService implements ProductService {
         'Approval transaction conflicted.',
       );
     await this.#assertProposalLineage(context, reloaded.value);
-    const result = this.#approvalResult(reloaded.value);
-    await this.operationQueue?.enqueue(result.operationId);
-    return result;
+    return this.#approvalResult(reloaded.value);
   }
 
   #approvalResult(proposal: StoredProposal): ApproveProposalResult {
