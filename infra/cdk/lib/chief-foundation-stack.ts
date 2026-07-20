@@ -352,6 +352,66 @@ export class ChiefFoundationStack extends cdk.Stack {
       enableTokenRevocation: true,
       preventUserExistenceErrors: true,
     });
+    // Brand the classic hosted sign-in page to match the product (white card, dark
+    // header bar, product lime CTA). Deployed as infrastructure so the styling is
+    // reproducible and survives redeploys rather than living only as an out-of-band
+    // set-ui-customization call. Only the classic hosted-UI customizable classes are
+    // allowed here; a true dark card would require Managed Login branding.
+    const hostedUiCss = `.background-customizable {
+  background-color: #ffffff;
+  border: 1px solid #e3e7ec;
+  border-radius: 14px;
+}
+.banner-customizable {
+  background-color: #0b0f14;
+  padding: 22px 0px 22px 0px;
+}
+.label-customizable {
+  color: #1b2128;
+  font-weight: 600;
+}
+.textDescription-customizable {
+  color: #5b6672;
+}
+.legalText-customizable {
+  color: #8a929c;
+}
+.inputField-customizable {
+  background-color: #f7f9fb;
+  border: 1px solid #d6dbe2;
+  border-radius: 8px;
+  color: #11151a;
+}
+.inputField-customizable:focus {
+  border-color: #7ea92a;
+  outline: 0;
+}
+.submitButton-customizable {
+  background-color: #c8ff72;
+  border: 0;
+  border-radius: 8px;
+  color: #111708;
+  font-weight: 700;
+}
+.submitButton-customizable:hover {
+  background-color: #a9ed45;
+}
+.errorMessage-customizable {
+  color: #8a2a1c;
+  background-color: #fff4f1;
+  border: 1px solid #f4c9bf;
+}`;
+    const hostedUiCustomization = new cognito.CfnUserPoolUICustomizationAttachment(
+      this,
+      'HostedUiCustomization',
+      {
+        userPoolId: userPool.userPoolId,
+        clientId: userPoolClient.userPoolClientId,
+        css: hostedUiCss,
+      },
+    );
+    // UI customization requires the hosted-UI domain to exist first.
+    hostedUiCustomization.node.addDependency(userPoolDomain);
     apiFunction.addEnvironment(
       'COGNITO_USER_POOL_CLIENT_ID',
       userPoolClient.userPoolClientId,
