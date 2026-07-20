@@ -1002,8 +1002,11 @@ describe('Chief product stack', () => {
     const product = new ChiefProductStack(app, 'ChiefProductStack', {
       env: { account: '417242953053', region: 'us-east-2' },
     });
+    // This test builds a second App with BOTH stacks, forcing a full re-bundle of
+    // four Lambda assets (~38s observed), unlike the other tests which reuse the
+    // module-scope template bundled once at import. Budget accordingly.
     expect(foundation.dependencies).toContain(product);
-  }, 20_000);
+  }, 90_000);
 
   it('synthesizes importable CommonJS worker assets', () => {
     const outputDirectory = mkdtempSync(

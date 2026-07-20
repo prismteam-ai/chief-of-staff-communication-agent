@@ -139,9 +139,7 @@ export interface DurableRetrievalPort {
 }
 
 export type DeterministicEvidenceTopic =
-  | 'release_readiness'
-  | 'board_metrics'
-  | 'communication_context';
+  'release_readiness' | 'board_metrics' | 'communication_context';
 export type DurableEvidenceTopic =
   DeterministicEvidenceTopic | 'event_logistics';
 export type DurableEvidenceSourceClass =

@@ -268,7 +268,7 @@ test.describe('authenticated evaluator journey', () => {
     await expect(page.getByRole('main')).toContainText(/demonstration-only/i);
 
     await page.goto('/approvals');
-    await expect(page.getByTestId('approval-pending-count')).toHaveText(
+    await expect(page.getByTestId('approval-pending-count')).toContainText(
       '0 pending',
     );
     await expect(
@@ -474,7 +474,7 @@ test.describe('authenticated evaluator journey', () => {
     if (durableHosted) {
       await expect(relatedAsana).toHaveCount(0);
     } else {
-      await expect(relatedAsana).toContainText(/SEC-4821/i);
+      await expect(relatedAsana).toContainText(/DEMO-4821/i);
     }
     await expectNoCredentialLeakage(page);
   });

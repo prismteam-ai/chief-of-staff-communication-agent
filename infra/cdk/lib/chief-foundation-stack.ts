@@ -401,15 +401,16 @@ export class ChiefFoundationStack extends cdk.Stack {
   background-color: #fff4f1;
   border: 1px solid #f4c9bf;
 }`;
-    const hostedUiCustomization = new cognito.CfnUserPoolUICustomizationAttachment(
-      this,
-      'HostedUiCustomization',
-      {
-        userPoolId: userPool.userPoolId,
-        clientId: userPoolClient.userPoolClientId,
-        css: hostedUiCss,
-      },
-    );
+    const hostedUiCustomization =
+      new cognito.CfnUserPoolUICustomizationAttachment(
+        this,
+        'HostedUiCustomization',
+        {
+          userPoolId: userPool.userPoolId,
+          clientId: userPoolClient.userPoolClientId,
+          css: hostedUiCss,
+        },
+      );
     // UI customization requires the hosted-UI domain to exist first.
     hostedUiCustomization.node.addDependency(userPoolDomain);
     apiFunction.addEnvironment(

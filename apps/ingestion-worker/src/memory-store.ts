@@ -47,11 +47,7 @@ function hash(value: string): string {
 
 function evaluatorRelationTopic(
   canonical: CanonicalWrite,
-):
-  | 'release_readiness'
-  | 'board_metrics'
-  | 'communication_context'
-  | undefined {
+): 'release_readiness' | 'board_metrics' | 'communication_context' | undefined {
   if (canonical.source === 'asana') return undefined;
   if (
     canonical.source === 'gmail' &&
