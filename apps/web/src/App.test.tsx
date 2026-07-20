@@ -129,6 +129,72 @@ const hostedCommunicationItems = [
   }),
 ] as const;
 
+/**
+ * Deterministic stand-in for the hosted 1,120-message corpus: `count` distinct
+ * inbound actionable threads, newest first, so the bounded recommendation
+ * fan-out can be observed without the two evaluator anchor overlays.
+ */
+function buildActionableCorpus(
+  count: number,
+): readonly CommunicationSummaryView[] {
+  const newestMs = Date.UTC(2026, 6, 17, 12, 0, 0);
+  return Array.from({ length: count }, (_, index) => {
+    const label = String(index).padStart(2, '0');
+    return communicationSummaryViewSchema.parse({
+      messageId: `corpus-message-${label}`,
+      messageRevisionId: `corpus-message-revision-${label}`,
+      revision: 1,
+      threadId: `corpus-thread-${label}`,
+      direction: 'inbound',
+      status: index % 2 === 0 ? 'overdue' : 'pending',
+      channel: 'gmail',
+      accountId: 'account-gmail-fixture',
+      brandId: 'brand-northstar',
+      senderDisplayName: 'Corpus Sender',
+      recipientDisplayNames: ['Avery Morgan'],
+      subject: `Corpus actionable thread ${label}`,
+      excerpt: 'Deterministic synthetic evaluator corpus message.',
+      attachmentCount: 0,
+      sourceTimestamp: new Date(newestMs - index * 60_000).toISOString(),
+      productUrl: `https://chief.example/communications/corpus-message-revision-${label}`,
+    });
+  });
+}
+
+function arrangeActionableCorpus(
+  corpus: readonly CommunicationSummaryView[],
+): void {
+  browserApiMock.listCommunications.mockImplementation(
+    (input: { readonly status?: string }) => {
+      if (input.status === 'overdue' || input.status === 'pending') {
+        return Promise.resolve({
+          items: corpus.filter((item) => item.status === input.status),
+          totalCount: corpus.length,
+        });
+      }
+      return Promise.resolve({
+        items: hostedCommunicationItems,
+        totalCount: 1_120,
+        nextCursor: 'page-2',
+      });
+    },
+  );
+}
+
+function buildCorpusRecommendation(messageRevisionId: string) {
+  return {
+    recommendationId: `recommendation-${messageRevisionId}`,
+    sourceMessageRevisionId: messageRevisionId,
+    revision: 1,
+    actionType: 'reply',
+    confidence: 0.82,
+    urgency: 'normal',
+    reasonSummary: 'Reply using the cited evidence for this exact thread.',
+    citations: [{ citationId: `citation-${messageRevisionId}` }],
+    missingFacts: [],
+  };
+}
+
 function arrangeHostedProjection() {
   browserApiMock.systemHealth.mockResolvedValue({
     service: 'chief-api',
@@ -761,6 +827,113 @@ describe('executive evaluator application', () => {
       1,
     );
     expect(screen.queryByText('Taylor Reed')).toBeNull();
+  });
+
+  it('caps the recommendation fan-out and discloses the uninspected threads', async () => {
+    arrangeHostedProjection();
+    const corpus = buildActionableCorpus(40);
+    arrangeActionableCorpus(corpus);
+    browserApiMock.recommendAction.mockImplementation(
+      (messageRevisionId: string) =>
+        Promise.resolve(buildCorpusRecommendation(messageRevisionId)),
+    );
+
+    renderRoute('/recommended');
+
+    expect(await screen.findAllByTestId('recommended-action-row')).toHaveLength(
+      12,
+    );
+    await waitFor(() => {
+      expect(screen.queryByTestId('recommendation-progress')).toBeNull();
+    });
+    expect(browserApiMock.recommendAction).toHaveBeenCalledTimes(12);
+    const scope = screen.getByTestId('recommendation-scope').textContent ?? '';
+    expect(scope).toContain(
+      'Showing 12 server recommendations from the newest 12 of 40 unique actionable threads',
+    );
+    expect(scope).toContain('The remaining 28 actionable threads');
+    expect(scope).toContain('claims nothing about them');
+    // The newest twelve threads are inspected; the rest are never requested.
+    expect(browserApiMock.recommendAction).toHaveBeenCalledWith(
+      'corpus-message-revision-00',
+      1,
+    );
+    expect(browserApiMock.recommendAction).toHaveBeenCalledWith(
+      'corpus-message-revision-11',
+      1,
+    );
+    expect(browserApiMock.recommendAction).not.toHaveBeenCalledWith(
+      'corpus-message-revision-12',
+      1,
+    );
+    expect(screen.getByText('Corpus actionable thread 00')).toBeTruthy();
+    expect(screen.queryByText('Corpus actionable thread 12')).toBeNull();
+  });
+
+  it('renders each recommendation as it arrives instead of one terminal update', async () => {
+    arrangeHostedProjection();
+    const corpus = buildActionableCorpus(40);
+    arrangeActionableCorpus(corpus);
+    const pending = new Map<string, (value: unknown) => void>();
+    browserApiMock.recommendAction.mockImplementation(
+      (messageRevisionId: string) =>
+        new Promise((resolve) => {
+          pending.set(messageRevisionId, resolve);
+        }),
+    );
+
+    renderRoute('/recommended');
+
+    await waitFor(() => {
+      expect(pending.size).toBe(6);
+    });
+    expect(screen.getByTestId('recommendation-progress').textContent).toContain(
+      'Inspected 0 of 12 threads so far',
+    );
+    expect(screen.queryAllByTestId('recommended-action-row')).toHaveLength(0);
+
+    await act(async () => {
+      pending.get('corpus-message-revision-03')?.(
+        buildCorpusRecommendation('corpus-message-revision-03'),
+      );
+      await Promise.resolve();
+    });
+
+    // One settled response renders immediately while eleven are outstanding.
+    expect(await screen.findAllByTestId('recommended-action-row')).toHaveLength(
+      1,
+    );
+    expect(screen.getByText('Corpus actionable thread 03')).toBeTruthy();
+    expect(screen.getByTestId('recommendation-progress').textContent).toContain(
+      'Still reading: 1 of 12 inspected threads have returned',
+    );
+
+    for (let round = 0; round < 20 && pending.size > 0; round += 1) {
+      // Drains one concurrency wave at a time.
+      await act(async () => {
+        for (const [messageRevisionId, resolve] of [...pending]) {
+          pending.delete(messageRevisionId);
+          resolve(buildCorpusRecommendation(messageRevisionId));
+        }
+        await Promise.resolve();
+      });
+    }
+    await waitFor(() => {
+      expect(screen.queryByTestId('recommendation-progress')).toBeNull();
+    });
+    expect(screen.getAllByTestId('recommended-action-row')).toHaveLength(12);
+    // Newest-first order survives the out-of-order incremental arrival.
+    expect(
+      screen
+        .getAllByTestId('recommended-action-row')
+        .map((row) => row.querySelector('strong')?.textContent),
+    ).toEqual(
+      Array.from(
+        { length: 12 },
+        (_, index) =>
+          `Corpus actionable thread ${String(index).padStart(2, '0')}`,
+      ),
+    );
   });
 
   it('shows no fabricated approval cards when no exact proposal ID is known', async () => {

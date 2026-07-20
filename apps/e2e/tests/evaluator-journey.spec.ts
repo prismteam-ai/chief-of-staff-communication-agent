@@ -196,6 +196,214 @@ async function mockFixtureProjection(page: Page): Promise<void> {
   });
 }
 
+/**
+ * Threads the deterministic evaluator identity publishes as typed anchor
+ * overlays. Everything else in the corpus is a non-anchor thread, which only
+ * carries a grounded, cited recommendation because ingestion tags real
+ * per-thread evidence. A non-anchor row on /recommended is therefore the only
+ * assertion that proves the grounding rather than the two hand-authored
+ * anchors.
+ */
+const anchorThreadIds: readonly string[] = [
+  'thread-1',
+  'thread-2',
+  'thread-q3-launch',
+  'thread-board-packet',
+  'thread-tenant-demo-northstar-0000',
+  'thread-tenant-demo-northstar-0007',
+];
+
+const recommendedActionInspectionLimit = 12;
+
+const recommendedCorpusThreadCount = 40;
+
+const recommendedCorpus = Array.from(
+  { length: recommendedCorpusThreadCount },
+  (_, index) => {
+    const label = String(index).padStart(2, '0');
+    return {
+      messageId: `corpus-message-${label}`,
+      messageRevisionId: `corpus-message-revision-${label}`,
+      revision: 1,
+      threadId: `corpus-thread-${label}`,
+      direction: 'inbound',
+      // Deliberately newer than both anchor overlays so the newest-first cap
+      // selects non-anchor threads only.
+      status: index % 2 === 0 ? 'overdue' : 'pending',
+      channel: 'gmail',
+      accountId: 'account-gmail-fixture',
+      brandId: 'brand-northstar',
+      senderDisplayName: 'Corpus Sender',
+      recipientDisplayNames: ['Public evaluator'],
+      subject: `Corpus actionable thread ${label}`,
+      excerpt: 'Deterministic synthetic evaluator corpus message.',
+      attachmentCount: 0,
+      sourceTimestamp: new Date(
+        Date.UTC(2026, 6, 17, 13, 0, 0) - index * 60_000,
+      ).toISOString(),
+      productUrl: `https://chief.example/communications/corpus-message-revision-${label}`,
+    };
+  },
+);
+
+const anchorActionableCommunications = (
+  fixtureProjectionResponses['communications.list'] as {
+    readonly items: readonly { readonly status: string }[];
+  }
+).items;
+
+function buildMockedRecommendation(messageRevisionId: string): unknown {
+  return {
+    recommendation: {
+      schemaVersion: '1',
+      tenantId: 'tenant-demo-northstar',
+      recommendationId: `recommendation-${messageRevisionId}`,
+      revision: 1,
+      sourceMessageRevisionId: messageRevisionId,
+      actionType: 'reply',
+      structuredParameters: {},
+      confidence: 0.82,
+      urgency: 'normal',
+      reasonSummary:
+        'Reply using the retrieved evidence bound to this exact thread.',
+      citations: [
+        {
+          citationId: `citation-${messageRevisionId}`,
+          sourceId: `source-${messageRevisionId}`,
+          sourceVersion: '1',
+          chunkId: `chunk-${messageRevisionId}`,
+          label: 'Communication context',
+          contentHash: 'd'.repeat(64),
+          hydratedUnderAuthorizationEpoch: 1,
+        },
+      ],
+      missingFacts: [],
+      status: 'current',
+      reproducibility: {
+        schemaVersion: '1',
+        selectedProfileManifestHash: 'e'.repeat(64),
+        routeId: 'action-context',
+        modelProfileId: 'fixture-generation',
+        gatewayVersion: '1',
+        promptHash: 'a'.repeat(64),
+        policyHash: 'b'.repeat(64),
+        schemaHash: 'c'.repeat(64),
+        retrievalQueryHash: '0'.repeat(64),
+        retrievalSnapshotManifestHash: '1'.repeat(64),
+        requestHash: '2'.repeat(64),
+        inputTokens: 128,
+        outputTokens: 64,
+        latencyMs: 12,
+        outcome: 'valid',
+      },
+      createdAt: '2026-07-17T13:05:00.000Z',
+    },
+  };
+}
+
+interface MockedTrpcCall {
+  readonly procedure: string;
+  readonly input: unknown;
+}
+
+function readTrpcCalls(
+  method: string,
+  url: URL,
+  postData: string | null,
+): readonly MockedTrpcCall[] {
+  const marker = '/trpc/';
+  const procedures = decodeURIComponent(
+    url.pathname.slice(url.pathname.indexOf(marker) + marker.length),
+  ).split(',');
+  const batched = url.searchParams.get('batch') === '1';
+  const raw =
+    method === 'GET' ? url.searchParams.get('input') : (postData ?? null);
+  const parsed =
+    raw === null || raw.length === 0 ? undefined : (JSON.parse(raw) as unknown);
+  return procedures.map((procedure, index) => ({
+    procedure,
+    input: batched
+      ? (parsed as Record<string, unknown> | undefined)?.[String(index)]
+      : parsed,
+  }));
+}
+
+/**
+ * Extends the shared fixture projection with a corpus large enough to exceed
+ * the bounded recommendation fan-out, plus per-message `agent.recommend`
+ * responses. Never used when hosted URLs are configured.
+ */
+async function mockRecommendedProjection(page: Page): Promise<void> {
+  if (hostedBaseUrlsConfigured)
+    throw new Error(
+      'FIXTURE_ROUTE_INTERCEPTION_FORBIDDEN_WHEN_HOSTED_URLS_ARE_CONFIGURED',
+    );
+  await page.route('**/trpc/**', async (route) => {
+    const request = route.request();
+    const calls = readTrpcCalls(
+      request.method(),
+      new URL(request.url()),
+      request.postData(),
+    );
+    const results = calls.map(({ procedure, input }) => {
+      if (procedure === 'agent.recommend') {
+        const { messageRevisionId } = input as {
+          readonly messageRevisionId: string;
+        };
+        return {
+          result: { data: buildMockedRecommendation(messageRevisionId) },
+        };
+      }
+      if (procedure === 'communications.list') {
+        const status = (input as { readonly status?: string } | undefined)
+          ?.status;
+        if (status === 'pending' || status === 'overdue') {
+          return {
+            result: {
+              data: {
+                items: [
+                  ...recommendedCorpus,
+                  ...anchorActionableCommunications,
+                ].filter((item) => item.status === status),
+                totalCount:
+                  recommendedCorpusThreadCount +
+                  anchorActionableCommunications.length,
+              },
+            },
+          };
+        }
+      }
+      const value = fixtureProjectionResponses[procedure];
+      if (value === undefined) {
+        throw new Error(`Unexpected mocked tRPC procedure: ${procedure}`);
+      }
+      return { result: { data: value } };
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(results),
+    });
+  });
+}
+
+async function expectNonAnchorCitedRecommendation(page: Page): Promise<void> {
+  const rows = page.getByTestId('recommended-action-row');
+  await expect(rows.first()).toBeVisible();
+  const nonAnchorCitedTexts: string[] = [];
+  for (const row of await rows.all()) {
+    const href = (await row.getAttribute('href')) ?? '';
+    const threadId = href.slice(href.lastIndexOf('/') + 1);
+    if (anchorThreadIds.includes(threadId)) continue;
+    const text = (await row.textContent()) ?? '';
+    if (/\b[1-9]\d* citations\b/u.test(text)) nonAnchorCitedTexts.push(text);
+  }
+  expect(
+    nonAnchorCitedTexts.length,
+    'at least one non-anchor thread must render a server recommendation with citations',
+  ).toBeGreaterThan(0);
+}
+
 async function expectModeSpecificReadOnlyBody(page: Page): Promise<void> {
   const persistedCopy = page.getByText(/persisted body is read-only/i);
   const fallbackCopy = page.getByText(/read-only fallback body/i);
@@ -642,6 +850,54 @@ test.describe('authenticated evaluator journey', () => {
     ).toBeVisible();
     await expectNoCredentialLeakage(page);
   });
+
+  test('renders cited non-anchor rows on the recommended actions view', async ({
+    page,
+  }) => {
+    if (!hostedBaseUrlsConfigured) await mockRecommendedProjection(page);
+    await page.goto('/recommended');
+
+    await expect(page.getByTestId('recommended-actions-page')).toBeVisible();
+    await expect(page.getByTestId('recommendation-scope')).toBeVisible();
+    await expectNonAnchorCitedRecommendation(page);
+    await expect(
+      page.getByRole('button', { name: /approve|send|dispatch/i }),
+    ).toHaveCount(0);
+    await expectNoCredentialLeakage(page);
+  });
+
+  test('bounds the recommendation fan-out and discloses uninspected threads', async ({
+    page,
+  }) => {
+    test.skip(
+      hostedBaseUrlsConfigured,
+      'Fixture route interception is excluded from hosted acceptance.',
+    );
+    await mockRecommendedProjection(page);
+    let recommendCallCount = 0;
+    page.on('request', (request) => {
+      recommendCallCount += new URL(request.url()).pathname
+        .split(',')
+        .filter((part) => part.endsWith('agent.recommend')).length;
+    });
+
+    await page.goto('/recommended');
+
+    await expect(page.getByTestId('recommendation-scope')).toContainText(
+      /showing 12 server recommendations from the newest 12 of 42 unique actionable threads/i,
+    );
+    await expect(page.getByTestId('recommendation-scope')).toContainText(
+      /remaining 30 actionable threads were deliberately not inspected/i,
+    );
+    await expect(page.getByTestId('recommended-action-row')).toHaveCount(
+      recommendedActionInspectionLimit,
+    );
+    await expect(page.getByTestId('recommendation-progress')).toHaveCount(0);
+    await expectNonAnchorCitedRecommendation(page);
+    // The bounded fan-out is the point: corpus size must not drive the number
+    // of `agent.recommend` mutations this read-only view issues.
+    expect(recommendCallCount).toBe(recommendedActionInspectionLimit);
+  });
 });
 
 test.describe('navigation, responsive behavior, and keyboard access', () => {
@@ -649,6 +905,7 @@ test.describe('navigation, responsive behavior, and keyboard access', () => {
     '/overview',
     '/inbox',
     '/inbox/thread-q3-launch',
+    '/recommended',
     '/approvals',
     '/connections',
     '/evidence',

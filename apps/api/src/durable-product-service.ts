@@ -5,6 +5,10 @@ import type {
   RecommendationArtifact,
 } from '@chief/agent/application-agent';
 import { deterministicId, immutableHash } from '@chief/agent/canonical';
+import type {
+  ApprovedStyleExample,
+  CommunicationChannel,
+} from '@chief/agent/style';
 
 import {
   attemptIdSchema,
@@ -28,12 +32,14 @@ import {
   serverRequestContextSchema,
   sha256Schema,
   threadContextViewSchema,
+  userIdSchema,
   type ActionPlan,
   type CommunicationDetailView,
   type CommunicationSummaryView,
   type ConnectorStatusView,
   type Citation,
   type RetrievalCandidate,
+  type UserId,
 } from '@chief/contracts';
 import { resetDemoCorpus } from '@chief/demo-fixtures';
 import {
@@ -77,6 +83,18 @@ const EXPIRES_AT = '2099-01-01T00:00:00.000Z';
 const RECIPIENT_DIGEST = `h1_v1_${'A'.repeat(43)}`;
 const RETRIEVAL_ROLE = 'factual';
 const RETRIEVAL_SCORING_PROFILE = 'chief-bounded-fusion-v1';
+const CORPUS_PRIMARY_OWNER_USER_ID = 'user-demo-executive';
+const agentChannelByDemoChannel: Readonly<
+  Record<string, CommunicationChannel>
+> = Object.freeze({
+  gmail: 'email',
+  microsoft_graph: 'email',
+  sms: 'sms',
+  whatsapp: 'whatsapp',
+  x: 'x',
+  linkedin_archive: 'linkedin',
+  future_demo: 'generic',
+});
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -416,6 +434,7 @@ interface SeedProjection {
   readonly details: readonly CommunicationDetailView[];
   readonly connectors: readonly ConnectorStatusView[];
   readonly channelByThread: Readonly<Record<string, string>>;
+  readonly styleExamples: readonly ApprovedStyleExample[];
   readonly marker: HostedProjectionMarkerV2;
 }
 
@@ -558,6 +577,24 @@ function hostedThreadId(threadId: string): string {
   return anchorThreadByCorpusThread.get(threadId) ?? threadId;
 }
 
+/**
+ * The generated corpus owns every primary-tenant connector account under a
+ * single synthetic executive. The hosted projection publishes that tenant under
+ * the public evaluator identity, so the owning corpus user is aliased the same
+ * way accounts and threads are. Any other owner keeps its corpus identity and
+ * therefore never matches a hosted requester: a user without approved examples
+ * of their own must learn an empty profile rather than borrow another voice.
+ */
+function hostedUserId(ownerUserId: string): UserId {
+  return ownerUserId === CORPUS_PRIMARY_OWNER_USER_ID
+    ? USER_ID
+    : userIdSchema.parse(ownerUserId);
+}
+
+function agentChannel(demoChannel: string): CommunicationChannel | undefined {
+  return agentChannelByDemoChannel[demoChannel];
+}
+
 function connectorCapabilities(channel: string) {
   const email = channel === 'gmail' || channel === 'microsoft_graph';
   return {
@@ -578,6 +615,92 @@ function connectorCapabilities(channel: string) {
     reconsentFeedback: false,
     consentWindowEligibility: channel === 'whatsapp',
   } as const;
+}
+
+type HostedCorpus = ReturnType<typeof resetDemoCorpus>;
+
+/**
+ * Projects the generated corpus' approved style examples into hosted style
+ * authority. Every example keeps its corpus body, approval timestamp and
+ * channel; only the tenant and owning user are aliased onto the published
+ * evaluator identity, exactly as communications and connectors already are.
+ */
+function projectStyleExamples(input: {
+  readonly corpus: HostedCorpus;
+  readonly primaryTenant: string;
+  readonly revisions: ReadonlyMap<
+    string,
+    HostedCorpus['messageRevisions'][number]
+  >;
+  readonly accountById: ReadonlyMap<string, HostedCorpus['accounts'][number]>;
+}): readonly ApprovedStyleExample[] {
+  const bodyByRef = new Map(
+    input.corpus.bodies
+      .filter(
+        ({ tenantId, classification }) =>
+          tenantId === input.primaryTenant && classification === 'style',
+      )
+      .map((body) => [body.sourceRef, body]),
+  );
+  const sourceById = new Map<string, HostedCorpus['knowledgeSources'][number]>(
+    input.corpus.knowledgeSources
+      .filter(
+        ({ tenantId, role }) =>
+          tenantId === input.primaryTenant && role === 'style',
+      )
+      .map((source) => [source.sourceId, source]),
+  );
+  const projected = input.corpus.styleExamples
+    .filter(
+      ({ tenantId, approved }) =>
+        tenantId === input.primaryTenant && approved === true,
+    )
+    .map((example) => {
+      const revision = input.revisions.get(example.messageRevisionId);
+      const source = sourceById.get(example.sourceId);
+      const account =
+        revision === undefined
+          ? undefined
+          : input.accountById.get(revision.connectorSnapshot.accountId);
+      const body =
+        source === undefined ? undefined : bodyByRef.get(source.body.objectKey);
+      const channel = agentChannel(example.channel);
+      if (
+        revision === undefined ||
+        source === undefined ||
+        account === undefined ||
+        body === undefined ||
+        channel === undefined ||
+        account.brandId === undefined ||
+        account.brandId !== example.brandId ||
+        account.channel !== example.channel ||
+        revision.direction !== 'outbound'
+      )
+        throw new ProductServiceError(
+          'STALE_REVISION',
+          'The deterministic evaluator style authority is partial.',
+        );
+      return Object.freeze({
+        exampleId: example.sourceId,
+        tenantId: TENANT_ID,
+        userId: hostedUserId(account.ownerUserId),
+        brandId: account.brandId,
+        channel,
+        body: body.bodyText,
+        approvedAt: source.sourceTimestamp,
+        approved: true as const,
+      });
+    })
+    .sort((left, right) => left.exampleId.localeCompare(right.exampleId));
+  if (
+    new Set(projected.map(({ exampleId }) => exampleId)).size !==
+    projected.length
+  )
+    throw new ProductServiceError(
+      'STALE_REVISION',
+      'The deterministic evaluator style authority is ambiguous.',
+    );
+  return Object.freeze(projected);
 }
 
 function createSeed(baseUrl: string): SeedProjection {
@@ -631,6 +754,12 @@ function createSeed(baseUrl: string): SeedProjection {
   const channelCounts = new Map<string, number>();
   const channelByThread: Record<string, string> = {};
   const details: CommunicationDetailView[] = [];
+  const styleExamples = projectStyleExamples({
+    corpus,
+    primaryTenant,
+    revisions,
+    accountById,
+  });
 
   for (const message of corpus.messages.filter(
     ({ tenantId }) => tenantId === primaryTenant,
@@ -894,6 +1023,7 @@ function createSeed(baseUrl: string): SeedProjection {
     details: Object.freeze(details),
     connectors: Object.freeze(connectors),
     channelByThread: Object.freeze(channelByThread),
+    styleExamples,
     marker,
   });
 }
@@ -1028,6 +1158,28 @@ export class DurableProductService implements ProductService {
         'Verified authority for the evaluator resources is required.',
       );
     }
+  }
+
+  /**
+   * Approved style examples the requesting member actually owns. Examples are
+   * matched on the verified actor identity, the brand the draft is authored
+   * under and the delivery channel; a member without their own approved
+   * examples learns an empty profile instead of another member's voice.
+   */
+  #styleExamplesFor(
+    context: ProductRequestContext,
+    channel: CommunicationChannel,
+    brandId: string,
+  ): readonly ApprovedStyleExample[] {
+    if (!context.actor.brandScopes.some((scope) => scope === brandId))
+      return [];
+    return this.#seed.styleExamples.filter(
+      (example) =>
+        example.tenantId === context.actor.tenantId &&
+        example.userId === context.actor.userId &&
+        example.brandId === brandId &&
+        example.channel === channel,
+    );
   }
 
   #sourceForRecommendation(artifact: RecommendationArtifact): {
@@ -1480,21 +1632,7 @@ export class DurableProductService implements ProductService {
       authoredText: detail.authoredText,
       scopeHash: context.retrievalScope?.scopeHash ?? sha256('missing-scope'),
       exactEntityRefs: [retrievalExactEntityRef],
-      styleExamples:
-        context.actor.userId === USER_ID
-          ? [
-              {
-                exampleId: 'approved-style-example-1',
-                tenantId: TENANT_ID,
-                userId: USER_ID,
-                brandId: BRAND_ID,
-                channel: 'email',
-                body: 'Hi,\n\nThanks for the note. I will confirm today.\n\nThanks,',
-                approvedAt: SEED_AT,
-                approved: true,
-              },
-            ]
-          : [],
+      styleExamples: this.#styleExamplesFor(context, 'email', BRAND_ID),
     });
     const recommendation = artifact.recommendation;
     const existing = await this.repository.getCurrent<RecommendationArtifact>(

@@ -16,6 +16,8 @@ import type {
   RecommendationArtifact,
 } from '@chief/agent/application-agent';
 import { deterministicId, immutableHash } from '@chief/agent/canonical';
+import { learnStyleProfile } from '@chief/agent/style';
+import { resetDemoCorpus } from '@chief/demo-fixtures';
 
 import { createDurableRequestContext } from './aws-composition.js';
 import type { ApiDependencies } from './context.js';
@@ -967,8 +969,26 @@ describe('durable hosted product vertical', () => {
       );
     expect(evaluatorArtifact?.value.styleProfile).toMatchObject({
       userId: context.actor.userId,
-      exampleCount: 1,
-      exampleIds: ['approved-style-example-1'],
+      brandId: deterministicEvaluatorIdentityV2.brandId,
+      channel: 'email',
+      exampleCount: 10,
+      exampleIds: [
+        'source-style-0000',
+        'source-style-0001',
+        'source-style-0014',
+        'source-style-0015',
+        'source-style-0028',
+        'source-style-0029',
+        'source-style-0042',
+        'source-style-0043',
+        'source-style-0056',
+        'source-style-0057',
+      ],
+      tone: 'conversational',
+      brevity: 'concise',
+      greeting: 'none',
+      signoff: 'none',
+      emojiAllowed: false,
     });
     const draft = await service.createDraft(requestDerived, {
       recommendationId: recommendation.recommendation.recommendationId,
@@ -988,6 +1008,99 @@ describe('durable hosted product vertical', () => {
       status: 'approved',
       externalEffect: false,
     });
+  });
+
+  it('learns the evaluator style profile from the corpus examples the member actually owns', async () => {
+    const corpus = resetDemoCorpus();
+    const accountById = new Map(
+      corpus.accounts.map((account) => [account.accountId, account]),
+    );
+    const revisionById = new Map<
+      string,
+      (typeof corpus.messageRevisions)[number]
+    >(
+      corpus.messageRevisions.map((revision) => [
+        revision.revisionId,
+        revision,
+      ]),
+    );
+    const sourceById = new Map<
+      string,
+      (typeof corpus.knowledgeSources)[number]
+    >(corpus.knowledgeSources.map((source) => [source.sourceId, source]));
+    const bodyByRef = new Map(
+      corpus.bodies.map((body) => [body.sourceRef, body]),
+    );
+    const ownedExamples = corpus.styleExamples
+      .filter((example) => {
+        const revision = revisionById.get(example.messageRevisionId);
+        const account =
+          revision === undefined
+            ? undefined
+            : accountById.get(revision.connectorSnapshot.accountId);
+        return (
+          account?.ownerUserId === 'user-demo-executive' &&
+          account.brandId === deterministicEvaluatorIdentityV2.brandId &&
+          account.channel === 'gmail'
+        );
+      })
+      .map((example) => {
+        const source = sourceById.get(example.sourceId);
+        const body = bodyByRef.get(source?.body.objectKey ?? '');
+        expect(source).toBeDefined();
+        expect(body?.bodyText).toBeTruthy();
+        return {
+          exampleId: example.sourceId,
+          tenantId: deterministicEvaluatorIdentityV2.tenantId,
+          userId: deterministicEvaluatorIdentityV2.userId,
+          brandId: deterministicEvaluatorIdentityV2.brandId,
+          channel: 'email' as const,
+          body: body?.bodyText ?? '',
+          approvedAt: source?.sourceTimestamp ?? '',
+          approved: true as const,
+        };
+      })
+      .sort((left, right) => left.exampleId.localeCompare(right.exampleId));
+    expect(ownedExamples.length).toBeGreaterThan(1);
+    const expectedProfile = learnStyleProfile({
+      tenantId: deterministicEvaluatorIdentityV2.tenantId,
+      userId: deterministicEvaluatorIdentityV2.userId,
+      brandId: deterministicEvaluatorIdentityV2.brandId,
+      channel: 'email',
+      examples: ownedExamples,
+    });
+
+    const context = createDurableRequestContext();
+    const launchIdentity = deterministicEvaluatorIdentityV1.communications[0];
+    const repository = new MemoryDurableProductRepository();
+    const service = new DurableProductService(
+      repository,
+      topicalBoundaryRetrieval([
+        {
+          key: 'style-launch',
+          text: 'The Friday launch is ready after QA owner confirmation.',
+          exactEntityRef: launchIdentity.retrievalExactEntityRef,
+          topic: 'release_readiness',
+        },
+      ]),
+      'https://chief.example.test',
+    );
+    const recommendation = await service.recommendAction(context, {
+      messageRevisionId: launchIdentity.messageRevisionId,
+      expectedMessageRevision: 1,
+    });
+    const artifact = await repository.getCurrent<RecommendationArtifact>(
+      deterministicEvaluatorIdentityV2.tenantId,
+      'recommendation',
+      recommendation.recommendation.recommendationId,
+    );
+
+    expect(artifact?.value.styleProfile.profileHash).toBe(
+      expectedProfile.profileHash,
+    );
+    expect(artifact?.value.styleProfile.exampleIds).toEqual(
+      ownedExamples.map(({ exampleId }) => exampleId),
+    );
   });
 
   it('never exposes a citation whose source and chunk are absent from the retrieval result', async () => {

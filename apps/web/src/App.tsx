@@ -132,7 +132,10 @@ type RecommendedActionsState =
       readonly kind: 'ready';
       readonly items: readonly RecommendedThread[];
       readonly inspectedCount: number;
+      readonly actionableThreadCount: number;
+      readonly settledCount: number;
       readonly unavailableCount: number;
+      readonly complete: boolean;
     }
   | { readonly kind: 'unavailable'; readonly message: string };
 
@@ -232,6 +235,15 @@ const mobileNavItems = navItems.filter(({ to }) => to !== '/connections');
 
 const conciseRevisionInstruction =
   'Make this draft concise while retaining all cited facts.';
+
+/**
+ * The recommended-actions view asks the server for one recommendation per
+ * actionable thread. That fan-out is bounded to the newest threads so the
+ * corpus size can never drive an unbounded burst of `agent.recommend` calls,
+ * and the omitted remainder is always disclosed in the UI.
+ */
+const recommendedActionInspectionLimit = 12;
+const recommendedActionConcurrency = 6;
 
 const channelLabels: Readonly<Record<string, string>> = Object.freeze({
   gmail: 'Gmail',
@@ -333,7 +345,7 @@ async function listAllCommunicationsByStatus(
 async function mapWithConcurrency<T, R>(
   items: readonly T[],
   concurrency: number,
-  operation: (item: T) => Promise<R>,
+  operation: (item: T, index: number) => Promise<R>,
 ): Promise<readonly R[]> {
   const results = new Array<R>(items.length);
   let nextIndex = 0;
@@ -342,7 +354,7 @@ async function mapWithConcurrency<T, R>(
     while (nextIndex < items.length) {
       const index = nextIndex;
       nextIndex += 1;
-      results[index] = await operation(items[index]!);
+      results[index] = await operation(items[index]!, index);
     }
   };
   const workerCount = Math.min(concurrency, items.length);
@@ -2576,45 +2588,62 @@ function RecommendedActionsPage({
             latestByThread.set(communication.threadId, communication);
           }
         }
-        const communicationsToInspect = [...latestByThread.values()].sort(
+        const actionableThreads = [...latestByThread.values()].sort(
           (left, right) =>
             right.sourceTimestamp.localeCompare(left.sourceTimestamp),
         );
-        const outcomes = await mapWithConcurrency(
+        const communicationsToInspect = actionableThreads.slice(
+          0,
+          recommendedActionInspectionLimit,
+        );
+
+        // Ordered slots keep the newest-first order stable while results
+        // arrive out of order from the bounded concurrent workers.
+        const slots = new Array<RecommendedThread | undefined>(
+          communicationsToInspect.length,
+        );
+        let settledCount = 0;
+        let unavailableCount = 0;
+        const publish = (complete: boolean) => {
+          setState({
+            kind: 'ready',
+            items: slots.flatMap((slot) => (slot === undefined ? [] : [slot])),
+            inspectedCount: communicationsToInspect.length,
+            actionableThreadCount: actionableThreads.length,
+            settledCount,
+            unavailableCount,
+            complete,
+          });
+        };
+
+        if (!active) return;
+        publish(communicationsToInspect.length === 0);
+        await mapWithConcurrency(
           communicationsToInspect,
-          6,
-          async (communication) => {
+          recommendedActionConcurrency,
+          async (communication, index) => {
             try {
               const recommendation = await api.recommendAction(
                 communication.messageRevisionId,
                 communication.revision,
               );
+              if (!active) return;
               if (
-                recommendation.sourceMessageRevisionId !==
+                recommendation.sourceMessageRevisionId ===
                 communication.messageRevisionId
               ) {
-                return { kind: 'unavailable' } as const;
+                slots[index] = { communication, recommendation };
+              } else {
+                unavailableCount += 1;
               }
-              return {
-                kind: 'ready',
-                item: { communication, recommendation },
-              } as const;
             } catch {
-              return { kind: 'unavailable' } as const;
+              if (!active) return;
+              unavailableCount += 1;
             }
+            settledCount += 1;
+            publish(settledCount === communicationsToInspect.length);
           },
         );
-        if (!active) return;
-        setState({
-          kind: 'ready',
-          items: outcomes.flatMap((outcome) =>
-            outcome.kind === 'ready' ? [outcome.item] : [],
-          ),
-          inspectedCount: communicationsToInspect.length,
-          unavailableCount: outcomes.filter(
-            (outcome) => outcome.kind === 'unavailable',
-          ).length,
-        });
       } catch {
         if (!active) return;
         setState({
@@ -2674,25 +2703,70 @@ function RecommendedActionsPage({
             <h3>Recommendations are unavailable</h3>
             <p>{state.message}</p>
           </div>
+        ) : state.items.length === 0 && !state.complete ? (
+          <div
+            className="empty-state"
+            data-testid="recommendation-progress"
+            role="status"
+          >
+            <RefreshCcw
+              className="auth-state-icon--spin"
+              aria-hidden="true"
+              size={24}
+            />
+            <h3>Reading current server recommendations</h3>
+            <p>
+              Inspected {state.settledCount} of {state.inspectedCount} threads
+              so far. Rows appear as each exact server response arrives; nothing
+              is shown before the server returns it.
+            </p>
+          </div>
         ) : state.items.length === 0 ? (
           <div className="empty-state" role="status">
             <CheckCircle2 aria-hidden="true" size={24} />
             <h3>No current recommendation responses</h3>
             <p>
               The server returned no displayable recommendation for the{' '}
-              {state.inspectedCount} actionable threads inspected. No fallback
-              actions were invented.
+              {state.inspectedCount} actionable threads inspected
+              {state.inspectedCount < state.actionableThreadCount
+                ? ` (the newest of ${state.actionableThreadCount} actionable threads)`
+                : ''}
+              . No fallback actions were invented.
             </p>
           </div>
         ) : (
           <>
             <p className="projection-notice" data-testid="recommendation-scope">
-              Showing {state.items.length} server recommendations from{' '}
-              {state.inspectedCount} unique actionable threads.
+              {state.inspectedCount < state.actionableThreadCount ? (
+                <>
+                  Showing {state.items.length} server recommendations from the
+                  newest {state.inspectedCount} of {state.actionableThreadCount}{' '}
+                  unique actionable threads. The remaining{' '}
+                  {state.actionableThreadCount - state.inspectedCount}{' '}
+                  actionable threads were deliberately not inspected here, so
+                  this view claims nothing about them; open them from the inbox.
+                </>
+              ) : (
+                <>
+                  Showing {state.items.length} server recommendations from{' '}
+                  {state.inspectedCount} unique actionable threads.
+                </>
+              )}
               {state.unavailableCount === 0
-                ? ' Every inspected thread returned an exact recommendation.'
-                : ` ${state.unavailableCount} threads did not return a verifiable current recommendation and are omitted.`}
+                ? state.complete
+                  ? ' Every inspected thread returned an exact recommendation.'
+                  : ''
+                : ` ${state.unavailableCount} inspected threads did not return a verifiable current recommendation and are omitted.`}
             </p>
+            {state.complete ? null : (
+              <p
+                className="projection-notice"
+                data-testid="recommendation-progress"
+              >
+                Still reading: {state.settledCount} of {state.inspectedCount}{' '}
+                inspected threads have returned.
+              </p>
+            )}
             <div className="queue-list">
               {state.items.map(({ communication, recommendation }) => (
                 <Link
