@@ -90,6 +90,45 @@ function renderRoute(route: string) {
   );
 }
 
+const hostedCommunicationItems = [
+  communicationSummaryViewSchema.parse({
+    messageId: 'message-1',
+    messageRevisionId: 'message-revision-1-1',
+    revision: 1,
+    threadId: 'thread-1',
+    direction: 'inbound',
+    status: 'overdue',
+    channel: 'gmail',
+    accountId: 'account-gmail-fixture',
+    brandId: 'brand-northstar',
+    senderDisplayName: 'Jordan Lee',
+    recipientDisplayNames: ['Avery Morgan'],
+    subject: 'Friday launch decision',
+    excerpt: 'Can we confirm the Friday launch and the owner for QA?',
+    attachmentCount: 1,
+    sourceTimestamp: '2026-07-17T10:52:00.000Z',
+    productUrl: 'https://chief.example/communications/message-revision-1-1',
+  }),
+  communicationSummaryViewSchema.parse({
+    messageId: 'message-2',
+    messageRevisionId: 'message-revision-2-1',
+    revision: 1,
+    threadId: 'thread-2',
+    direction: 'inbound',
+    status: 'pending',
+    channel: 'microsoft_graph',
+    accountId: 'account-graph-fixture',
+    brandId: 'brand-harbor',
+    senderDisplayName: 'Priya Shah',
+    recipientDisplayNames: ['Avery Morgan'],
+    subject: 'Board update numbers',
+    excerpt: 'Please send the approved pipeline numbers for the board note.',
+    attachmentCount: 0,
+    sourceTimestamp: '2026-07-17T11:06:00.000Z',
+    productUrl: 'https://chief.example/communications/message-revision-2-1',
+  }),
+] as const;
+
 function arrangeHostedProjection() {
   browserApiMock.systemHealth.mockResolvedValue({
     service: 'chief-api',
@@ -122,45 +161,7 @@ function arrangeHostedProjection() {
     },
   });
   browserApiMock.listCommunications.mockResolvedValue({
-    items: [
-      {
-        messageId: 'message-1',
-        messageRevisionId: 'message-revision-1-1',
-        revision: 1,
-        threadId: 'thread-1',
-        direction: 'inbound',
-        status: 'overdue',
-        channel: 'gmail',
-        accountId: 'account-gmail-fixture',
-        brandId: 'brand-northstar',
-        senderDisplayName: 'Jordan Lee',
-        recipientDisplayNames: ['Avery Morgan'],
-        subject: 'Friday launch decision',
-        excerpt: 'Can we confirm the Friday launch and the owner for QA?',
-        attachmentCount: 1,
-        sourceTimestamp: '2026-07-17T10:52:00.000Z',
-        productUrl: 'https://chief.example/communications/message-revision-1-1',
-      },
-      {
-        messageId: 'message-2',
-        messageRevisionId: 'message-revision-2-1',
-        revision: 1,
-        threadId: 'thread-2',
-        direction: 'inbound',
-        status: 'pending',
-        channel: 'microsoft_graph',
-        accountId: 'account-graph-fixture',
-        brandId: 'brand-harbor',
-        senderDisplayName: 'Priya Shah',
-        recipientDisplayNames: ['Avery Morgan'],
-        subject: 'Board update numbers',
-        excerpt:
-          'Please send the approved pipeline numbers for the board note.',
-        attachmentCount: 0,
-        sourceTimestamp: '2026-07-17T11:06:00.000Z',
-        productUrl: 'https://chief.example/communications/message-revision-2-1',
-      },
-    ],
+    items: hostedCommunicationItems,
     totalCount: 1_120,
     nextCursor: 'page-2',
   });
@@ -384,6 +385,39 @@ function arrangeHostedThread() {
       });
     },
   );
+  browserApiMock.getApprovalStatus.mockImplementation((inputId: string) => {
+    if (inputId !== proposalId || preparedBinding === undefined) {
+      return Promise.reject(new Error('PROPOSAL_NOT_FOUND'));
+    }
+    return Promise.resolve({
+      proposalId,
+      status: approvalPersisted ? 'approved' : 'pending_approval',
+      updatedAt: approvalPersisted ? approvedAt : pendingAt,
+    });
+  });
+  browserApiMock.getExecutionStatus.mockImplementation((inputId: string) => {
+    if (inputId !== proposalId || preparedBinding === undefined) {
+      return Promise.reject(new Error('PROPOSAL_NOT_FOUND'));
+    }
+    return Promise.resolve(
+      approvalPersisted
+        ? {
+            proposalId,
+            runtimeMode: 'fixture',
+            effectPolicy: 'effect_disabled',
+            externalEffect: false,
+            status: 'effect_disabled',
+            receipt: durableReceipt,
+          }
+        : {
+            proposalId,
+            runtimeMode: 'fixture',
+            effectPolicy: 'effect_disabled',
+            externalEffect: false,
+            status: 'pending_approval',
+          },
+    );
+  });
 }
 
 describe('executive evaluator application', () => {
@@ -659,24 +693,129 @@ describe('executive evaluator application', () => {
     });
   });
 
-  it('labels approval examples separately from the zero-pending durable projection', async () => {
+  it('enumerates exact server recommendations for actionable threads', async () => {
+    arrangeHostedProjection();
+    browserApiMock.listCommunications.mockImplementation(
+      (input: { readonly status?: string }) => {
+        if (input.status === 'pending') {
+          return Promise.resolve({
+            items: [hostedCommunicationItems[1]],
+            totalCount: 1,
+          });
+        }
+        if (input.status === 'overdue') {
+          return Promise.resolve({
+            items: [hostedCommunicationItems[0]],
+            totalCount: 1,
+          });
+        }
+        return Promise.resolve({
+          items: hostedCommunicationItems,
+          totalCount: 1_120,
+          nextCursor: 'page-2',
+        });
+      },
+    );
+    browserApiMock.recommendAction.mockImplementation(
+      (messageRevisionId: string) =>
+        Promise.resolve({
+          recommendationId: `recommendation-${messageRevisionId}`,
+          sourceMessageRevisionId: messageRevisionId,
+          revision: 1,
+          actionType:
+            messageRevisionId === 'message-revision-1-1'
+              ? 'reply'
+              : 'request_context',
+          confidence: 0.88,
+          urgency:
+            messageRevisionId === 'message-revision-1-1' ? 'high' : 'normal',
+          reasonSummary:
+            messageRevisionId === 'message-revision-1-1'
+              ? 'Reply with the cited launch owner and checkpoint.'
+              : 'Request the approved pipeline source before replying.',
+          citations: [{ citationId: 'citation-server-1' }],
+          missingFacts:
+            messageRevisionId === 'message-revision-1-1'
+              ? []
+              : ['Approved pipeline source'],
+        }),
+    );
+
+    renderRoute('/recommended');
+
+    expect(await screen.findAllByTestId('recommended-action-row')).toHaveLength(
+      2,
+    );
+    expect(screen.getByTestId('recommendation-scope').textContent).toContain(
+      '2 server recommendations from 2 unique actionable threads',
+    );
+    expect(screen.getByText('Friday launch decision')).toBeTruthy();
+    expect(screen.getByText('Board update numbers')).toBeTruthy();
+    expect(screen.getByText(/fixture\/effect-disabled runtime/i)).toBeTruthy();
+    expect(browserApiMock.recommendAction).toHaveBeenCalledWith(
+      'message-revision-1-1',
+      1,
+    );
+    expect(browserApiMock.recommendAction).toHaveBeenCalledWith(
+      'message-revision-2-1',
+      1,
+    );
+    expect(screen.queryByText('Taylor Reed')).toBeNull();
+  });
+
+  it('shows no fabricated approval cards when no exact proposal ID is known', async () => {
     arrangeHostedProjection();
     renderRoute('/approvals');
 
     expect(
       (await screen.findByTestId('approval-pending-count')).textContent,
-    ).toContain('0 pending');
+    ).toContain('0 pending server-wide');
     expect(screen.getByTestId('nav-pending-approval-count').textContent).toBe(
       '0',
     );
     expect(
-      screen.getByRole('heading', {
-        name: 'Prepared effect-disabled examples',
+      await screen.findByRole('heading', {
+        name: 'No verified proposal is known in this tab',
       }),
     ).toBeTruthy();
-    expect(screen.getAllByText(/demonstration only/i)).toHaveLength(3);
-    expect(screen.getAllByText(/effect disabled/i).length).toBeGreaterThan(1);
-    expect(screen.queryByText(/1 side effect/i)).toBeNull();
+    expect(screen.getByText(/no list-proposals endpoint/i)).toBeTruthy();
+    expect(screen.queryByText('Reply to Taylor Reed')).toBeNull();
+    expect(screen.queryByText('Update board packet task')).toBeNull();
+    expect(browserApiMock.getApprovalStatus).not.toHaveBeenCalled();
+  });
+
+  it('enumerates a real prepared proposal and rechecks server status', async () => {
+    arrangeHostedThread();
+    const user = userEvent.setup();
+    renderRoute('/inbox/thread-q3-launch');
+
+    await screen.findByTestId<HTMLTextAreaElement>('draft-editor');
+    await user.click(
+      screen.getByRole('button', { name: 'Create concise revision' }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('approve-action').hasAttribute('disabled'),
+      ).toBe(false);
+    });
+    const approvalsLink = screen
+      .getAllByRole('link', { name: /^Approvals/ })
+      .find((link) => link.getAttribute('href') === '/approvals');
+    expect(approvalsLink).toBeDefined();
+    await user.click(approvalsLink!);
+
+    const row = await screen.findByTestId('approval-queue-row');
+    expect(row.textContent).toContain('proposal-durable-1');
+    expect(row.textContent).toContain('Friday launch decision');
+    expect(row.textContent).toContain('pending approval');
+    expect(row.textContent).toContain('external effects disabled');
+    expect(browserApiMock.getApprovalStatus).toHaveBeenCalledWith(
+      'proposal-durable-1',
+    );
+    expect(browserApiMock.getExecutionStatus).toHaveBeenCalledWith(
+      'proposal-durable-1',
+    );
+    expect(screen.queryByText(/demonstration only/i)).toBeNull();
   });
 
   it('loads an exact pending proposal through the read-only durable route', async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   ArrowRight,
@@ -53,7 +53,9 @@ import { createApiClient, type ApiClient } from '@chief/api-client';
 import {
   createBrowserApi,
   type BrowserApi,
+  type BrowserApprovalStatus,
   type BrowserDashboardMetrics,
+  type BrowserExecutionStatus,
 } from '@chief/browser-api';
 import {
   attachmentIdSchema,
@@ -109,6 +111,44 @@ type ApiState =
 
 type InboxFilter = 'all' | CommunicationStatus;
 type ProjectionSource = 'checking' | 'hosted_durable' | 'local_fallback';
+
+interface KnownProposalReference {
+  readonly proposalId: string;
+  readonly kind: 'draft_reply' | 'asana_action';
+  readonly threadId: string;
+  readonly messageRevisionId: string;
+  readonly subject: string;
+  readonly actionType?: string;
+}
+
+interface RecommendedThread {
+  readonly communication: CommunicationSummaryView;
+  readonly recommendation: ActionRecommendation;
+}
+
+type RecommendedActionsState =
+  | { readonly kind: 'loading' }
+  | {
+      readonly kind: 'ready';
+      readonly items: readonly RecommendedThread[];
+      readonly inspectedCount: number;
+      readonly unavailableCount: number;
+    }
+  | { readonly kind: 'unavailable'; readonly message: string };
+
+interface VerifiedProposal {
+  readonly reference: KnownProposalReference;
+  readonly approval: BrowserApprovalStatus;
+  readonly execution: BrowserExecutionStatus;
+}
+
+type ProposalQueueState =
+  | { readonly kind: 'loading' }
+  | {
+      readonly kind: 'ready';
+      readonly items: readonly VerifiedProposal[];
+      readonly unavailableCount: number;
+    };
 
 interface DurableApprovalReceipt {
   readonly kind: 'effect_disabled';
@@ -182,10 +222,13 @@ interface ProductProjection {
 const navItems = [
   { to: '/overview', label: 'Overview', Icon: BarChart3 },
   { to: '/inbox', label: 'Inbox', Icon: Inbox },
+  { to: '/recommended', label: 'Recommended', Icon: Sparkles },
   { to: '/approvals', label: 'Approvals', Icon: ClipboardCheck },
   { to: '/connections', label: 'Connections', Icon: Waypoints },
   { to: '/evidence', label: 'Evidence & help', Icon: BookOpenCheck },
 ] as const;
+
+const mobileNavItems = navItems.filter(({ to }) => to !== '/connections');
 
 const conciseRevisionInstruction =
   'Make this draft concise while retaining all cited facts.';
@@ -253,6 +296,58 @@ function formatCapabilityName(value: string): string {
   return value
     .replace(/([a-z])([A-Z])/gu, '$1 $2')
     .replace(/^./u, (character) => character.toUpperCase());
+}
+
+function formatActionType(value: string): string {
+  return value
+    .replaceAll('_', ' ')
+    .replace(/^./u, (character) => character.toUpperCase());
+}
+
+async function listAllCommunicationsByStatus(
+  api: BrowserApi,
+  status: 'pending' | 'overdue',
+): Promise<readonly CommunicationSummaryView[]> {
+  const items: CommunicationSummaryView[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
+
+  for (let page = 0; page < 100; page += 1) {
+    const result = await api.listCommunications({
+      status,
+      limit: 100,
+      ...(cursor === undefined ? {} : { cursor }),
+    });
+    items.push(...result.items);
+    if (result.nextCursor === undefined) return items;
+    if (seenCursors.has(result.nextCursor)) {
+      throw new Error('The communication cursor repeated.');
+    }
+    seenCursors.add(result.nextCursor);
+    cursor = result.nextCursor;
+  }
+
+  throw new Error('The bounded communication enumeration was exceeded.');
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  operation: (item: T) => Promise<R>,
+): Promise<readonly R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await operation(items[index]!);
+    }
+  };
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => worker()));
+  return results;
 }
 
 function hostedConnectorToView(
@@ -425,7 +520,7 @@ function AppShell({
           <span>{routeLabel}</span>
         </header>
         <nav className="mobile-nav" aria-label="Mobile navigation">
-          {navItems.map(({ to, label, Icon }) => (
+          {mobileNavItems.map(({ to, label, Icon }) => (
             <NavLink key={to} to={to} aria-label={label}>
               <Icon aria-hidden="true" size={19} />
               <span>{label === 'Evidence & help' ? 'Evidence' : label}</span>
@@ -1129,11 +1224,13 @@ function RoutedThreadPage({
   api,
   apiClient,
   projection,
+  onProposalObserved,
   routeKind = 'inbox',
 }: {
   readonly api: BrowserApi;
   readonly apiClient: ApiClient;
   readonly projection: ProductProjection;
+  readonly onProposalObserved: (proposal: KnownProposalReference) => void;
   readonly routeKind?: ThreadRouteKind;
 }) {
   const { messageRevisionId = '', threadId = '' } = useParams<{
@@ -1244,6 +1341,7 @@ function RoutedThreadPage({
       apiClient={apiClient}
       communication={communication}
       source={projection.source}
+      onProposalObserved={onProposalObserved}
     />
   );
 }
@@ -1269,11 +1367,13 @@ function ProjectionThreadPage({
   apiClient,
   communication,
   source,
+  onProposalObserved,
 }: {
   readonly api: BrowserApi;
   readonly apiClient: ApiClient;
   readonly communication?: CommunicationFixture;
   readonly source: ProjectionSource;
+  readonly onProposalObserved: (proposal: KnownProposalReference) => void;
 }) {
   const navigate = useNavigate();
   const [state, setState] = useState<HostedThreadState>({ kind: 'loading' });
@@ -1370,10 +1470,15 @@ function ProjectionThreadPage({
     if (
       draft === undefined ||
       draft.revision <= 1 ||
+      communication?.threadId === undefined ||
+      communication.messageRevisionId === undefined ||
       preparedDraftRevisionId.current === draft.draftRevisionId
     ) {
       return;
     }
+    const proposalThreadId = communication.threadId;
+    const proposalMessageRevisionId = communication.messageRevisionId;
+    const proposalSubject = communication.subject;
 
     let active = true;
     preparedDraftRevisionId.current = draft.draftRevisionId;
@@ -1384,6 +1489,16 @@ function ProjectionThreadPage({
         expectedDraftRevision: draft.revision,
       })
       .then(async (prepared) => {
+        onProposalObserved({
+          proposalId: prepared.proposalId,
+          kind: 'draft_reply',
+          threadId: proposalThreadId,
+          messageRevisionId: proposalMessageRevisionId,
+          subject: proposalSubject,
+          ...(state.recommendation === undefined
+            ? {}
+            : { actionType: state.recommendation.actionType }),
+        });
         const [status, execution] = await Promise.all([
           apiClient.approvals.status.query({
             proposalId: prepared.proposalId,
@@ -1425,7 +1540,13 @@ function ProjectionThreadPage({
     return () => {
       active = false;
     };
-  }, [apiClient, state.draft]);
+  }, [
+    apiClient,
+    communication,
+    onProposalObserved,
+    state.draft,
+    state.recommendation,
+  ]);
 
   const requestContext = () => {
     if (state.recommendation === undefined) return;
@@ -1557,7 +1678,16 @@ function ProjectionThreadPage({
   };
 
   const prepareAsana = () => {
-    if (state.recommendation === undefined) return;
+    if (
+      state.recommendation === undefined ||
+      communication?.threadId === undefined ||
+      communication.messageRevisionId === undefined
+    )
+      return;
+    const proposalThreadId = communication.threadId;
+    const proposalMessageRevisionId = communication.messageRevisionId;
+    const proposalSubject = communication.subject;
+    const actionType = state.recommendation.actionType;
     void api
       .prepareAsanaAction(
         state.recommendation.recommendationId,
@@ -1565,6 +1695,14 @@ function ProjectionThreadPage({
       )
       .then(
         (proposal) => {
+          onProposalObserved({
+            proposalId: proposal.proposalId,
+            kind: 'asana_action',
+            threadId: proposalThreadId,
+            messageRevisionId: proposalMessageRevisionId,
+            subject: proposalSubject,
+            actionType,
+          });
           setProposalOutcome(
             `${proposal.status}: ${proposal.proposalId}. Direct effect available: no.`,
           );
@@ -2398,6 +2536,205 @@ function isProposalNotFound(error: unknown): boolean {
   );
 }
 
+function RecommendedActionsPage({
+  api,
+  projection,
+}: {
+  readonly api: BrowserApi;
+  readonly projection: ProductProjection;
+}) {
+  const [state, setState] = useState<RecommendedActionsState>({
+    kind: 'loading',
+  });
+
+  useEffect(() => {
+    if (projection.source !== 'hosted_durable') {
+      setState({
+        kind: 'unavailable',
+        message:
+          'Recommended actions require the authenticated hosted API. The local fallback does not fabricate recommendation records.',
+      });
+      return;
+    }
+
+    let active = true;
+    setState({ kind: 'loading' });
+    const load = async () => {
+      try {
+        const [pending, overdue] = await Promise.all([
+          listAllCommunicationsByStatus(api, 'pending'),
+          listAllCommunicationsByStatus(api, 'overdue'),
+        ]);
+        const latestByThread = new Map<string, CommunicationSummaryView>();
+        for (const communication of [...pending, ...overdue]) {
+          if (communication.direction !== 'inbound') continue;
+          const current = latestByThread.get(communication.threadId);
+          if (
+            current === undefined ||
+            communication.sourceTimestamp > current.sourceTimestamp
+          ) {
+            latestByThread.set(communication.threadId, communication);
+          }
+        }
+        const communicationsToInspect = [...latestByThread.values()].sort(
+          (left, right) =>
+            right.sourceTimestamp.localeCompare(left.sourceTimestamp),
+        );
+        const outcomes = await mapWithConcurrency(
+          communicationsToInspect,
+          6,
+          async (communication) => {
+            try {
+              const recommendation = await api.recommendAction(
+                communication.messageRevisionId,
+                communication.revision,
+              );
+              if (
+                recommendation.sourceMessageRevisionId !==
+                communication.messageRevisionId
+              ) {
+                return { kind: 'unavailable' } as const;
+              }
+              return {
+                kind: 'ready',
+                item: { communication, recommendation },
+              } as const;
+            } catch {
+              return { kind: 'unavailable' } as const;
+            }
+          },
+        );
+        if (!active) return;
+        setState({
+          kind: 'ready',
+          items: outcomes.flatMap((outcome) =>
+            outcome.kind === 'ready' ? [outcome.item] : [],
+          ),
+          inspectedCount: communicationsToInspect.length,
+          unavailableCount: outcomes.filter(
+            (outcome) => outcome.kind === 'unavailable',
+          ).length,
+        });
+      } catch {
+        if (!active) return;
+        setState({
+          kind: 'unavailable',
+          message:
+            'The hosted communication queue could not be enumerated safely. No recommendation, draft, proposal, or external effect is shown as successful.',
+        });
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [api, projection.source]);
+
+  return (
+    <div className="page" data-testid="recommended-actions-page">
+      <PageHeader
+        eyebrow="Server recommendations · read first"
+        title="Recommended actions"
+        description="Every row below comes from the typed hosted communication and recommendation APIs. This view creates no draft, proposal, approval, or provider effect."
+        action={
+          <Link className="button button--secondary" to="/approvals">
+            <ClipboardCheck aria-hidden="true" size={17} /> Open approvals
+          </Link>
+        }
+      />
+      <section className="surface approval-queue" aria-live="polite">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Aggregate actionable queue</p>
+            <h2>Current inbound pending and overdue threads</h2>
+          </div>
+          <Sparkles aria-hidden="true" size={20} />
+        </div>
+        <p className="projection-notice">
+          Deterministic non-PII evaluator records · fixture/effect-disabled
+          runtime · recommendation text is displayed only when returned for the
+          exact server message revision.
+        </p>
+        {state.kind === 'loading' ? (
+          <div className="empty-state" role="status">
+            <RefreshCcw
+              className="auth-state-icon--spin"
+              aria-hidden="true"
+              size={24}
+            />
+            <h3>Reading current server recommendations</h3>
+            <p>
+              Enumerating the bounded actionable queue without preparing
+              effects.
+            </p>
+          </div>
+        ) : state.kind === 'unavailable' ? (
+          <div className="empty-state" role="alert">
+            <CircleHelp aria-hidden="true" size={24} />
+            <h3>Recommendations are unavailable</h3>
+            <p>{state.message}</p>
+          </div>
+        ) : state.items.length === 0 ? (
+          <div className="empty-state" role="status">
+            <CheckCircle2 aria-hidden="true" size={24} />
+            <h3>No current recommendation responses</h3>
+            <p>
+              The server returned no displayable recommendation for the{' '}
+              {state.inspectedCount} actionable threads inspected. No fallback
+              actions were invented.
+            </p>
+          </div>
+        ) : (
+          <>
+            <p className="projection-notice" data-testid="recommendation-scope">
+              Showing {state.items.length} server recommendations from{' '}
+              {state.inspectedCount} unique actionable threads.
+              {state.unavailableCount === 0
+                ? ' Every inspected thread returned an exact recommendation.'
+                : ` ${state.unavailableCount} threads did not return a verifiable current recommendation and are omitted.`}
+            </p>
+            <div className="queue-list">
+              {state.items.map(({ communication, recommendation }) => (
+                <Link
+                  className="queue-row"
+                  data-testid="recommended-action-row"
+                  key={recommendation.recommendationId}
+                  to={`/threads/${communication.threadId}`}
+                  state={{
+                    communication: hostedCommunicationToView(communication),
+                  }}
+                >
+                  <QueueIcon status={communication.status} />
+                  <div className="queue-content">
+                    <div>
+                      <strong>
+                        {communication.subject ??
+                          'Communication without subject'}
+                      </strong>
+                      <span>
+                        {Math.round(recommendation.confidence * 100)}%
+                      </span>
+                    </div>
+                    <p>{recommendation.reasonSummary}</p>
+                    <small>
+                      {formatActionType(recommendation.actionType)} ·{' '}
+                      {recommendation.urgency} urgency ·{' '}
+                      {recommendation.citations.length} citations ·{' '}
+                      {recommendation.missingFacts.length} missing facts ·{' '}
+                      {formatChannel(communication.channel)} fixture
+                    </small>
+                  </div>
+                  <StatusChip status={communication.status} />
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function ApprovalStatusPage({ apiClient }: { readonly apiClient: ApiClient }) {
   const { proposalId: routeProposalId } = useParams<{
     proposalId: string;
@@ -2608,117 +2945,199 @@ function ApprovalStatusPage({ apiClient }: { readonly apiClient: ApiClient }) {
 }
 
 function ApprovalsPage({
+  api,
   projection,
+  knownProposals,
 }: {
+  readonly api: BrowserApi;
   readonly projection: ProductProjection;
+  readonly knownProposals: readonly KnownProposalReference[];
 }) {
   const pendingApprovalCount = projection.metrics?.pendingApprovalCount ?? 0;
-  const sourceLabel =
-    projection.source === 'hosted_durable'
-      ? 'Durable hosted projection'
-      : projection.source === 'local_fallback'
-        ? 'Local demonstration projection'
-        : 'Checking durable projection';
+  const pendingApprovalLabel =
+    projection.metrics === undefined
+      ? 'Pending aggregate unavailable'
+      : `${pendingApprovalCount} pending server-wide`;
+  const [state, setState] = useState<ProposalQueueState>({ kind: 'loading' });
+
+  useEffect(() => {
+    if (knownProposals.length === 0) {
+      setState({ kind: 'ready', items: [], unavailableCount: 0 });
+      return;
+    }
+
+    let active = true;
+    setState({ kind: 'loading' });
+    void Promise.all(
+      knownProposals.map(async (reference) => {
+        try {
+          const [approval, execution] = await Promise.all([
+            api.getApprovalStatus(reference.proposalId),
+            api.getExecutionStatus(reference.proposalId),
+          ]);
+          if (
+            approval.proposalId !== reference.proposalId ||
+            execution.proposalId !== reference.proposalId ||
+            (approval.status === 'approved' &&
+              (execution.status !== 'effect_disabled' ||
+                execution.receipt === undefined)) ||
+            (approval.status !== 'approved' &&
+              (execution.status === 'effect_disabled' ||
+                execution.receipt !== undefined))
+          ) {
+            return undefined;
+          }
+          return { reference, approval, execution };
+        } catch {
+          return undefined;
+        }
+      }),
+    ).then((results) => {
+      if (!active) return;
+      const items = results
+        .filter((result): result is VerifiedProposal => result !== undefined)
+        .sort((left, right) =>
+          right.approval.updatedAt.localeCompare(left.approval.updatedAt),
+        );
+      setState({
+        kind: 'ready',
+        items,
+        unavailableCount: results.length - items.length,
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [api, knownProposals]);
 
   return (
-    <div className="page">
+    <div className="page" data-testid="approvals-page">
       <PageHeader
         eyebrow="Human control plane"
-        title="Pending approvals"
-        description="External actions are never approved implicitly. The authenticated evaluator can persist an exact server-authorized approval and immutable outbox receipt, while provider dispatch remains disabled."
+        title="Approvals"
+        description="This queue contains only proposal IDs returned by a real preparation API call since Chief was loaded in this tab, and rechecks their current server status before display. Provider dispatch remains disabled."
+        action={
+          <Link className="button button--secondary" to="/recommended">
+            <Sparkles aria-hidden="true" size={17} /> Review recommendations
+          </Link>
+        }
       />
       <div className="approval-page-grid">
         <section className="surface approval-queue">
           <div className="section-heading">
             <div>
               <p className="eyebrow" data-testid="approval-pending-count">
-                {pendingApprovalCount} pending
+                {pendingApprovalLabel}
               </p>
-              <h2>Prepared effect-disabled examples</h2>
-              <small>{sourceLabel} · demonstration cards below</small>
+              <h2>Verified proposals known in this tab</h2>
             </div>
             <Filter aria-hidden="true" size={18} />
           </div>
-          <Link
-            className="approval-row approval-row--active"
-            to="/inbox/thread-q3-launch"
-          >
-            <span className="queue-icon queue-icon--overdue">
-              <Send size={16} />
-            </span>
-            <div>
-              <strong>Reply to Taylor Reed</strong>
-              <p>Q3 launch risk and customer note</p>
-              <small>
-                Demonstration only · deterministic non-PII Gmail-shaped seed ·
-                prepared revision · effect disabled
-              </small>
+          {state.kind === 'loading' ? (
+            <div className="empty-state" role="status">
+              <RefreshCcw
+                className="auth-state-icon--spin"
+                aria-hidden="true"
+                size={24}
+              />
+              <h3>Checking durable proposal records</h3>
+              <p>No approval or provider request is made while status loads.</p>
             </div>
-            <StatusChip status="overdue" />
-          </Link>
-          <div className="approval-row">
-            <span className="queue-icon">
-              <ListChecks size={16} />
-            </span>
-            <div>
-              <strong>Update board packet task</strong>
-              <p>Operating metrics sensitivity page</p>
-              <small>
-                Demonstration only · prepared outbox · effect disabled
-              </small>
+          ) : state.items.length === 0 ? (
+            <div className="empty-state" role="status">
+              <ClipboardCheck aria-hidden="true" size={24} />
+              <h3>No verified proposal is known in this tab</h3>
+              <p>
+                Open a recommended thread and prepare its exact revised draft.
+                The resulting server proposal will appear here; no demonstration
+                card is substituted.
+              </p>
+              <Link className="button button--secondary" to="/recommended">
+                Open recommended actions
+              </Link>
             </div>
-            <StatusChip status="pending" />
-          </div>
-          <div className="approval-row">
-            <span className="queue-icon">
-              <MessageSquareText size={16} />
-            </span>
-            <div>
-              <strong>Acknowledge partner meeting</strong>
-              <p>Owner context required first</p>
-              <small>
-                Demonstration only · no prepared effect · not approvable
-              </small>
-            </div>
-            <StatusChip status="context" />
-          </div>
+          ) : (
+            state.items.map(({ reference, approval, execution }) => (
+              <Link
+                className="approval-row"
+                data-testid="approval-queue-row"
+                key={reference.proposalId}
+                to={`/approvals/${reference.proposalId}`}
+              >
+                <span className="queue-icon">
+                  {reference.kind === 'draft_reply' ? (
+                    <Send aria-hidden="true" size={16} />
+                  ) : (
+                    <ListChecks aria-hidden="true" size={16} />
+                  )}
+                </span>
+                <div>
+                  <strong>{reference.subject}</strong>
+                  <p className="mono">{reference.proposalId}</p>
+                  <small>
+                    {reference.kind === 'draft_reply'
+                      ? 'Exact draft revision'
+                      : 'Asana action preparation'}
+                    {reference.actionType === undefined
+                      ? ''
+                      : ` · ${formatActionType(reference.actionType)}`}{' '}
+                    · {execution.status} · external effects disabled
+                  </small>
+                </div>
+                <span className="period-chip">
+                  {approval.status.replaceAll('_', ' ')}
+                </span>
+              </Link>
+            ))
+          )}
+          {state.kind === 'ready' && state.unavailableCount > 0 ? (
+            <p className="projection-notice" role="status">
+              {state.unavailableCount} known proposal IDs could not be verified
+              against consistent approval and execution records, so they are
+              omitted.
+            </p>
+          ) : null}
         </section>
         <section className="surface approval-focus">
-          <p className="eyebrow">Selected action</p>
-          <h2>Reply + Asana follow-up</h2>
+          <p className="eyebrow">Enumeration boundary</p>
+          <h2>Count and identities are different API facts</h2>
           <p className="approval-summary">
-            The selected action is bound to a fixture recipient, revision hash,
-            Gmail-shaped renderer, and prepared Asana comment. Neither operation
-            can reach an external endpoint in this session.
+            The dashboard reports the aggregate pending count, but the current
+            product API has no list-proposals endpoint. Chief therefore shows
+            only exact IDs observed from preparation calls in this browser tab
+            since Chief loaded and verifies each one through approval and
+            execution status APIs. It never invents rows to make the count look
+            complete.
           </p>
           <dl className="approval-plan">
             <div>
-              <dt>Recipient</dt>
-              <dd>Taylor Reed · fixture identity</dd>
+              <dt>Server aggregate</dt>
+              <dd>
+                {projection.metrics === undefined
+                  ? 'Unavailable outside the hosted projection'
+                  : `${pendingApprovalCount} pending approvals`}
+              </dd>
             </div>
             <div>
-              <dt>Draft</dt>
-              <dd>Loaded from the exact persisted thread revision</dd>
+              <dt>Known exact IDs</dt>
+              <dd>{knownProposals.length} since Chief loaded in this tab</dd>
             </div>
             <div>
-              <dt>Message outcome</dt>
-              <dd>effect_disabled</dd>
+              <dt>Displayed rows</dt>
+              <dd>
+                {state.kind === 'loading' ? 'Checking' : state.items.length}
+              </dd>
             </div>
             <div>
-              <dt>Asana outcome</dt>
-              <dd>Prepared only</dd>
+              <dt>External effects</dt>
+              <dd>Disabled · no provider dispatch authority</dd>
             </div>
             <div>
-              <dt>Expires</dt>
-              <dd>10:14 UTC · 30 minutes</dd>
+              <dt>Data mode</dt>
+              <dd>Deterministic non-PII fixture records</dd>
             </div>
           </dl>
-          <Link
-            className="button button--primary button--full"
-            to="/inbox/thread-q3-launch"
-          >
-            <PencilLine size={16} /> Open exact revision and durable status
-          </Link>
         </section>
       </div>
     </div>
@@ -3275,6 +3694,9 @@ export function App() {
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string>();
+  const [knownProposals, setKnownProposals] = useState<
+    readonly KnownProposalReference[]
+  >([]);
   const [projection, setProjection] = useState<ProductProjection>({
     source: 'checking',
     communications: [],
@@ -3365,6 +3787,13 @@ export function App() {
     setBootstrapAttempt((attempt) => attempt + 1);
   };
 
+  const observeProposal = useCallback((proposal: KnownProposalReference) => {
+    setKnownProposals((current) => [
+      proposal,
+      ...current.filter(({ proposalId }) => proposalId !== proposal.proposalId),
+    ]);
+  }, []);
+
   const logout = async () => {
     setLoggingOut(true);
     setLogoutError(undefined);
@@ -3376,6 +3805,7 @@ export function App() {
         hostedCommunications: [],
         connectors: [],
       });
+      setKnownProposals([]);
       setApiState({ kind: 'unauthenticated' });
     } catch {
       setLogoutError('Sign out failed. Please try again.');
@@ -3408,11 +3838,16 @@ export function App() {
           element={<InboxPage api={api} projection={projection} />}
         />
         <Route
+          path="/recommended"
+          element={<RecommendedActionsPage api={api} projection={projection} />}
+        />
+        <Route
           path="/inbox/:threadId"
           element={
             <RoutedThreadPage
               api={api}
               apiClient={apiClient}
+              onProposalObserved={observeProposal}
               projection={projection}
             />
           }
@@ -3423,6 +3858,7 @@ export function App() {
             <RoutedThreadPage
               api={api}
               apiClient={apiClient}
+              onProposalObserved={observeProposal}
               projection={projection}
               routeKind="communication"
             />
@@ -3434,6 +3870,7 @@ export function App() {
             <RoutedThreadPage
               api={api}
               apiClient={apiClient}
+              onProposalObserved={observeProposal}
               projection={projection}
               routeKind="thread"
             />
@@ -3445,7 +3882,13 @@ export function App() {
         />
         <Route
           path="/approvals"
-          element={<ApprovalsPage projection={projection} />}
+          element={
+            <ApprovalsPage
+              api={api}
+              knownProposals={knownProposals}
+              projection={projection}
+            />
+          }
         />
         <Route
           path="/approvals/:proposalId"
