@@ -95,7 +95,11 @@ export const canonicalRetrievalSourceAuthoritySchema = z.discriminatedUnion(
         sourceKind: canonicalCommunicationSourceKindSchema,
         relationKind: z.literal('canonical_thread'),
         relationTopic: z
-          .enum(['release_readiness', 'board_metrics'])
+          .enum([
+            'release_readiness',
+            'board_metrics',
+            'communication_context',
+          ])
           .optional(),
       })
       .strict(),

@@ -368,15 +368,15 @@ describe('deterministic evaluator retrieval seed', () => {
 
     expect(result).toEqual({
       schemaVersion: '1',
-      seedVersion: 'chief-evaluator-retrieval-seed.v2',
+      seedVersion: 'chief-evaluator-retrieval-seed.v3',
       seedId:
-        'e6755bf3f2cd96a4b4af9c395e6a9a89775f311c0a14680e9ac700ce31e96af3',
+        '368f484946d71d6ab0aed4e58400344d3b2ab14e26abe7f009fb90c1daa6b683',
       status: 'seeded',
       scopeHash:
         '78f117a88b1fc73ce8c394e2045888eb102fd34ee3e8c77fbaa75cb21d9a8e3d',
       authorizationEpoch: 1,
       manifestHash:
-        '9b2e0f7339885bbb74af029583b2e95b2dcfa23ae6d1dae557da335953e011fe',
+        '8796bdaa1f40fbb6e93ebd914c00678a4e656bcb3a0504ac1563552da0a3bd99',
       generation: 1,
       chunkCount: 1_120,
       sourceCount: 1_120,

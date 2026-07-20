@@ -138,7 +138,10 @@ export interface DurableRetrievalPort {
   ): Promise<boolean>;
 }
 
-export type DeterministicEvidenceTopic = 'release_readiness' | 'board_metrics';
+export type DeterministicEvidenceTopic =
+  | 'release_readiness'
+  | 'board_metrics'
+  | 'communication_context';
 export type DurableEvidenceTopic =
   DeterministicEvidenceTopic | 'event_logistics';
 export type DurableEvidenceSourceClass =
@@ -941,7 +944,7 @@ function communicationListBinding(input: {
 
 function evaluatorTopicForMessage(
   messageRevisionId: string,
-): DeterministicEvidenceTopic | null {
+): DeterministicEvidenceTopic {
   if (
     messageRevisionId ===
     deterministicEvaluatorIdentityV2.anchorOverlays[0].messageRevisionId
@@ -952,7 +955,7 @@ function evaluatorTopicForMessage(
     deterministicEvaluatorIdentityV2.anchorOverlays[1].messageRevisionId
   )
     return 'board_metrics';
-  return null;
+  return 'communication_context';
 }
 
 export class DurableProductService implements ProductService {
@@ -1043,14 +1046,14 @@ export class DurableProductService implements ProductService {
       ({ messageRevisionId }) => messageRevisionId === sourceMessageRevisionId,
     );
     const topic = evaluatorTopicForMessage(sourceMessageRevisionId);
-    if (detail === undefined || identity === undefined || topic === null)
+    if (detail === undefined)
       throw new ProductServiceError(
         'NOT_FOUND',
         'Recommendation source communication was not found.',
       );
     return {
       detail,
-      exactEntityRef: identity.retrievalExactEntityRef,
+      exactEntityRef: identity?.retrievalExactEntityRef ?? detail.threadId,
       topic,
     };
   }
@@ -1412,7 +1415,9 @@ export class DurableProductService implements ProductService {
         const sourceOwned =
           record !== null &&
           exactEntityRef !== undefined &&
-          (topic === 'release_readiness' || topic === 'board_metrics')
+          (topic === 'release_readiness' ||
+            topic === 'board_metrics' ||
+            topic === 'communication_context')
             ? sourceOwnedMetadata(record.evidence, {
                 exactEntityRef,
                 topic,
@@ -1453,21 +1458,13 @@ export class DurableProductService implements ProductService {
         ({ messageRevisionId }) =>
           messageRevisionId === detail.messageRevisionId,
       );
-    if (communicationIdentity === undefined)
-      throw new ProductServiceError(
-        'NOT_FOUND',
-        'Evaluator communication identity was not found.',
-      );
     const topic = evaluatorTopicForMessage(detail.messageRevisionId);
-    if (topic === null)
-      throw new ProductServiceError(
-        'NOT_FOUND',
-        'Evaluator communication topic was not found.',
-      );
+    const retrievalExactEntityRef =
+      communicationIdentity?.retrievalExactEntityRef ?? detail.threadId;
     const agent = createDeterministicDurableAgent({
       repository: this.repository,
       retrieval: verifiedEvaluatorRetrieval(this.retrieval, {
-        exactEntityRef: communicationIdentity.retrievalExactEntityRef,
+        exactEntityRef: retrievalExactEntityRef,
         topic,
       }),
       context,
@@ -1484,7 +1481,7 @@ export class DurableProductService implements ProductService {
       subject: detail.subject,
       authoredText: detail.authoredText,
       scopeHash: context.retrievalScope?.scopeHash ?? sha256('missing-scope'),
-      exactEntityRefs: [communicationIdentity.retrievalExactEntityRef],
+      exactEntityRefs: [retrievalExactEntityRef],
       styleExamples:
         context.actor.userId === USER_ID
           ? [

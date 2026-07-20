@@ -248,7 +248,10 @@ export interface RetrievedEvidence {
   readonly relation: {
     readonly verified: boolean;
     readonly kind: 'canonical_thread' | 'explicit_related_work' | 'unverified';
-    readonly topic?: 'release_readiness' | 'board_metrics';
+    readonly topic?:
+      | 'release_readiness'
+      | 'board_metrics'
+      | 'communication_context';
     readonly exactEntityRefs: readonly string[];
   };
 }

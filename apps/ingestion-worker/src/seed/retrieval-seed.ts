@@ -48,7 +48,7 @@ import {
   hostedEvaluatorChannelCountsV2,
 } from './hosted-corpus.js';
 
-const SEED_VERSION = 'chief-evaluator-retrieval-seed.v2';
+const SEED_VERSION = 'chief-evaluator-retrieval-seed.v3';
 const NON_SECRET_DIGEST_BYTE = 71;
 
 export const evaluatorRetrievalScope = retrievalScopeSchema.parse({

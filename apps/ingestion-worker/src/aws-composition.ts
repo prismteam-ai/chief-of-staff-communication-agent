@@ -65,9 +65,14 @@ function sha256(value: Uint8Array | string): string {
 
 function evaluatorRelationTopic(
   canonical: CanonicalWrite,
-): 'release_readiness' | 'board_metrics' | undefined {
-  if (canonical.source !== 'gmail') return undefined;
+):
+  | 'release_readiness'
+  | 'board_metrics'
+  | 'communication_context'
+  | undefined {
+  if (canonical.source === 'asana') return undefined;
   if (
+    canonical.source === 'gmail' &&
     canonical.thread.threadId ===
       'thr_94f02c2953e5253d7f62f514efffdda78aa29090' &&
     canonical.contentHash ===
@@ -75,13 +80,14 @@ function evaluatorRelationTopic(
   )
     return 'release_readiness';
   if (
+    canonical.source === 'gmail' &&
     canonical.thread.threadId ===
       'thr_309a81cf66fffd346b95eccaf016494a30abd88f' &&
     canonical.contentHash ===
       '49ee3e715f21ab40d361d2aa06f9871cb1bf5cb3731beb9d212f9944e02fb7d0'
   )
     return 'board_metrics';
-  return undefined;
+  return 'communication_context';
 }
 
 function tenantPath(tenantId: string): string {
