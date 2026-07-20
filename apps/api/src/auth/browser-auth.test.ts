@@ -258,7 +258,9 @@ describe('Hosted UI browser authorization flow', () => {
     expect(JSON.stringify(stored)).not.toContain('synthetic.access.value');
 
     const replay = await handler.handle(callback);
-    expect(replay.statusCode).toBe(400);
+    expect(replay.statusCode).toBe(302);
+    expect(replay.headers?.location).toBe('/auth/login');
+    expect(replay.cookies?.[0]).toContain('Max-Age=0');
     expect(exchange).toHaveBeenCalledTimes(1);
   });
 
@@ -293,7 +295,7 @@ describe('Hosted UI browser authorization flow', () => {
     expect(exchange).not.toHaveBeenCalled();
   });
 
-  it('rejects state mismatch and expired state before token exchange', async () => {
+  it('rejects state mismatch but retries an expired state before token exchange', async () => {
     const memory = memoryPersistence();
     const exchange = tokenExchange();
     let currentEpoch = nowEpoch;
@@ -323,7 +325,34 @@ describe('Hosted UI browser authorization flow', () => {
         headers: { cookie: login.cookies?.[0]?.split(';')[0] as string },
       }),
     );
-    expect(expired.statusCode).toBe(400);
+    expect(expired.statusCode).toBe(302);
+    expect(expired.headers?.location).toBe('/auth/login');
+    expect(expired.cookies?.[0]).toContain('Max-Age=0');
+    expect(exchange).not.toHaveBeenCalled();
+  });
+
+  it('retries a well-formed callback whose state cookie is absent', async () => {
+    const memory = memoryPersistence();
+    const exchange = tokenExchange();
+    const handler = createBrowserAuthHandler({
+      configuration,
+      persistence: memory.persistence,
+      accessTokenVerifier: verifier('access'),
+      idTokenVerifier: verifier('id'),
+      fetch: exchange,
+      now,
+    });
+    const { state } = await beginLogin(handler);
+
+    const response = await handler.handle(
+      event('/auth/callback', {
+        query: `code=synthetic-code&state=${state}`,
+      }),
+    );
+
+    expect(response.statusCode).toBe(302);
+    expect(response.headers?.location).toBe('/auth/login');
+    expect(response.cookies?.[0]).toContain('Max-Age=0');
     expect(exchange).not.toHaveBeenCalled();
   });
 

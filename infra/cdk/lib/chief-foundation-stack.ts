@@ -142,7 +142,7 @@ export class ChiefFoundationStack extends cdk.Stack {
       {
         ...fixtureEnvironment,
         AUTH_SESSION_TTL_SECONDS: '900',
-        AUTH_STATE_TTL_SECONDS: '300',
+        AUTH_STATE_TTL_SECONDS: '600',
         COGNITO_DOMAIN: userPoolDomain.baseUrl(),
         COGNITO_ISSUER: cognitoIssuer,
         COGNITO_USER_POOL_ID: userPool.userPoolId,

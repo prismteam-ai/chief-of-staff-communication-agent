@@ -481,7 +481,7 @@ describe('Chief foundation stack', () => {
       PUBLIC_FIXTURE_MODE: 'enabled',
     });
     expect(apiEnvironment?.AUTH_SESSION_TTL_SECONDS).toBe('900');
-    expect(apiEnvironment?.AUTH_STATE_TTL_SECONDS).toBe('300');
+    expect(apiEnvironment?.AUTH_STATE_TTL_SECONDS).toBe('600');
     expect(apiEnvironment?.COGNITO_DOMAIN).toBeDefined();
     expect(apiEnvironment?.COGNITO_ISSUER).toBeDefined();
     expect(apiEnvironment?.COGNITO_USER_POOL_CLIENT_ID).toBeDefined();

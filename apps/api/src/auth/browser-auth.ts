@@ -191,10 +191,12 @@ function singleQueryValue(
   return values.length === 1 ? values[0] : undefined;
 }
 
-function cookieValue(
-  event: APIGatewayProxyEventV2,
-  name: string,
-): string | undefined {
+type CookieRead =
+  | Readonly<{ kind: 'invalid' }>
+  | Readonly<{ kind: 'missing' }>
+  | Readonly<{ kind: 'value'; value: string }>;
+
+function readCookie(event: APIGatewayProxyEventV2, name: string): CookieRead {
   const headersFound = Object.entries(event.headers).filter(
     ([headerName]) => headerName.toLocaleLowerCase('en-US') === 'cookie',
   );
@@ -207,7 +209,7 @@ function cookieValue(
       4_096 ||
     (headersFound.length === 1 && gatewayCookies.length > 0)
   )
-    return undefined;
+    return Object.freeze({ kind: 'invalid' });
   const parts =
     headersFound.length === 1
       ? (headersFound[0]?.[1] ?? '').split(';')
@@ -216,7 +218,17 @@ function cookieValue(
     .map((part) => part.trim())
     .filter((part) => part.startsWith(`${name}=`))
     .map((part) => part.slice(name.length + 1));
-  return matches.length === 1 ? matches[0] : undefined;
+  if (matches.length === 0) return Object.freeze({ kind: 'missing' });
+  if (matches.length > 1) return Object.freeze({ kind: 'invalid' });
+  return Object.freeze({ kind: 'value', value: matches[0] as string });
+}
+
+function cookieValue(
+  event: APIGatewayProxyEventV2,
+  name: string,
+): string | undefined {
+  const result = readCookie(event, name);
+  return result.kind === 'value' ? result.value : undefined;
 }
 
 function sameValue(left: string, right: string): boolean {
@@ -253,6 +265,14 @@ function badRequest(): APIGatewayProxyStructuredResultV2 {
     statusCode: 400,
     headers: noStoreHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify({ error: 'invalid_auth_request' }),
+  };
+}
+
+function retryLogin(): APIGatewayProxyStructuredResultV2 {
+  return {
+    statusCode: 302,
+    headers: noStoreHeaders({ location: '/auth/login' }),
+    cookies: [clearCookie(STATE_COOKIE, 'Lax')],
   };
 }
 
@@ -357,24 +377,25 @@ export function createBrowserAuthHandler(input: {
           return badRequest();
         const code = singleQueryValue(event, 'code');
         const state = singleQueryValue(event, 'state');
-        const stateFromCookie = cookieValue(event, STATE_COOKIE);
+        const stateCookieRead = readCookie(event, STATE_COOKIE);
         if (
           code === undefined ||
           state === undefined ||
-          stateFromCookie === undefined ||
           code.length > 2_048 ||
           state.length !== 43 ||
           !OAUTH_VALUE.test(code) ||
-          !OAUTH_VALUE.test(state) ||
-          !sameValue(state, stateFromCookie)
+          !OAUTH_VALUE.test(state)
         )
           return badRequest();
+        if (stateCookieRead.kind === 'invalid') return badRequest();
+        if (stateCookieRead.kind === 'missing') return retryLogin();
+        if (!sameValue(state, stateCookieRead.value)) return badRequest();
         const nowEpochSeconds = Math.floor(now().getTime() / 1_000);
         const pending = await input.persistence.consumeOAuthState(
           sha256(state),
           nowEpochSeconds,
         );
-        if (pending === undefined) return badRequest();
+        if (pending === undefined) return retryLogin();
         let accessIdentity: VerifiedSessionIdentity;
         let idIdentity: VerifiedSessionIdentity;
         try {
