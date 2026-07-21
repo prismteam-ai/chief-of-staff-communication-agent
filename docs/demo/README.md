@@ -23,4 +23,4 @@ Playwright writes the video beneath
 is intentionally not the authority for pass/fail; the assertions in
 `hosted-durable.spec.ts` remain the executable proof. The checked-in demo copy
 contains no credential value or provider payload:
-[chief-hosted-evaluator.webm](chief-hosted-evaluator.webm).
+[chief-hosted-evaluator.mp4](chief-hosted-evaluator.mp4).
