@@ -521,10 +521,15 @@ describe('Chief foundation stack', () => {
     );
     expect(apiActions).toEqual(
       expect.arrayContaining([
+        // ConditionCheckItem and UpdateItem are required by the transactional
+        // revise and approve paths. Their absence denied every TransactWriteItems
+        // containing an Update, so drafts could be created but never revised.
+        'dynamodb:ConditionCheckItem',
         'dynamodb:DeleteItem',
         'dynamodb:PutItem',
         'dynamodb:Query',
         'dynamodb:TransactWriteItems',
+        'dynamodb:UpdateItem',
         'kms:Decrypt',
         'kms:GenerateDataKey',
         's3:GetObject',
@@ -548,6 +553,10 @@ describe('Chief foundation stack', () => {
     expect(mcpActions).not.toContain('dynamodb:DeleteItem');
     expect(mcpActions).not.toContain('kms:GenerateDataKey');
     expect(mcpActions).not.toContain('sqs:SendMessage');
+    // The MCP function shares only the read-only core-table grant. The widened
+    // transactional verbs must stay on the API function alone.
+    expect(mcpActions).not.toContain('dynamodb:UpdateItem');
+    expect(mcpActions).not.toContain('dynamodb:ConditionCheckItem');
 
     const apiPolicy = JSON.stringify(apiStatements);
     const mcpPolicy = JSON.stringify(mcpStatements);

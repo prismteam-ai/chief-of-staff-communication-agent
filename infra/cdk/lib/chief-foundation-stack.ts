@@ -401,8 +401,27 @@ export class ChiefFoundationStack extends cdk.Stack {
   background-color: #fff4f1;
   border: 1px solid #f4c9bf;
 }`;
-    const hostedUiCustomization =
-      new cognito.CfnUserPoolUICustomizationAttachment(
+    // Opt-in, because CloudFormation cannot adopt a UI customization that already
+    // exists. This pool's customization was applied out-of-band with
+    // set-ui-customization before it was expressed here, so CFN CREATE fails with
+    // "Resource of type 'AWS::Cognito::UserPoolUICustomizationAttachment' with
+    // identifier '<pool> | <client>' already exists", which rolls back the WHOLE
+    // stack and blocks unrelated Lambda/web deploys.
+    //
+    // Cognito has no DeleteUICustomization: clearing the CSS empties the content but
+    // leaves the record (verified - ClientId and CSSVersion still returned), so CFN
+    // still sees it as existing. Adopting it therefore needs a CloudFormation
+    // resource import, not a redeploy.
+    //
+    // Until that import happens the branding stays runtime configuration, applied by
+    // set-ui-customization and byte-identical to hostedUiCss above. Enable with
+    // `-c hostedUiCustomization=true` ONLY against a pool that has no existing
+    // customization, or immediately after importing it.
+    const manageHostedUiCustomization =
+      this.node.tryGetContext('hostedUiCustomization') === true ||
+      this.node.tryGetContext('hostedUiCustomization') === 'true';
+    if (manageHostedUiCustomization) {
+      const hostedUiCustomization = new cognito.CfnUserPoolUICustomizationAttachment(
         this,
         'HostedUiCustomization',
         {
@@ -411,8 +430,9 @@ export class ChiefFoundationStack extends cdk.Stack {
           css: hostedUiCss,
         },
       );
-    // UI customization requires the hosted-UI domain to exist first.
-    hostedUiCustomization.node.addDependency(userPoolDomain);
+      // UI customization requires the hosted-UI domain to exist first.
+      hostedUiCustomization.node.addDependency(userPoolDomain);
+    }
     apiFunction.addEnvironment(
       'COGNITO_USER_POOL_CLIENT_ID',
       userPoolClient.userPoolClientId,
@@ -546,7 +566,25 @@ export class ChiefFoundationStack extends cdk.Stack {
     this.grantCoreTableData(function_, runtime.coreTableArn);
     function_.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ['dynamodb:DeleteItem', 'dynamodb:PutItem'],
+        // UpdateItem and ConditionCheckItem were missing, so any transaction
+        // containing them was denied. The revise path issues an Update on the draft
+        // head (durable-product-repository.ts:602-627) while the create path is
+        // three Puts, so drafts could be created but never revised: agent.reviseDraft
+        // surfaced as INTERNAL_SERVER_ERROR because the raw AccessDenied is not a
+        // TransactionCanceledException and is rethrown unclassified at :642-649.
+        // ConditionCheckItem has the identical latent gap in approveAtomically
+        // (durable-product-repository.ts:695-698) and would fail as soon as the
+        // revise flow unblocked and reached approval.
+        //
+        // The EnclosingOperation condition is retained deliberately: the API still
+        // cannot issue a bare UpdateItem outside a transaction, so this widens the
+        // allowed transactional verbs without widening the blast radius.
+        actions: [
+          'dynamodb:ConditionCheckItem',
+          'dynamodb:DeleteItem',
+          'dynamodb:PutItem',
+          'dynamodb:UpdateItem',
+        ],
         conditions: {
           StringEquals: {
             'dynamodb:EnclosingOperation': 'TransactWriteItems',
