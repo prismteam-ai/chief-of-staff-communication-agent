@@ -421,15 +421,16 @@ export class ChiefFoundationStack extends cdk.Stack {
       this.node.tryGetContext('hostedUiCustomization') === true ||
       this.node.tryGetContext('hostedUiCustomization') === 'true';
     if (manageHostedUiCustomization) {
-      const hostedUiCustomization = new cognito.CfnUserPoolUICustomizationAttachment(
-        this,
-        'HostedUiCustomization',
-        {
-          userPoolId: userPool.userPoolId,
-          clientId: userPoolClient.userPoolClientId,
-          css: hostedUiCss,
-        },
-      );
+      const hostedUiCustomization =
+        new cognito.CfnUserPoolUICustomizationAttachment(
+          this,
+          'HostedUiCustomization',
+          {
+            userPoolId: userPool.userPoolId,
+            clientId: userPoolClient.userPoolClientId,
+            css: hostedUiCss,
+          },
+        );
       // UI customization requires the hosted-UI domain to exist first.
       hostedUiCustomization.node.addDependency(userPoolDomain);
     }
