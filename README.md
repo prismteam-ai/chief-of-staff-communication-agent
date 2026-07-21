@@ -95,7 +95,7 @@ active, stable-epoch manifest inspection and an exact digest of the issued
 source/chunk/version/epoch/evidence rows. A copied hash, altered row, altered
 result object, or head change fails closed with `STALE_REVISION`; there is no
 fixture-identity or app-tier-classification fallback. This citation-proof wiring
-is deployed in commit `f5caa2cfa178961df6d8b68d54e7de7b64d37b83` listed
+is deployed in commit `d7c58a66100b75042591c1ab609b6157d032c46b` listed
 below.
 
 The focused compatibility suite runs the actual production staging writer into
@@ -243,7 +243,7 @@ Expected parent deployment outputs:
 - MCP health: `<ChiefFoundationStack.McpHealthUrl>`
 
 The final deployed commit is
-`f5caa2cfa178961df6d8b68d54e7de7b64d37b83`. Its runtime is live at the URLs
+`d7c58a66100b75042591c1ab609b6157d032c46b`. Its runtime is live at the URLs
 below and includes durable citation-lineage verification, quarantine of stale
 proposal replay/effects, availability-safe passive dashboard counts, and the
 truthful single-citation hosted workflow:
@@ -262,7 +262,7 @@ that session. Evaluator credentials are delivered with the submission and are
 never committed to this repository.
 
 Both CloudFormation stacks are `UPDATE_COMPLETE`. The strict authenticated
-hosted suite finished with **19 runnable checks passed, 2 fixture-only checks
+hosted suite finished with **21 runnable checks passed, 3 fixture-only checks
 skipped, and 0 failed**. It proved HTTP 200 dashboard/API/MCP health, a genuine
 communication-backed citation with no fabricated Asana/SEC-4821 evidence,
 durable revision/approval/effect-disabled receipt reload, and API/MCP parity.

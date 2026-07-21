@@ -234,14 +234,14 @@ pnpm --filter @chief/api-client test
 pnpm --filter @chief/browser-api test
 ```
 
-The assessed `f5caa2cfa178961df6d8b68d54e7de7b64d37b83` runtime release is deployed at
+The assessed `d7c58a66100b75042591c1ab609b6157d032c46b` runtime release is deployed at
 `https://d3hgq3e86d3knk.cloudfront.net`, with the product API at
 `https://prjip3os8i.execute-api.us-east-2.amazonaws.com`. The deployed evaluator
 is authenticated: unauthenticated visitors are redirected to the Cognito Hosted
 UI login at `https://d3hgq3e86d3knk.cloudfront.net/auth/login`, and data
 endpoints return HTTP 401 without a session cookie. Evaluator credentials are
 delivered with the submission and are never committed. The strict authenticated
-hosted run completed with **19 runnable checks passed, 2 fixture-only checks
+hosted run completed with **21 runnable checks passed, 3 fixture-only checks
 skipped, and 0 failed**. The public corpus is deterministic non-PII fixture data
 persisted through the durable composition; it is not authenticated provider
 evidence.

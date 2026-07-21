@@ -2,7 +2,45 @@
 
 ## Unreleased
 
+### Fixed
+
+- Resolved the canonical retrieval entity reference for non-anchor threads
+  (`d7c58a6`). The recommendation paths queried the retrieval index with the
+  product thread id while the index is keyed by the ingestion `thr_` id, so the
+  exact-reference gate discarded every candidate and non-anchor threads returned
+  no evidence at any data scale. Both the create and the lineage-verify paths now
+  resolve the reference through one shared helper, so they cannot drift apart and
+  raise a spurious stale-revision conflict. No integrity guard was relaxed: the
+  exact-reference gate and the citation lineage check are unchanged, and the fix
+  supplies the correct key rather than loosening the lock. Hosted acceptance moved
+  from 20 passed / 1 failed to 21 passed / 0 failed / 3 fixture-only skips, and
+  the deployed product now returns cited recommendations for non-anchor threads.
+- Granted the API the transactional `UpdateItem` and `ConditionCheckItem`
+  permissions it needs on the core table (`fea26e8`). Draft creation is three
+  puts and succeeded, while revision issues an update inside the same
+  transaction and was denied; because the denial is not a transaction-cancelled
+  error it surfaced as an opaque internal error with nothing indicating a
+  permissions cause. The transaction-scoped condition is retained, so the API
+  still cannot issue an unscoped update, and the MCP function remains read-only
+  on that table.
+
 ### Added
+
+- Learned style profiles from the approved corpus examples and bounded the
+  recommended-actions fan-out with an explicit "showing N of M" disclosure
+  (`bf6b928`). Note the shipped corpus gives every approved example the same
+  body text and style tags, so the learned profile currently has no variance to
+  express; the mechanism is real but its demonstration is limited by the fixture
+  data.
+- Branded the classic Cognito hosted sign-in page through the CDK stack
+  (`d1f7c9b`). The attachment is opt-in via the `hostedUiCustomization` context
+  flag, because CloudFormation cannot adopt a UI customization that already
+  exists and attempting to create one aborts the whole stack update.
+
+### Changed
+
+- Made `pnpm verify` runnable end to end and corrected three stale test
+  expectations (`bc45c88`).
 
 - Added a reproducible authenticated hosted demo capture that runs the same
   non-skippable durable Playwright flow and records its evaluator-safe browser

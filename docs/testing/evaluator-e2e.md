@@ -80,7 +80,7 @@ both origins (or one shared API/MCP origin) and must finish with no skipped
 health assertion.
 
 The final deployed commit
-`f5caa2cfa178961df6d8b68d54e7de7b64d37b83` uses
+`d7c58a66100b75042591c1ab609b6157d032c46b` uses
 `https://d3hgq3e86d3knk.cloudfront.net` for the UI and
 `https://prjip3os8i.execute-api.us-east-2.amazonaws.com` for API/MCP. The
 deployed evaluator is authenticated: an unauthenticated visitor is redirected
@@ -88,7 +88,7 @@ to the Cognito Hosted UI login at
 `https://d3hgq3e86d3knk.cloudfront.net/auth/login`, browser sessions are
 cookie-based, and data endpoints return HTTP 401 without a session. Evaluator
 credentials are delivered with the submission and are never committed. The
-strict authenticated hosted run passed all 19 runnable checks, skipped 2
+strict authenticated hosted run passed all 21 runnable checks, skipped 3
 explicitly fixture-only mock-dependent scenarios, and had 0 failures. Neither
 health assertion was skipped. The run required dashboard HTTP 200, one genuine
 communication-backed citation, empty related-Asana results, no Asana/SEC-4821

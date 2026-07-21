@@ -173,7 +173,7 @@ journey. Its representative `tools/call` is `get_approval_status` with the
 browser-created proposal ID; MCP must return structured content exactly equal
 to the API approval status for that same approved proposal.
 
-The assessed `f5caa2cfa178961df6d8b68d54e7de7b64d37b83` runtime release is deployed at
+The assessed `d7c58a66100b75042591c1ab609b6157d032c46b` runtime release is deployed at
 `https://d3hgq3e86d3knk.cloudfront.net`, with MCP at
 `https://prjip3os8i.execute-api.us-east-2.amazonaws.com/mcp`. The deployed
 evaluator is authenticated: unauthenticated browser visitors are redirected to
@@ -181,8 +181,8 @@ the Cognito Hosted UI login at
 `https://d3hgq3e86d3knk.cloudfront.net/auth/login`, and data endpoints return
 HTTP 401 without authentication. Evaluator credentials are delivered with the
 submission and are never committed. After the scoped authoritative evaluator
-reseed, the strict authenticated hosted run completed with **19 runnable checks
-passed, 2 fixture-only checks skipped, and 0 failed**. This is durable fixture
+reseed, the strict authenticated hosted run completed with **21 runnable checks
+passed, 3 fixture-only checks skipped, and 0 failed**. This is durable fixture
 evidence through the production-shaped storage interfaces; it is not live
 provider authentication or external-effect evidence.
 
