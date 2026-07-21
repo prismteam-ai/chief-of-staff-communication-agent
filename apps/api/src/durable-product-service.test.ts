@@ -27,6 +27,7 @@ import {
   type AtomicRevisionWithExactLookup,
 } from './durable-product-repository.js';
 import {
+  canonicalRetrievalThreadRef,
   durableEvaluatorAuthority,
   DurableProductService,
   type DurableManifestBinding,
@@ -126,7 +127,11 @@ function topicalBoundaryRetrieval(
     readonly text: string;
     readonly exactEntityRef: string;
     readonly sourceKind?: 'communication' | 'asana';
-    readonly topic: 'release_readiness' | 'board_metrics' | 'event_logistics';
+    readonly topic:
+      | 'release_readiness'
+      | 'board_metrics'
+      | 'event_logistics'
+      | 'communication_context';
     readonly sourceId?: string;
   }[],
 ): DurableRetrievalPort {
@@ -415,6 +420,91 @@ describe('durable hosted product vertical', () => {
       ),
     ).resolves.toBeUndefined();
   }, 30_000);
+
+  it('resolves an identical canonical thr_ retrieval ref at create and verify for a non-anchor thread', async () => {
+    // Hash-function pin (NOT an identity pin): proves id()/canonicalSha256 stays
+    // byte-equivalent to the ingestion pipeline's stableId by reproducing the
+    // frozen anchor constants. It passes both inputs by hand, so it deliberately
+    // does NOT exercise account aliasing - the nonAnchorRef assertion below is
+    // what covers that, end to end.
+    for (const anchor of deterministicEvaluatorIdentityV2.anchorOverlays)
+      expect(
+        canonicalRetrievalThreadRef(
+          deterministicEvaluatorIdentityV2.accountId,
+          anchor.providerThreadId,
+        ),
+      ).toBe(anchor.retrievalExactEntityRef);
+
+    const nonAnchorMessageRevisionId = messageRevisionIdSchema.parse(
+      'revision-tenant-demo-northstar-0157-00',
+    );
+    // Derived from ['tenant_public_assessment',
+    // 'account-tenant-demo-northstar-whatsapp-03',
+    // 'thread-tenant-demo-northstar-0157'] - i.e. the ALIASED account id, which
+    // is what makes this the real regression guard for the fix.
+    const nonAnchorRef = 'thr_2148d0e93c27b4d8030f8d7660a9d4a6fe53b07e';
+
+    const observed: string[][] = [];
+    // topicalBoundaryRetrieval returns an object literal, so spreading it keeps
+    // verifyManifestBinding intact and assertTrustedManifest will not fail
+    // closed. This would break silently if that helper ever became a class.
+    const backing = topicalBoundaryRetrieval([
+      {
+        key: 'northstar-0157',
+        text: 'Harbor logistics thread 0157 confirms the outstanding owner.',
+        exactEntityRef: nonAnchorRef,
+        topic: 'communication_context',
+      },
+    ]);
+    const retrieval: DurableRetrievalPort = {
+      ...backing,
+      search: (context, input) => {
+        observed.push([...input.exactEntityRefs]);
+        return backing.search(context, input);
+      },
+    };
+
+    const context = createDurableRequestContext();
+    const service = new DurableProductService(
+      new MemoryDurableProductRepository(),
+      retrieval,
+      'https://chief.example.test',
+    );
+
+    const { communication } = await service.getCommunication(context, {
+      messageRevisionId: nonAnchorMessageRevisionId,
+    });
+    // The product id the old code hashed nothing from - it was passed straight
+    // to the exact-ref gate and matched no index entry.
+    expect(communication.threadId).toBe('thread-tenant-demo-northstar-0157');
+
+    const created = await service.recommendAction(context, {
+      messageRevisionId: nonAnchorMessageRevisionId,
+      expectedMessageRevision: communication.revision,
+    });
+
+    // Load-bearing: retrieval matched, so citations exist. citations is
+    // facts.map(({citation}) => citation), so it is non-empty iff the ref was
+    // correct. Deliberately NOT asserting status === 'current': status is
+    // 'request_context' whenever missingFacts is non-empty, which a single
+    // generic fact can legitimately produce, and the hosted E2E only requires a
+    // non-zero citation count.
+    expect(created.recommendation.citations.length).toBeGreaterThan(0);
+
+    // The actual regression guard: every retrieval call - create AND the
+    // lineage verify replay - must use the same canonical ref. If these ever
+    // diverge, the lineage check manufactures STALE_REVISION and permanently
+    // breaks threads that currently work.
+    const replay = await service.recommendAction(context, {
+      messageRevisionId: nonAnchorMessageRevisionId,
+      expectedMessageRevision: communication.revision,
+    });
+    expect(replay.recommendation.recommendationId).toBe(
+      created.recommendation.recommendationId,
+    );
+    expect(observed.length).toBeGreaterThan(1);
+    for (const refs of observed) expect(refs).toEqual([nonAnchorRef]);
+  });
 
   it('binds communication citations to the exact normalized evidence text', async () => {
     const service = new DurableProductService(

@@ -1086,6 +1086,76 @@ function evaluatorTopicForMessage(
   return 'communication_context';
 }
 
+/**
+ * Canonical ingestion thread id, mirroring
+ * apps/ingestion-worker/src/pipeline.ts:490-496
+ *   stableId('thr', [tenantId, accountId, providerThreadId])
+ *
+ * `id()` above is byte-equivalent to the pipeline's `stableId`: both take
+ * sha256 over canonical JSON and slice 40 hex chars. Verified by reproducing
+ * both frozen anchor constants in packages/contracts/src/evaluator.ts.
+ *
+ * Exported so a unit test can pin the hash function against those constants.
+ */
+export function canonicalRetrievalThreadRef(
+  accountId: string,
+  providerThreadId: string,
+): string {
+  return id('thr', [TENANT_ID, accountId, providerThreadId]);
+}
+
+/**
+ * Single source of truth for a communication's retrieval entity ref and topic.
+ *
+ * Both the create site (recommendAction) and the verify site
+ * (#sourceForRecommendation) call this, so they cannot drift apart and
+ * spuriously trip the STALE_REVISION lineage check at :1240-1264. That is a
+ * structural guarantee, not a convention to remember: after this there is no
+ * other expression in the file that resolves a retrieval ref.
+ *
+ * Non-anchor threads previously fell back to `detail.threadId`, the PRODUCT id
+ * (e.g. 'thread-tenant-demo-northstar-0157'), while the retrieval index is
+ * keyed by the ingestion id 'thr_<40 hex>'. The exact-ref gate at :401-406 then
+ * dropped every candidate, so every non-anchor thread returned zero facts and
+ * rendered as 'needs_context' with no citations, at any data scale.
+ *
+ * The fallback is correct because ingestion and this service apply the SAME
+ * account aliasing before hashing: hostedAccountId here (:570-574) is
+ * character-identical to the one in seed/hosted-corpus.ts (:63-67). Hashing the
+ * un-aliased account id yields a different, unmatchable ref.
+ *
+ * KNOWN LIMITATION - the ~12 non-anchor revisions that live inside the two
+ * ANCHOR corpus threads are not fixed by this. The two `hostedThreadId`
+ * functions share a name but not a mapping: this service maps a corpus thread
+ * to `anchor.productThreadAlias` ('thread-1'), whereas seed/hosted-corpus.ts
+ * maps it to `anchor.providerThreadId` ('evaluator-thread-N'). For those
+ * revisions the fallback hashes a product alias as though it were a provider
+ * id and yields a ref matching nothing. That is pre-existing (they resolve to
+ * the equally unmatchable 'thread-1' today), it is not a drift risk (both sites
+ * derive the SAME value, so no STALE_REVISION), and it is deliberately left
+ * alone here rather than changing behaviour for 12 messages. Closing it means
+ * also resolving the overlay by `detail.threadId === overlay.productThreadAlias`
+ * and re-running the full suite.
+ */
+function evaluatorRetrievalIdentity(detail: {
+  readonly messageRevisionId: string;
+  readonly accountId: string;
+  readonly threadId: string;
+}): {
+  readonly exactEntityRef: string;
+  readonly topic: DeterministicEvidenceTopic;
+} {
+  const overlay = deterministicEvaluatorIdentityV2.anchorOverlays.find(
+    ({ messageRevisionId }) => messageRevisionId === detail.messageRevisionId,
+  );
+  return {
+    exactEntityRef:
+      overlay?.retrievalExactEntityRef ??
+      canonicalRetrievalThreadRef(detail.accountId, detail.threadId),
+    topic: evaluatorTopicForMessage(detail.messageRevisionId),
+  };
+}
+
 export class DurableProductService implements ProductService {
   readonly #seed: SeedProjection;
 
@@ -1192,20 +1262,16 @@ export class DurableProductService implements ProductService {
     const detail = this.#seed.details.find(
       ({ messageRevisionId }) => messageRevisionId === sourceMessageRevisionId,
     );
-    const identity = deterministicEvaluatorIdentityV2.anchorOverlays.find(
-      ({ messageRevisionId }) => messageRevisionId === sourceMessageRevisionId,
-    );
-    const topic = evaluatorTopicForMessage(sourceMessageRevisionId);
     if (detail === undefined)
       throw new ProductServiceError(
         'NOT_FOUND',
         'Recommendation source communication was not found.',
       );
-    return {
-      detail,
-      exactEntityRef: identity?.retrievalExactEntityRef ?? detail.threadId,
-      topic,
-    };
+    // `detail` was selected by sourceMessageRevisionId above, so
+    // detail.messageRevisionId is the identical overlay key the previous inline
+    // lookup used. Five call sites consume this ref (:1217, :1350, :1730, :1886,
+    // :2057); all read it from here, so they are all covered.
+    return { detail, ...evaluatorRetrievalIdentity(detail) };
   }
 
   async #assertRecommendationLineage(
@@ -1603,14 +1669,9 @@ export class DurableProductService implements ProductService {
         'STALE_REVISION',
         'Communication revision is stale.',
       );
-    const communicationIdentity =
-      deterministicEvaluatorIdentityV2.anchorOverlays.find(
-        ({ messageRevisionId }) =>
-          messageRevisionId === detail.messageRevisionId,
-      );
-    const topic = evaluatorTopicForMessage(detail.messageRevisionId);
-    const retrievalExactEntityRef =
-      communicationIdentity?.retrievalExactEntityRef ?? detail.threadId;
+    // Same helper as the verify site, so create and verify cannot disagree.
+    const { exactEntityRef: retrievalExactEntityRef, topic } =
+      evaluatorRetrievalIdentity(detail);
     const agent = createDeterministicDurableAgent({
       repository: this.repository,
       retrieval: verifiedEvaluatorRetrieval(this.retrieval, {
