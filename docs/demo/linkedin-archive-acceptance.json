@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "1",
+  "status": "pass",
+  "containerSha256": "05dc082a8e1a03bcc4d376042ec7c0180e0841f607862bb19e54e4d9ebb5f623",
+  "logicalArchiveSha256": "2d475097433da6a147136b2a46dba7ef99cb6075828af9be12c65a2f6c46b90c",
+  "counts": {
+    "entries": 51,
+    "sourceBytes": 8206599,
+    "conversations": 3870,
+    "participants": 7749,
+    "messages": 11249,
+    "attachments": 168,
+    "duplicateRows": 0,
+    "malformedRows": 110
+  },
+  "admission": {
+    "admittedToRag": false,
+    "status": "requires_bounded_preselection_or_opensearch_promotion",
+    "expectedBoundedProfileMaximum": 6000,
+    "promotionEvaluationThreshold": 8000,
+    "hardStopThreshold": 10000
+  },
+  "enforcedDefaultLimits": {
+    "zip": {
+      "maxContainerBytes": 134217728,
+      "maxEntries": 256,
+      "maxCompressedBytes": 134217728,
+      "maxUncompressedBytes": 134217728,
+      "maxCompressionRatio": 200
+    },
+    "importer": {
+      "maxEntries": 256,
+      "maxArchiveBytes": 134217728,
+      "maxCsvBytes": 67108864,
+      "maxRows": 100000,
+      "maxRecordBytes": 1048576,
+      "maxAttachmentsPerMessage": 32
+    }
+  }
+}

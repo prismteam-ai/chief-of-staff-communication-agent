@@ -1,0 +1,198 @@
+# Changelog
+
+## Unreleased
+
+### Fixed
+
+- Resolved the canonical retrieval entity reference for non-anchor threads
+  (`d7c58a6`). The recommendation paths queried the retrieval index with the
+  product thread id while the index is keyed by the ingestion `thr_` id, so the
+  exact-reference gate discarded every candidate and non-anchor threads returned
+  no evidence at any data scale. Both the create and the lineage-verify paths now
+  resolve the reference through one shared helper, so they cannot drift apart and
+  raise a spurious stale-revision conflict. No integrity guard was relaxed: the
+  exact-reference gate and the citation lineage check are unchanged, and the fix
+  supplies the correct key rather than loosening the lock. Hosted acceptance moved
+  from 20 passed / 1 failed to 21 passed / 0 failed / 3 fixture-only skips, and
+  the deployed product now returns cited recommendations for non-anchor threads.
+- Granted the API the transactional `UpdateItem` and `ConditionCheckItem`
+  permissions it needs on the core table (`fea26e8`). Draft creation is three
+  puts and succeeded, while revision issues an update inside the same
+  transaction and was denied; because the denial is not a transaction-cancelled
+  error it surfaced as an opaque internal error with nothing indicating a
+  permissions cause. The transaction-scoped condition is retained, so the API
+  still cannot issue an unscoped update, and the MCP function remains read-only
+  on that table.
+
+### Added
+
+- Learned style profiles from the approved corpus examples and bounded the
+  recommended-actions fan-out with an explicit "showing N of M" disclosure
+  (`bf6b928`). Note the shipped corpus gives every approved example the same
+  body text and style tags, so the learned profile currently has no variance to
+  express; the mechanism is real but its demonstration is limited by the fixture
+  data.
+- Branded the classic Cognito hosted sign-in page through the CDK stack
+  (`d1f7c9b`). The attachment is opt-in via the `hostedUiCustomization` context
+  flag, because CloudFormation cannot adopt a UI customization that already
+  exists and attempting to create one aborts the whole stack update.
+
+### Changed
+
+- Made `pnpm verify` runnable end to end and corrected three stale test
+  expectations (`bc45c88`).
+
+- Added a reproducible authenticated hosted demo capture that runs the same
+  non-skippable durable Playwright flow and records its evaluator-safe browser
+  surface without credentials or provider payloads.
+- Added redacted live Asana acceptance evidence for one controlled create,
+  preconditioned update, direct verification, and immediate idempotent replay;
+  this remains separate from the effect-disabled public evaluator.
+- Added the versioned `chief-retrieval.v1` durable staging, snapshot, head, and
+  query-vector contract shared by production ingestion and bounded retrieval.
+- Added deterministic, bounded compaction with duplicate replay handling,
+  contiguous publication sequences, snapshot validation, stale-writer
+  rejection, and tenant/scope/authorization-epoch CAS head promotion.
+- Added the canonical secret-independent `retrievalDynamoKeyV1` seam for every
+  durable retrieval producer/reader, separate from canonical ingestion's
+  secret-backed digest `KeyCodec`.
+- Added bounded consistent DynamoDB Query enumeration of registered staging and
+  register-triggered compaction/CAS retry, so production registration produces
+  a queryable promoted head without a separate fixture or parent compactor.
+- Added an independent monotonic DynamoDB authorization-epoch authority;
+  epoch-qualified staging/query keys; transactional epoch `ConditionCheck` plus
+  head CAS; consistent reader rechecks; old-epoch denial; and fresh-snapshot
+  promotion on epoch transition.
+- Added snapshot-contained canonical evidence text/hash, citation labels, exact
+  entity references, active/tombstoned state, and mutation ordinals; cross-head
+  replay does not advance sequence, and older upserts cannot supersede a newer
+  tombstone.
+- Added focused compatibility coverage from the production staging writer
+  through compaction, promoted-head health, persisted query vectors, bounded
+  retrieval, and citations.
+- Added durable hosted product composition over DynamoDB/S3 retrieval,
+  repository-backed recommendations and immutable draft revisions, and a fixed
+  deterministic non-PII evaluator projection.
+- Added atomic draft persistence: the immutable revision, exact-revision lookup,
+  and conditional draft-head compare-and-swap commit in one transaction.
+- Added server-authorized draft approval, immutable approval/execution records,
+  approval-outbox enqueueing, terminal effect-disabled receipts, and reloadable
+  approval/execution status.
+- Added canonical immutable-value conflict comparison and idempotent replay for
+  recommendation, the exact current draft (including revision 2), proposal,
+  approval, and receipt state.
+- Added exact post-approval `prepareDraft` replay of the persisted approved
+  proposal, action-plan binding, and approval timestamp.
+- Added post-commit SQS recovery: an enqueue failure leaves approval readable,
+  and retry re-enqueues the stable operation ID while returning the same
+  effect-disabled receipt.
+- Added API/MCP composition parity: non-test Lambda defaults use the shared
+  durable `@chief/api` service, while tests use production-shaped in-memory
+  adapters rather than the fixture-only public service.
+- Added a stable `TOOL_UNAVAILABLE` result for the retained legacy MCP
+  `submit_for_approval` name; the HTTPS product API remains the only exact-draft
+  approval path.
+- Added a read-only persisted draft body and the sole evaluator revision action,
+  **Create concise revision**, which submits exactly `Make this draft concise
+while retaining all cited facts.` before approve/receipt/reload; also added
+  functional connection and evidence routes, truthful fixed-scope copy, and
+  explicit local-fallback restrictions.
+- Added a real durable-service regression proving revision 2 has a different,
+  shorter body while preserving citations, factual-citation count, passed
+  validation, and exact restart reload.
+- Added a non-skippable `test:hosted` Playwright configuration that requires
+  separate deployed UI, API, and MCP HTTPS URLs and exercises MCP
+  `initialize`, `tools/list`, and `tools/call`.
+- Added public-host validation for hosted URLs, including private/local/
+  reserved/unspecified hostname and IP rejection, and hosted MCP proof of the
+  same browser-created approval proposal.
+- Established the reproducible Node 22.18.0, Corepack 0.34.6, pnpm 10.33.0,
+  TypeScript 5.9.3, strict ESM/NodeNext Turborepo foundation.
+- Added modular communication/provider contracts, durable persistence,
+  bounded RAG, cited agent/draft generation, approval/outbox execution guards,
+  typed tRPC/browser clients, remote MCP, responsive UI, Playwright E2E, and
+  two-stack AWS CDK deployment.
+
+### Changed
+
+- Propagated authorized fused retrieval scores into cited evidence and made
+  confidence/abstention respond deterministically to relevance. Low-relevance
+  evidence now requests context while strong exact topical evidence increases
+  confidence; the deployed authenticated suite remains 19/19 runnable checks.
+- Relabeled every realistic-looking work item in the browser-only fallback as
+  the synthetic `DEMO-4821` fixture. The deployed CloudFront bundle contains
+  neither `SEC-4821` nor an `Asana ·` citation label; strict authenticated
+  hosted acceptance remains 19 passed, 2 intentional fixture-only skips, and
+  0 failed.
+- Removed app-tier synthesis of the SEC-4821 Asana citation and synthetic
+  retrieval-manifest hash. Public knowledge and agent citations now fail closed
+  unless one unique retrieved candidate/evidence tuple matches the citation's
+  source, chunk, version, authorization epoch, and evidence-text hash; genuine
+  indexed Asana evidence remains eligible.
+- Removed evaluator-only Asana identity/text and legacy communication/Asana
+  source-class upgrades from the durable product service and its memory
+  retrieval composition. Related Asana work there remains empty until
+  source-owned durable evidence exists; the separate legacy fixture service is
+  unchanged by this patch.
+- Added a fail-closed manifest-proof capability to the retrieval port. A source
+  adapter must verify the exact tenant/scope/epoch/role/scoring/manifest binding
+  and issued source/chunk/version/epoch/evidence rows; a 64-hex string alone is
+  rejected. The AWS composition now rechecks the bounded index's active stable-
+  epoch manifest and rejects altered or non-issued results.
+- Added read-time citation-lineage revalidation for persisted recommendations
+  and drafts before replay, revision, context/Asana handoff, or approval
+  preparation. Legacy artifacts containing absent or untrusted citations are
+  quarantined with `STALE_REVISION` instead of being returned by ID.
+- Extended that quarantine to proposal replay, approval, approval status,
+  and execution status. A persisted proposal must still resolve through its
+  exact draft and current trusted recommendation to the same deterministic
+  action plan before it can be returned, approved, or queued. Passive dashboard
+  counts omit lineage-stale historical proposals so quarantine cannot make the
+  healthy corpus unavailable; malformed indexes, missing indexed state, and
+  non-stale authority errors still fail closed.
+- Recalibrated the documented confidence heuristic so one model-selected,
+  source-owned cited fact with no missing facts reaches the unchanged `0.67`
+  action threshold. Zero evidence, missing facts, unsupported fact IDs, prompt
+  injection, and model degradation still abstain or fail closed.
+- Strengthened hosted acceptance to require an empty related-Asana result and
+  no Asana/SEC-4821 citation when the durable corpus contains none, while
+  proving the genuine communication citation is identical across API and MCP.
+- Replaced public browser access with Cognito Hosted UI authorization-code
+  login using S256 PKCE, single-use OAuth state, opaque server-side sessions,
+  strict-origin CSRF checks, and revocable `__Host-` cookies. API Gateway v2
+  cookie arrays are accepted only as an unambiguous bounded carrier; mixed,
+  duplicate, oversized, or bearer-plus-cookie authority fails closed.
+- Added an autonomous DynamoDB-stream outbox relay with a sole-producer queue
+  policy, conditional claims, idempotent retries, terminal effect-disabled
+  receipts, bounded failure evidence, and no public direct-effect surface.
+- Replaced fixture-only hosted API and MCP defaults with the durable product
+  composition while retaining the deterministic fixed-scope evaluator data.
+- Replaced the incompatible arbitrary-sequence retrieval delta with immutable
+  staged mutations that compact into the exact NDJSON/binary32 snapshot format
+  consumed by the existing bounded reader.
+- Replaced React-local approval authority with exact-revision, server-derived,
+  durable approval and status operations.
+- Updated evaluator copy to define deterministic, recorded, blocked, and live
+  capability modes without claiming public OAuth or account setup. The hosted
+  deterministic seed exposes seven source-owned connector cards: six fixture
+  cards and one manual/recorded LinkedIn archive card. Blocked remains a mode
+  definition with zero hosted evidence and does not create an additional card.
+
+### Safety boundaries
+
+- Public API/MCP authority is fixed by the server; caller tenant, account,
+  provider, storage, and credential authority is rejected.
+- Public external effects, provider effects, work-management effects, and model
+  effects remain disabled. A successful public approval records only an
+  `effect_disabled` receipt.
+- Controlled real-effect, reconciliation, and feedback-closure paths are
+  library contracts with automated tests only. No durable reconciliation or
+  feedback-closure adapter is wired into the deployed Lambda composition; the
+  public worker uses the effect-disabled sink.
+- MCP has no approval or direct-effect tool. The browser local fallback cannot
+  approve and is forbidden in strict hosted acceptance.
+- The parent workflow deployed and verified commit
+  `f5caa2cfa178961df6d8b68d54e7de7b64d37b83`. Both stacks are
+  `UPDATE_COMPLETE`; the deterministic retrieval seed returned
+  `already_current`; dashboard metrics returned HTTP 200; and strict hosted
+  acceptance passed 19 runnable checks with 2 fixture-only skips and 0 failures.

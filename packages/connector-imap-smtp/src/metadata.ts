@@ -1,0 +1,40 @@
+import { connectorDescriptorSchema } from '@chief/contracts/connectors';
+const descriptor = connectorDescriptorSchema.parse({
+  schemaVersion: '1',
+  connectorId: 'imap-smtp',
+  descriptorVersion: '1.0.0-scaffold',
+  provider: 'generic-imap-smtp',
+  channel: 'email',
+  connectionStrategy: 'credential',
+  credentialReferenceClass: 'kms-envelope-mailbox-credential',
+  authorizationScopes: [],
+  capabilities: {
+    read: false,
+    send: false,
+    webhook: false,
+    poll: false,
+    threads: false,
+    attachments: false,
+    deliveryFeedback: false,
+    multipleAccounts: false,
+    historicalBackfill: false,
+    externalEffect: false,
+    replyCorrelation: false,
+    complaintFeedback: false,
+    unsubscribeFeedback: false,
+    optOutFeedback: false,
+    reconsentFeedback: false,
+    consentWindowEligibility: false,
+  },
+  supportedRuntimeModes: ['disabled'],
+  constraints: [
+    'Fallback candidate scaffold; no TLS/auth/read/send implementation or live certification is present.',
+  ],
+});
+export const imapSmtpConnectorMetadata = Object.freeze({
+  ...descriptor,
+  authorizationScopes: Object.freeze([...descriptor.authorizationScopes]),
+  capabilities: Object.freeze({ ...descriptor.capabilities }),
+  supportedRuntimeModes: Object.freeze([...descriptor.supportedRuntimeModes]),
+  constraints: Object.freeze([...descriptor.constraints]),
+});

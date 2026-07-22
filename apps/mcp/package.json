@@ -1,0 +1,40 @@
+{
+  "name": "@chief/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/handler.d.ts",
+      "default": "./dist/handler.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src"
+  },
+  "dependencies": {
+    "@chief/agent": "workspace:*",
+    "@chief/api": "workspace:*",
+    "@chief/approval-outbox": "workspace:*",
+    "@chief/connector-core": "workspace:*",
+    "@chief/contracts": "workspace:*",
+    "@chief/domain": "workspace:*",
+    "@chief/model-gateway": "workspace:*",
+    "@chief/observability": "workspace:*",
+    "@chief/persistence-dynamodb": "workspace:*",
+    "@chief/rag": "workspace:*",
+    "@chief/work-management-asana": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "aws-jwt-verify": "5.2.1",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@chief/tsconfig": "workspace:*",
+    "@types/aws-lambda": "8.10.162",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

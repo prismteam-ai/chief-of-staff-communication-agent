@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "policyId": "chief-of-staff-secret-policy-v1",
+  "scan": {
+    "maxFileBytes": 26214400,
+    "maxFindings": 1000
+  },
+  "valueFreeEnvironmentTemplates": {
+    "ruleId": "value-free-env-template",
+    "paths": [
+      ".env.example"
+    ]
+  },
+  "prohibitedPaths": [
+    {
+      "id": "root-local-config",
+      "regex": "^\\.config(?:/|$)",
+      "allow": []
+    },
+    {
+      "id": "dotenv-file",
+      "regex": "(?:^|/)(?:\\.env(?:\\.[^/]+)?|[^/]+\\.env)$",
+      "allow": [
+        "^\\.env\\.example$"
+      ]
+    },
+    {
+      "id": "aws-credential-store",
+      "regex": "(?:^|/)\\.aws/(?:credentials|config)$",
+      "allow": []
+    },
+    {
+      "id": "access-key-or-credential-csv",
+      "regex": "(?:^|/)[^/]*(?:access[-_ ]?keys?|credentials?)[^/]*\\.csv$",
+      "allow": []
+    },
+    {
+      "id": "private-key-file",
+      "regex": "(?:^|/)(?:id_(?:rsa|dsa|ecdsa|ed25519)|[^/]+\\.(?:pem|key|p8|p12|pfx|jks|keystore|kdbx))$",
+      "allow": []
+    },
+    {
+      "id": "token-or-credential-export",
+      "regex": "(?:^|/)(?:credentials?|tokens?|(?:github|oauth|access|auth)[-_]tokens?(?:[-_][^/]*)?|client[-_]?secret(?:[-_][^/]*)?|client[-_]?(?:credential|auth)[-_]export(?:[-_][^/]*)?|service[-_]?account(?:[-_][^/]*)?|application_default_credentials|(?:auth|credential)[-_]export(?:[-_][^/]*)?)\\.(?:json|ya?ml|csv|txt)$",
+      "allow": []
+    },
+    {
+      "id": "credential-bearing-dotfile",
+      "regex": "(?:^|/)\\.(?:npmrc|pypirc|netrc)$",
+      "allow": []
+    },
+    {
+      "id": "in-repository-secret-fixture",
+      "regex": "(?:^|/)tools/secret-policy/(?:fixtures?|test-data)(?:/|$)",
+      "allow": []
+    }
+  ],
+  "secretPatterns": [
+    {
+      "id": "aws-access-key-id",
+      "regex": "\\b(?:AKIA|ASIA|AIDA|AROA|AIPA|ANPA|ANVA|ASCA)[A-Z0-9]{16}\\b",
+      "flags": "g"
+    },
+    {
+      "id": "aws-secret-access-key-assignment",
+      "regex": "(?:^|[^\\r\\nA-Za-z0-9_])(?:AWS_SECRET_ACCESS_KEY|aws_secret_access_key)[ \\t]*[:=][ \\t]*[\"']?[A-Za-z0-9/+]{40}[\"']?",
+      "flags": "gim"
+    },
+    {
+      "id": "github-token",
+      "regex": "\\b(?:gh[pousr]_[A-Za-z0-9_]{36,255}|github_pat_[A-Za-z0-9_]{20,255})\\b",
+      "flags": "g"
+    },
+    {
+      "id": "openai-api-key",
+      "regex": "\\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}\\b",
+      "flags": "g"
+    },
+    {
+      "id": "google-api-or-oauth-secret",
+      "regex": "\\b(?:AIza[0-9A-Za-z_-]{35}|GOCSPX-[A-Za-z0-9_-]{20,})\\b",
+      "flags": "g"
+    },
+    {
+      "id": "slack-token",
+      "regex": "\\b(?:xox[baprs]-[0-9A-Za-z-]{10,}|xapp-[0-9A-Za-z-]{10,})\\b",
+      "flags": "g"
+    },
+    {
+      "id": "slack-webhook",
+      "regex": "https://hooks\\.slack\\.com/services/T[A-Za-z0-9]+/B[A-Za-z0-9]+/[A-Za-z0-9]+",
+      "flags": "g"
+    },
+    {
+      "id": "jwt",
+      "regex": "\\beyJ[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]{8,}\\b",
+      "flags": "g"
+    },
+    {
+      "id": "pem-private-key",
+      "regex": "-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----",
+      "flags": "g"
+    },
+    {
+      "id": "presigned-request-signature",
+      "regex": "(?:X-Amz-Signature|X-Goog-Signature)=[A-Fa-f0-9]{32,}",
+      "flags": "gi"
+    },
+    {
+      "id": "high-confidence-secret-assignment",
+      "regex": "(?:^|[^\\r\\nA-Za-z0-9_])(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|webhook[_-]?secret|password|passwd)[ \\t]*[:=][ \\t]*[\"']?[A-Za-z0-9+/_=-]{16,}[\"']?",
+      "flags": "gim"
+    }
+  ]
+}

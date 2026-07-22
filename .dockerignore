@@ -1,0 +1,16 @@
+.git
+.github
+.assessment
+.config
+node_modules
+**/node_modules
+**/dist
+cdk.out
+**/cdk.out
+.turbo
+**/.turbo
+coverage
+**/coverage
+.env
+.env.*
+!.env.example

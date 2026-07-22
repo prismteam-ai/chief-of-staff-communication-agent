@@ -1,0 +1,54 @@
+{
+  "name": "@chief/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/router.ts",
+      "default": "./dist/router.js"
+    },
+    "./handler": {
+      "types": "./src/handler.ts",
+      "default": "./dist/handler.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm --workspace-root exec turbo run build --filter=@chief/api^... && vitest run src"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1089.0",
+    "@aws-sdk/client-s3": "3.1089.0",
+    "@aws-sdk/client-sqs": "3.1089.0",
+    "@aws-sdk/lib-dynamodb": "3.1089.0",
+    "@chief/agent": "workspace:*",
+    "@chief/approval-outbox": "workspace:*",
+    "@chief/connector-core": "workspace:*",
+    "@chief/connector-gmail": "workspace:*",
+    "@chief/connector-imap-smtp": "workspace:*",
+    "@chief/connector-linkedin": "workspace:*",
+    "@chief/connector-microsoft-graph": "workspace:*",
+    "@chief/connector-twilio": "workspace:*",
+    "@chief/connector-x": "workspace:*",
+    "@chief/contracts": "workspace:*",
+    "@chief/demo-fixtures": "workspace:*",
+    "@chief/domain": "workspace:*",
+    "@chief/model-gateway": "workspace:*",
+    "@chief/observability": "workspace:*",
+    "@chief/persistence-dynamodb": "workspace:*",
+    "@chief/rag": "workspace:*",
+    "@chief/work-management-asana": "workspace:*",
+    "@trpc/server": "11.18.0",
+    "aws-jwt-verify": "5.2.1",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@chief/tsconfig": "workspace:*",
+    "@types/aws-lambda": "8.10.162",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

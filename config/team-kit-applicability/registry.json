@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "registryId": "chief-team-kit-applicability-v1",
+  "assessment": "chief-of-staff-communication-agent",
+  "decisionDate": "2026-07-17",
+  "stateSemantics": {
+    "adopted": "Selected without an assessment-specific topology change; this state alone is not evidence of a live integration.",
+    "adapted": "Selected with a documented assessment-specific boundary; this state alone is not evidence of a live integration.",
+    "not_applicable": "Excluded by the current architecture with an explicit trigger for reconsideration.",
+    "exception_pending": "Required or conditionally required evidence, access, or approval is unresolved and blocks the stated release claim."
+  },
+  "entries": [
+    {
+      "id": "shared_ci_cd",
+      "capability": "Team Kit shared CI/CD workflows",
+      "sourceContract": "skills/integrate-ci-cd/SKILL.md",
+      "state": "adapted",
+      "implementationStatus": "decision_recorded_not_implemented",
+      "accessStatus": "not_verified",
+      "owner": "Metagross / repository foundation owner",
+      "evidence": [
+        "Team Kit requires six justfile recipes and shared caller workflows.",
+        "The approved operating model limits assessment pull-request CI to validation only and denies deploy, inherited secrets, and OIDC in that workflow."
+      ],
+      "trigger": "COS-015 and COS-019 implement and test the six-recipe validation-only caller after the monorepo toolchain is frozen.",
+      "dataHandlingImpact": "Validation jobs receive source code only; provider credentials, repository secrets, OIDC tokens, and deployment authority are excluded.",
+      "releaseConsequence": "The release may claim only validation-only CI after the caller is implemented and exercised; it may not claim the organization shared workflow or deployment path is live from this decision record.",
+      "liveConformanceClaimed": false
+    },
+    {
+      "id": "lexicon",
+      "capability": "Lexicon CloudWatch metric registration",
+      "sourceContract": "skills/apply-engineering-guidelines/rules/observability-metrics.md",
+      "state": "exception_pending",
+      "implementationStatus": "external_exception_unresolved",
+      "accessStatus": "not_verified",
+      "owner": "Observability owner with Spring Oaks repository authority",
+      "evidence": [
+        "Team Kit requires every emitted custom metric to be registered in Lexicon.",
+        "No external repository access or mutation is authorized in COS-008, and no application metric exists in this pre-scaffold wave."
+      ],
+      "trigger": "Before COS-013 metric implementation or any release claim, obtain exact repository authority or a separately approved assessment exception with a metric-to-registry ledger.",
+      "dataHandlingImpact": "Metric definitions must contain aggregate operational metadata only and must not contain message content, personal identifiers, or credential values.",
+      "releaseConsequence": "A release emitting unregistered custom metrics cannot claim full Golden Path conformance; the exception must close or remain an explicit release limitation.",
+      "liveConformanceClaimed": false
+    },
+    {
+      "id": "main_dashboard",
+      "capability": "Main Dashboard metric visualization",
+      "sourceContract": "skills/apply-engineering-guidelines/rules/observability-metrics.md",
+      "state": "exception_pending",
+      "implementationStatus": "external_exception_unresolved",
+      "accessStatus": "not_verified",
+      "owner": "Observability owner with Main Dashboard repository authority",
+      "evidence": [
+        "Team Kit requires every emitted custom metric to have a Main Dashboard widget.",
+        "No external dashboard access or mutation is authorized in COS-008, and no application metric exists in this pre-scaffold wave."
+      ],
+      "trigger": "Before COS-013 metric implementation or any release claim, obtain exact dashboard authority or a separately approved assessment exception tied to the same metric ledger as Lexicon.",
+      "dataHandlingImpact": "Dashboard widgets may expose aggregate service and SLA measures only; executive content, raw tenant identifiers, and secrets are prohibited.",
+      "releaseConsequence": "A release emitting metrics without verified dashboard coverage cannot claim full Golden Path observability conformance.",
+      "liveConformanceClaimed": false
+    },
+    {
+      "id": "pagerduty",
+      "capability": "PagerDuty critical-failure and DLQ alerting",
+      "sourceContract": "skills/apply-engineering-guidelines/rules/observability-pagerduty-alerting.md and observability-dlq-alarms.md",
+      "state": "exception_pending",
+      "implementationStatus": "external_exception_unresolved",
+      "accessStatus": "not_verified",
+      "owner": "Reliability/on-call owner",
+      "evidence": [
+        "Team Kit requires production critical failures to page PagerDuty and each DLQ to use one self-resolving alarm.",
+        "No PagerDuty service, routing authority, secret reference, or external mutation is verified or authorized in COS-008."
+      ],
+      "trigger": "Before any production effect-capable release, verify service ownership and a Secrets Manager reference, synthesize the single-alarm lifecycle, and exercise trigger plus automatic resolution under the deployment gates.",
+      "dataHandlingImpact": "Incident payloads must contain opaque correlation IDs and safe operational summaries only; message bodies, recipients, tenant identifiers, and routing keys are excluded.",
+      "releaseConsequence": "Critical production paths remain release-blocked for full Golden Path conformance until the live alert lifecycle is verified or a separately approved non-production exception applies.",
+      "liveConformanceClaimed": false
+    },
+    {
+      "id": "aws_oidc",
+      "capability": "GitHub Actions AWS OIDC deployment authentication",
+      "sourceContract": "skills/integrate-ci-cd/SKILL.md",
+      "state": "exception_pending",
+      "implementationStatus": "external_exception_unresolved",
+      "accessStatus": "not_verified",
+      "owner": "Deployment security owner",
+      "evidence": [
+        "Team Kit shared deployment workflows require id-token write permission and target-account bootstrap context.",
+        "The approved assessment pull-request workflow is validation-only; account identity, qualifier, trust policy, and deployment authority are intentionally not inspected in COS-008."
+      ],
+      "trigger": "Before enabling any CI deployment, separately verify target account, role trust, least-privilege policy, region, bootstrap qualifier, environment binding, and exact deployment approval.",
+      "dataHandlingImpact": "OIDC must provide short-lived, audience-bound credentials; static AWS access keys, administrator exports, and credential values in repository or workflow state are prohibited.",
+      "releaseConsequence": "CI must not request an OIDC token or deploy while this exception is pending; deployment conformance cannot be claimed from validation-only CI.",
+      "liveConformanceClaimed": false
+    },
+    {
+      "id": "langsmith",
+      "capability": "LangSmith agent telemetry",
+      "sourceContract": "plan Team Kit applicability decision for agent turns",
+      "state": "exception_pending",
+      "implementationStatus": "conditional_exception_unresolved",
+      "accessStatus": "not_verified",
+      "owner": "AI privacy and observability owner",
+      "evidence": [
+        "The approved architecture makes LangSmith conditional on package compatibility, account access, redaction, retention, and data-handling approval.",
+        "No account, retention setting, data-processing terms, or sanitized trace contract is verified in COS-008."
+      ],
+      "trigger": "Before exporting any agent trace, approve a field allowlist, retention and deletion policy, tenant boundary, package compatibility, account access, and a synthetic-data validation run.",
+      "dataHandlingImpact": "Executive messages, attachments, provider tokens, raw prompts, and personal identifiers must not leave AWS without explicit authorization and a verified redaction contract.",
+      "releaseConsequence": "LangSmith remains disabled; CloudWatch evidence must not be labeled equivalent, and prompt-iteration conformance cannot cite LangSmith until the exception closes.",
+      "liveConformanceClaimed": false
+    },
+    {
+      "id": "chat_sdk",
+      "capability": "Team Kit Chat SDK Asana-triggered agent surface",
+      "sourceContract": "Team Kit build-ai-agents Chat SDK and Asana applicability clause",
+      "state": "not_applicable",
+      "implementationStatus": "excluded_by_architecture",
+      "accessStatus": "not_required",
+      "owner": "Chief agent architecture owner",
+      "evidence": [
+        "The approved core ingests communication-provider events and models Asana through a sibling WorkManagementConnector.",
+        "No Asana-triggered conversational agent surface is selected for the core product."
+      ],
+      "trigger": "Reassess only if an approved Asana-triggered agent/chat surface is added; if selected, use the Team Kit adapter and state pattern rather than a hand-built bot.",
+      "dataHandlingImpact": "No Chat SDK state or external data flow exists in the selected core architecture.",
+      "releaseConsequence": "The release must not claim Chat SDK adoption; its absence does not block the current connector-and-approval architecture.",
+      "liveConformanceClaimed": false
+    },
+    {
+      "id": "agentcore_memory",
+      "capability": "Amazon Bedrock AgentCore Memory",
+      "sourceContract": "Team Kit build-ai-agents memory applicability clause",
+      "state": "not_applicable",
+      "implementationStatus": "excluded_by_architecture",
+      "accessStatus": "not_required",
+      "owner": "Chief knowledge and agent architecture owner",
+      "evidence": [
+        "Canonical messages, threads, authorized retrieval snapshots, and audit records are the system of record.",
+        "No separate Chat SDK conversational session requiring AgentCore Memory is selected for the core product."
+      ],
+      "trigger": "Reassess only if a distinct conversational-agent session with lifecycle semantics not covered by canonical communication history is approved.",
+      "dataHandlingImpact": "No duplicate memory store or additional executive-content retention boundary is introduced.",
+      "releaseConsequence": "The release must not claim AgentCore Memory adoption; adding it later requires a retention, deletion, tenancy, and source-of-truth decision.",
+      "liveConformanceClaimed": false
+    }
+  ]
+}

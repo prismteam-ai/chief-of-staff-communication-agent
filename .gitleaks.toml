@@ -1,0 +1,69 @@
+title = "Chief of Staff repository secret policy"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "aws-access-key-id"
+description = "AWS access key identifier"
+regex = '''\b(?:AKIA|ASIA|AIDA|AROA|AIPA|ANPA|ANVA|ASCA)[A-Z0-9]{16}\b'''
+keywords = ["AKIA", "ASIA"]
+
+[[rules]]
+id = "aws-secret-access-key-assignment"
+description = "Assigned AWS secret access key"
+regex = '''(?i)(?:AWS_SECRET_ACCESS_KEY|aws_secret_access_key)[ \t]*[:=][ \t]*["']?[A-Za-z0-9/+]{40}["']?'''
+keywords = ["AWS_SECRET_ACCESS_KEY", "aws_secret_access_key"]
+
+[[rules]]
+id = "github-token"
+description = "GitHub token"
+regex = '''\b(?:gh[pousr]_[A-Za-z0-9_]{36,255}|github_pat_[A-Za-z0-9_]{20,255})\b'''
+keywords = ["ghp_", "github_pat_"]
+
+[[rules]]
+id = "openai-api-key"
+description = "OpenAI API key"
+regex = '''\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}\b'''
+keywords = ["sk-"]
+
+[[rules]]
+id = "google-api-or-oauth-secret"
+description = "Google API key or OAuth client secret"
+regex = '''\b(?:AIza[0-9A-Za-z_-]{35}|GOCSPX-[A-Za-z0-9_-]{20,})\b'''
+keywords = ["AIza", "GOCSPX-"]
+
+[[rules]]
+id = "slack-token"
+description = "Slack token"
+regex = '''\b(?:xox[baprs]-[0-9A-Za-z-]{10,}|xapp-[0-9A-Za-z-]{10,})\b'''
+keywords = ["xox", "xapp-"]
+
+[[rules]]
+id = "slack-webhook"
+description = "Slack incoming-webhook URL"
+regex = '''https://hooks\.slack\.com/services/T[A-Za-z0-9]+/B[A-Za-z0-9]+/[A-Za-z0-9]+'''
+keywords = ["hooks.slack.com"]
+
+[[rules]]
+id = "jwt"
+description = "JSON Web Token"
+regex = '''\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{8,}\b'''
+keywords = ["eyJ"]
+
+[[rules]]
+id = "pem-private-key"
+description = "PEM private-key header"
+regex = '''-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----'''
+keywords = ["PRIVATE KEY"]
+
+[[rules]]
+id = "presigned-request-signature"
+description = "AWS or Google pre-signed request signature"
+regex = '''(?i)(?:X-Amz-Signature|X-Goog-Signature)=[A-Fa-f0-9]{32,}'''
+keywords = ["X-Amz-Signature", "X-Goog-Signature"]
+
+[[rules]]
+id = "high-confidence-secret-assignment"
+description = "High-confidence named secret assignment"
+regex = '''(?i)(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|webhook[_-]?secret|password|passwd)[ \t]*[:=][ \t]*["']?[A-Za-z0-9+/_=-]{16,}["']?'''

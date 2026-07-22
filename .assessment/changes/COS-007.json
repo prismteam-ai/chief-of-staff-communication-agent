@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "taskId": "COS-007",
+  "correctionId": "COS-007-correction-02",
+  "state": "satisfied",
+  "branch": "assessment/chief-communications",
+  "baseHead": "6f785d03ec14d163b327d638c34e9a730a5daa3e",
+  "nativeParent": "/root",
+  "nativeChild": "/root/metagross",
+  "model": "gpt-5.6-sol",
+  "reasoning": "ultra",
+  "approval": "never",
+  "sandbox": "disabled/danger-full-access",
+  "parentReadOnly": true,
+  "implementationPaths": [
+    ".gitignore",
+    ".env.example",
+    ".gitleaks.toml",
+    "tools/secret-policy/policy.json",
+    "tools/secret-policy/scan.mjs",
+    "tools/secret-policy/ingest-env.mjs",
+    "tools/secret-policy/self-test.mjs",
+    "tools/secret-policy/README.md",
+    "docs/operations/credential-ingress.md",
+    ".assessment/changes/COS-007.json"
+  ],
+  "correction02ChangedPaths": [
+    ".gitleaks.toml",
+    "tools/secret-policy/policy.json",
+    "tools/secret-policy/self-test.mjs",
+    "tools/secret-policy/README.md",
+    "docs/operations/credential-ingress.md",
+    ".assessment/changes/COS-007.json"
+  ],
+  "assignmentRuleDecisions": {
+    "aws-secret-access-key-assignment": "spaces_or_tabs_only_around_separator_and_node_boundary_excludes_cr_lf",
+    "high-confidence-secret-assignment": "spaces_or_tabs_only_around_separator_and_node_boundary_excludes_cr_lf",
+    "presigned-request-signature": "literal_equals_and_hex_value_are_inherently_line_bound"
+  },
+  "verification": {
+    "nodeExecutable": "E:\\nvm\\v22.18.0\\node.exe",
+    "nodeVersion": "v22.18.0",
+    "syntaxChecks": {
+      "fileCheckCount": 5,
+      "scannerModule": "passed",
+      "ingressModule": "passed",
+      "selfTestModule": "passed",
+      "policyJson": "passed",
+      "receiptJson": "passed",
+      "gitleaksTomlLoaded": true
+    },
+    "selfTest": {
+      "status": "passed",
+      "checkCount": 149,
+      "fixtures": "os-temp-only",
+      "cleanup": "validated",
+      "valuesEmitted": false
+    },
+    "nodeAssignmentFixtures": {
+      "negativeCrossLine": {
+        "exitCode": 0,
+        "status": "clean",
+        "findingCount": 0
+      },
+      "positiveSameLine": {
+        "exitCode": 1,
+        "status": "findings",
+        "findingCount": 3,
+        "ruleIds": [
+          "aws-secret-access-key-assignment",
+          "high-confidence-secret-assignment",
+          "presigned-request-signature"
+        ]
+      },
+      "cleanupBoundaryValidated": true,
+      "cleanupVerified": true,
+      "valuesEmitted": false
+    },
+    "repositoryScanner": {
+      "format": "json",
+      "exitCode": 0,
+      "status": "clean",
+      "enumeratedFileCount": 20,
+      "scannedFileCount": 20,
+      "findingCount": 0,
+      "errorCount": 0,
+      "valuesEmitted": false
+    },
+    "hiddenJsonParsing": {
+      "inventoryCount": 20,
+      "parsedFileCount": 5,
+      "contentsEmitted": false
+    },
+    "gitleaks": {
+      "version": "v8.30.1",
+      "image": "ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f",
+      "imageId": "sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f",
+      "repositoryCommand": "gitleaks dir /repo --config /repo/.gitleaks.toml --redact --no-banner --exit-code 1",
+      "repositoryExitCode": 0,
+      "repositoryFindingCount": 0,
+      "positiveFixtureCommand": "gitleaks dir /fixture --config /repo/.gitleaks.toml --redact --no-banner --exit-code 1 --verbose",
+      "positiveFixtureExitCode": 1,
+      "positiveFixtureFindingCount": 3,
+      "positiveFixtureRuleIds": [
+        "aws-secret-access-key-assignment",
+        "high-confidence-secret-assignment",
+        "presigned-request-signature"
+      ],
+      "repositoryAndFixtureMountsReadOnly": true,
+      "containerRootReadOnly": true,
+      "network": "none",
+      "redactionMarkerObserved": true,
+      "fixtureValueEmitted": false,
+      "cleanupBoundaryValidated": true,
+      "cleanupVerified": true
+    },
+    "gitDiffCheckExitCode": 0,
+    "strictWriteAllowlistPassed": true
+  },
+  "envExampleWholeFileAllowlisted": false,
+  "credentialFilesRead": false,
+  "rootConfigAccessed": false,
+  "prohibitedPlanOrReviewFilesAccessed": false,
+  "externalEffectsPerformed": false,
+  "installPerformed": false,
+  "commitCreated": false,
+  "stagedPathsCreated": false,
+  "remoteWritePerformed": false,
+  "providerOrAwsActionPerformed": false
+}

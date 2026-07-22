@@ -1,0 +1,30 @@
+{
+  "name": "@chief/outbox-relay",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/handler.d.ts",
+      "default": "./dist/handler.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sqs": "3.1089.0",
+    "@chief/approval-outbox": "workspace:*",
+    "@chief/contracts": "workspace:*",
+    "@chief/observability": "workspace:*"
+  },
+  "devDependencies": {
+    "@chief/tsconfig": "workspace:*",
+    "@types/aws-lambda": "8.10.162",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

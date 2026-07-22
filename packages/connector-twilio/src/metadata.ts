@@ -1,0 +1,40 @@
+import { connectorDescriptorSchema } from '@chief/contracts/connectors';
+const descriptor = connectorDescriptorSchema.parse({
+  schemaVersion: '1',
+  connectorId: 'twilio-messaging',
+  descriptorVersion: '1.0.0-scaffold',
+  provider: 'twilio',
+  channel: 'sms-and-whatsapp',
+  connectionStrategy: 'credential',
+  credentialReferenceClass: 'secrets-manager-twilio-account-credential',
+  authorizationScopes: [],
+  capabilities: {
+    read: false,
+    send: false,
+    webhook: false,
+    poll: false,
+    threads: false,
+    attachments: false,
+    deliveryFeedback: false,
+    multipleAccounts: false,
+    historicalBackfill: false,
+    externalEffect: false,
+    replyCorrelation: false,
+    complaintFeedback: false,
+    unsubscribeFeedback: false,
+    optOutFeedback: false,
+    reconsentFeedback: false,
+    consentWindowEligibility: false,
+  },
+  supportedRuntimeModes: ['disabled'],
+  constraints: [
+    'Scaffold metadata only; SMS and WhatsApp implementations and provider verification are absent.',
+  ],
+});
+export const twilioConnectorMetadata = Object.freeze({
+  ...descriptor,
+  authorizationScopes: Object.freeze([...descriptor.authorizationScopes]),
+  capabilities: Object.freeze({ ...descriptor.capabilities }),
+  supportedRuntimeModes: Object.freeze([...descriptor.supportedRuntimeModes]),
+  constraints: Object.freeze([...descriptor.constraints]),
+});

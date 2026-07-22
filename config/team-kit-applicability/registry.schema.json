@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/chief-of-staff/team-kit-applicability.schema.json",
+  "title": "Chief of Staff Team Kit applicability registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "registryId",
+    "assessment",
+    "decisionDate",
+    "stateSemantics",
+    "entries"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "registryId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "assessment": {
+      "const": "chief-of-staff-communication-agent"
+    },
+    "decisionDate": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "stateSemantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "adopted",
+        "adapted",
+        "not_applicable",
+        "exception_pending"
+      ],
+      "properties": {
+        "adopted": {
+          "type": "string",
+          "minLength": 1
+        },
+        "adapted": {
+          "type": "string",
+          "minLength": 1
+        },
+        "not_applicable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exception_pending": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "capability",
+          "sourceContract",
+          "state",
+          "implementationStatus",
+          "accessStatus",
+          "owner",
+          "evidence",
+          "trigger",
+          "dataHandlingImpact",
+          "releaseConsequence",
+          "liveConformanceClaimed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "capability": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceContract": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state": {
+            "enum": [
+              "adopted",
+              "adapted",
+              "not_applicable",
+              "exception_pending"
+            ]
+          },
+          "implementationStatus": {
+            "type": "string",
+            "minLength": 1
+          },
+          "accessStatus": {
+            "enum": [
+              "verified",
+              "not_verified",
+              "not_required"
+            ]
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "trigger": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dataHandlingImpact": {
+            "type": "string",
+            "minLength": 1
+          },
+          "releaseConsequence": {
+            "type": "string",
+            "minLength": 1
+          },
+          "liveConformanceClaimed": {
+            "const": false
+          }
+        }
+      }
+    }
+  }
+}

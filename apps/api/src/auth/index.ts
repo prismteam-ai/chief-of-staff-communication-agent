@@ -1,0 +1,25 @@
+export {
+  RequestAuthorityError,
+  browserSessionTokenHash,
+  createBrowserSessionRequestAuthorityResolver,
+  createCognitoRequestAuthorityResolver,
+  createCognitoSessionTokenVerifier,
+  createDenyAllRequestAuthorityResolver,
+  createLocalTestRequestAuthorityResolver,
+  createRequestAuthorityResolver,
+  requestAuthorityInput,
+} from './request-authority.js';
+export type {
+  AuthorityGrantResolution,
+  AuthorityMembershipResolution,
+  AuthorityMembershipResolver,
+  BrowserSessionReader,
+  CognitoSessionVerifierOptions,
+  RequestAuthMode,
+  RequestAuthorityInput,
+  RequestAuthorityResolver,
+  ResolvedRequestAuthority,
+  SessionTokenVerifier,
+  VerifiedAuthorityIdentity,
+  VerifiedSessionIdentity,
+} from './request-authority.js';

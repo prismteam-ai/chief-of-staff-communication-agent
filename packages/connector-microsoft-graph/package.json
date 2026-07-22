@@ -1,0 +1,34 @@
+{
+  "name": "@chief/connector-microsoft-graph",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./src/*.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src"
+  },
+  "dependencies": {
+    "@azure/msal-node": "5.4.1",
+    "@chief/connector-core": "workspace:*",
+    "@chief/connector-testkit": "workspace:*",
+    "@chief/contracts": "workspace:*",
+    "@chief/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@chief/tsconfig": "workspace:*",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}
